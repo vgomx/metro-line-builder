@@ -1,3 +1,38 @@
+export const UndoIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <path
+      d="M3 4.5H9a3.5 3.5 0 0 1 0 7H6"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path d="M5.5 2 3 4.5 5.5 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
+export const RedoIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <path
+      d="M11 4.5H5a3.5 3.5 0 0 0 0 7h3"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path d="M8.5 2 11 4.5 8.5 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
+export const TrainIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <rect x="2.5" y="1.5" width="9" height="8" rx="2.5" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M2.5 6h9" stroke="currentColor" strokeWidth="1.4" />
+    <circle cx="4.5" cy="11.5" r="1" fill="currentColor" />
+    <circle cx="9.5" cy="11.5" r="1" fill="currentColor" />
+  </svg>
+)
+
 export const CursorIcon = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
     <path d="M3 2l10 5.5-5 1.5L6.5 14 3 2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />

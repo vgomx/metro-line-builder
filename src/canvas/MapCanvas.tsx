@@ -5,6 +5,7 @@ import type { Line, Station, Tool } from '../types'
 import { useZoomPan } from './useZoomPan'
 import { StationNode } from './StationNode'
 import { LinePath } from './LinePath'
+import { TrainMarker } from './TrainMarker'
 import { routeOrthogonal } from './routing'
 
 export interface MapCanvasHandle {
@@ -21,6 +22,7 @@ interface MapCanvasProps {
   selectedLineIds: string[]
   draftLineStationIds: string[]
   showGrid: boolean
+  showTrains: boolean
   onAddStation: (x: number, y: number) => void
   onMoveStations: (ids: string[], dx: number, dy: number) => void
   onAddToDraftLine: (stationId: string) => void
@@ -29,6 +31,9 @@ interface MapCanvasProps {
   onSetSelection: (stationIds: string[], lineIds: string[]) => void
   onClearSelection: () => void
   onDeleteSelected: () => void
+  onCheckpoint: () => void
+  onUndo: () => void
+  onRedo: () => void
   onTransformChange?: (transform: ZoomTransform) => void
 }
 
@@ -44,7 +49,7 @@ function safeSetPointerCapture(target: Element, pointerId: number) {
 
 type DragState =
   | { kind: 'none' }
-  | { kind: 'marquee'; startX: number; startY: number; x: number; y: number }
+  | { kind: 'marquee'; startX: number; startY: number; x: number; y: number; union: boolean }
   | { kind: 'stations'; ids: string[]; lastX: number; lastY: number; moved: boolean }
 
 const GRID_SIZE = 40
@@ -60,6 +65,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     selectedLineIds,
     draftLineStationIds,
     showGrid,
+    showTrains,
     onAddStation,
     onMoveStations,
     onAddToDraftLine,
@@ -68,6 +74,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onSetSelection,
     onClearSelection,
     onDeleteSelected,
+    onCheckpoint,
+    onUndo,
+    onRedo,
     onTransformChange,
   },
   ref,
@@ -98,11 +107,28 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         }
       } else if (e.key === 'Enter') {
         if (draftLineStationIds.length >= 2) onFinishDraftLine()
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) onRedo()
+        else onUndo()
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault()
+        onRedo()
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [draftLineStationIds, selectedStationIds, selectedLineIds, onCancelDraftLine, onClearSelection, onDeleteSelected, onFinishDraftLine])
+  }, [
+    draftLineStationIds,
+    selectedStationIds,
+    selectedLineIds,
+    onCancelDraftLine,
+    onClearSelection,
+    onDeleteSelected,
+    onFinishDraftLine,
+    onUndo,
+    onRedo,
+  ])
 
   const toWorld = (clientX: number, clientY: number) => {
     const rect = svgRef.current!.getBoundingClientRect()
@@ -124,7 +150,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     if (tool === 'select') {
       const { x, y } = toWorld(e.clientX, e.clientY)
       safeSetPointerCapture(e.target as Element, e.pointerId)
-      setDrag({ kind: 'marquee', startX: x, startY: y, x, y })
+      setDrag({ kind: 'marquee', startX: x, startY: y, x, y, union: e.shiftKey })
     }
   }
 
@@ -132,6 +158,16 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     if (e.button !== 0) return
     if (tool !== 'select') return
     e.stopPropagation()
+
+    if (e.shiftKey) {
+      const isSelected = selectedStationIds.includes(station.id)
+      const nextIds = isSelected
+        ? selectedStationIds.filter(id => id !== station.id)
+        : [...selectedStationIds, station.id]
+      onSetSelection(nextIds, [])
+      return
+    }
+
     safeSetPointerCapture(e.target as Element, e.pointerId)
     const ids = selectedStationIds.includes(station.id) ? selectedStationIds : [station.id]
     if (!selectedStationIds.includes(station.id)) {
@@ -163,6 +199,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       const dx = (e.clientX - drag.lastX) / transform.k
       const dy = (e.clientY - drag.lastY) / transform.k
       if (dx !== 0 || dy !== 0) {
+        if (!drag.moved) onCheckpoint()
         onMoveStations(drag.ids, dx, dy)
         setDrag({ ...drag, lastX: e.clientX, lastY: e.clientY, moved: true })
       }
@@ -178,11 +215,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       const movedEnough = maxX - minX > 3 || maxY - minY > 3
 
       if (movedEnough) {
-        const ids = stationList
+        const hitIds = stationList
           .filter(s => s.x >= minX && s.x <= maxX && s.y >= minY && s.y <= maxY)
           .map(s => s.id)
+        const ids = drag.union ? Array.from(new Set([...selectedStationIds, ...hitIds])) : hitIds
         onSetSelection(ids, [])
-      } else {
+      } else if (!drag.union) {
         onClearSelection()
       }
     } else if (drag.kind === 'stations' && !drag.moved) {
@@ -266,6 +304,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             onClick={handleStationClick}
           />
         ))}
+
+        {showTrains &&
+          lineList
+            .filter(line => line.visible && line.stationIds.length >= 2)
+            .map(line => <TrainMarker key={line.id} lineId={line.id} color={line.color} />)}
 
         {drag.kind === 'marquee' && (
           <rect

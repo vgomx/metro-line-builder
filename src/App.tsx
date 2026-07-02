@@ -31,11 +31,17 @@ function App() {
     renameLine,
     recolorLine,
     toggleLineVisibility,
+    checkpoint,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } = useMapState()
 
   const mapCanvasRef = useRef<MapCanvasHandle>(null)
   const [zoom, setZoom] = useState(1)
   const [showGrid, setShowGrid] = useState(false)
+  const [showTrains, setShowTrains] = useState(false)
 
   const selectedLine =
     state.selectedLineIds.length === 1 && state.selectedStationIds.length === 0
@@ -62,7 +68,13 @@ function App() {
         onZoomOut={() => mapCanvasRef.current?.zoomOut()}
         showGrid={showGrid}
         onToggleGrid={() => setShowGrid(g => !g)}
+        showTrains={showTrains}
+        onToggleTrains={() => setShowTrains(t => !t)}
         onExport={() => exportMapAsJson(state.mapName, stationList, lineList)}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
       />
 
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
@@ -79,6 +91,7 @@ function App() {
             selectedLineIds={state.selectedLineIds}
             draftLineStationIds={state.draftLineStationIds}
             showGrid={showGrid}
+            showTrains={showTrains}
             onAddStation={addStation}
             onMoveStations={moveStations}
             onAddToDraftLine={addToDraftLine}
@@ -87,6 +100,9 @@ function App() {
             onSetSelection={setSelection}
             onClearSelection={clearSelection}
             onDeleteSelected={deleteSelected}
+            onCheckpoint={checkpoint}
+            onUndo={undo}
+            onRedo={redo}
             onTransformChange={t => setZoom(t.k)}
           />
 

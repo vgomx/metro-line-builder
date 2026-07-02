@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { Button, IconButton } from 'metro-ds'
-import { DownloadIcon, GridIcon, LogoMark, ZoomInIcon, ZoomOutIcon } from '../icons'
+import { DownloadIcon, GridIcon, LogoMark, RedoIcon, TrainIcon, UndoIcon, ZoomInIcon, ZoomOutIcon } from '../icons'
 
 interface TopBarProps {
   mapName: string
@@ -11,7 +11,13 @@ interface TopBarProps {
   onZoomOut: () => void
   showGrid: boolean
   onToggleGrid: () => void
+  showTrains: boolean
+  onToggleTrains: () => void
   onExport: () => void
+  onUndo: () => void
+  onRedo: () => void
+  canUndo: boolean
+  canRedo: boolean
 }
 
 export function TopBar({
@@ -22,7 +28,13 @@ export function TopBar({
   onZoomOut,
   showGrid,
   onToggleGrid,
+  showTrains,
+  onToggleTrains,
   onExport,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
 }: TopBarProps) {
   const [focused, setFocused] = useState(false)
 
@@ -77,6 +89,13 @@ export function TopBar({
         }}
       />
 
+      <div style={{ width: '1px', height: '24px', background: 'var(--border-subtle)', margin: '0 var(--space-2)' }} />
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-tight)' }}>
+        <IconButton icon={<UndoIcon />} label="Undo" size="sm" disabled={!canUndo} onClick={onUndo} />
+        <IconButton icon={<RedoIcon />} label="Redo" size="sm" disabled={!canRedo} onClick={onRedo} />
+      </div>
+
       <div style={{ flex: 1 }} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-tight)', marginRight: 'var(--space-2)' }}>
@@ -98,6 +117,7 @@ export function TopBar({
       <div style={{ width: '1px', height: '24px', background: 'var(--border-subtle)', margin: '0 var(--space-2)' }} />
 
       <IconButton icon={<GridIcon />} label="Toggle grid" size="sm" active={showGrid} onClick={onToggleGrid} />
+      <IconButton icon={<TrainIcon />} label="Toggle trains" size="sm" active={showTrains} onClick={onToggleTrains} />
       <div style={{ width: 'var(--space-2)' }} />
       <Button size="sm" variant="ghost" icon={<DownloadIcon />} onClick={onExport}>
         Export

@@ -2,18 +2,23 @@ import { useCallback, useEffect, useMemo, useReducer } from 'react'
 import type { Line, Station, Tool } from '../types'
 import { nextLineColor } from '../lineColors'
 
-interface MapState {
+interface DataSnapshot {
   mapName: string
   stations: Record<string, Station>
   stationOrder: string[]
   lines: Record<string, Line>
   lineOrder: string[]
+  nextStationNumber: number
+  nextLineNumber: number
+}
+
+interface MapState extends DataSnapshot {
   tool: Tool
   selectedStationIds: string[]
   selectedLineIds: string[]
   draftLineStationIds: string[]
-  nextStationNumber: number
-  nextLineNumber: number
+  past: DataSnapshot[]
+  future: DataSnapshot[]
 }
 
 type Action =
@@ -34,6 +39,49 @@ type Action =
   | { type: 'renameLine'; lineId: string; name: string }
   | { type: 'recolorLine'; lineId: string; color: string }
   | { type: 'toggleLineVisibility'; lineId: string }
+  | { type: 'checkpoint' }
+  | { type: 'undo' }
+  | { type: 'redo' }
+
+const MAX_HISTORY = 50
+
+// Actions that mutate map content get a history entry pushed before they run, so
+// they're individually undoable. Ephemeral UI state (tool, selection, in-progress
+// draft line) and moveStations (fired continuously during a drag — the caller
+// dispatches an explicit 'checkpoint' once at drag-start instead) are excluded.
+const RECORDABLE_ACTIONS = new Set<Action['type']>([
+  'setMapName',
+  'addStation',
+  'renameStation',
+  'toggleStationTransfer',
+  'finishDraftLine',
+  'renameLine',
+  'recolorLine',
+  'toggleLineVisibility',
+  'deleteLine',
+  'deleteStation',
+  'deleteSelected',
+])
+
+function snapshotOf(state: DataSnapshot): DataSnapshot {
+  return {
+    mapName: state.mapName,
+    stations: state.stations,
+    stationOrder: state.stationOrder,
+    lines: state.lines,
+    lineOrder: state.lineOrder,
+    nextStationNumber: state.nextStationNumber,
+    nextLineNumber: state.nextLineNumber,
+  }
+}
+
+function pushHistory(state: MapState): MapState {
+  return {
+    ...state,
+    past: [...state.past, snapshotOf(state)].slice(-MAX_HISTORY),
+    future: [],
+  }
+}
 
 const emptyState: MapState = {
   mapName: 'Untitled Map',
@@ -47,25 +95,17 @@ const emptyState: MapState = {
   draftLineStationIds: [],
   nextStationNumber: 1,
   nextLineNumber: 1,
+  past: [],
+  future: [],
 }
 
 const STORAGE_KEY = 'metro-line-builder:map'
 
-interface PersistedMap {
-  mapName: string
-  stations: Record<string, Station>
-  stationOrder: string[]
-  lines: Record<string, Line>
-  lineOrder: string[]
-  nextStationNumber: number
-  nextLineNumber: number
-}
-
-function loadPersisted(): PersistedMap | null {
+function loadPersisted(): DataSnapshot | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
-    const parsed = JSON.parse(raw) as PersistedMap
+    const parsed = JSON.parse(raw) as DataSnapshot
     // Backfill fields added after earlier saves.
     for (const line of Object.values(parsed.lines ?? {})) {
       if (line.visible === undefined) line.visible = true
@@ -102,8 +142,39 @@ function removeStationsFromLines(
   return { lines: nextLines, lineOrder: nextOrder }
 }
 
-function reducer(state: MapState, action: Action): MapState {
+function reducer(rawState: MapState, action: Action): MapState {
+  const state = RECORDABLE_ACTIONS.has(action.type) ? pushHistory(rawState) : rawState
+
   switch (action.type) {
+    case 'checkpoint':
+      return pushHistory(rawState)
+
+    case 'undo': {
+      if (state.past.length === 0) return state
+      const snapshot = state.past[state.past.length - 1]
+      return {
+        ...state,
+        ...snapshot,
+        past: state.past.slice(0, -1),
+        future: [...state.future, snapshotOf(state)],
+        selectedStationIds: [],
+        selectedLineIds: [],
+      }
+    }
+
+    case 'redo': {
+      if (state.future.length === 0) return state
+      const snapshot = state.future[state.future.length - 1]
+      return {
+        ...state,
+        ...snapshot,
+        past: [...state.past, snapshotOf(state)],
+        future: state.future.slice(0, -1),
+        selectedStationIds: [],
+        selectedLineIds: [],
+      }
+    }
+
     case 'setTool':
       return {
         ...state,
@@ -283,7 +354,7 @@ export function useMapState() {
   const [state, dispatch] = useReducer(reducer, undefined, initState)
 
   useEffect(() => {
-    const persisted: PersistedMap = {
+    const snapshot: DataSnapshot = {
       mapName: state.mapName,
       stations: state.stations,
       stationOrder: state.stationOrder,
@@ -292,7 +363,7 @@ export function useMapState() {
       nextStationNumber: state.nextStationNumber,
       nextLineNumber: state.nextLineNumber,
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot))
   }, [
     state.mapName,
     state.stations,
@@ -338,6 +409,9 @@ export function useMapState() {
     (lineId: string) => dispatch({ type: 'toggleLineVisibility', lineId }),
     [],
   )
+  const checkpoint = useCallback(() => dispatch({ type: 'checkpoint' }), [])
+  const undo = useCallback(() => dispatch({ type: 'undo' }), [])
+  const redo = useCallback(() => dispatch({ type: 'redo' }), [])
 
   const stationList = useMemo(() => state.stationOrder.map(id => state.stations[id]), [state.stationOrder, state.stations])
   const lineList = useMemo(() => state.lineOrder.map(id => state.lines[id]), [state.lineOrder, state.lines])
@@ -363,5 +437,10 @@ export function useMapState() {
     renameLine,
     recolorLine,
     toggleLineVisibility,
+    checkpoint,
+    undo,
+    redo,
+    canUndo: state.past.length > 0,
+    canRedo: state.future.length > 0,
   }
 }
