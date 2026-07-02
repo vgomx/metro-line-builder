@@ -1,9 +1,12 @@
+import type { MouseEvent } from 'react'
 import type { Line, Station } from '../types'
+import { routeOrthogonal } from './routing'
 
 interface LinePathProps {
   line: Line
   stations: Record<string, Station>
   selected: boolean
+  onClick?: (line: Line) => void
 }
 
 /**
@@ -11,11 +14,16 @@ interface LinePathProps {
  * train-animation layer can call document.getElementById(line.id).getPointAtLength(...)
  * to walk a marker along it without touching this component.
  */
-export function LinePath({ line, stations, selected }: LinePathProps) {
+export function LinePath({ line, stations, selected, onClick }: LinePathProps) {
   const points = line.stationIds.map(id => stations[id]).filter((s): s is Station => Boolean(s))
   if (points.length < 2) return null
 
-  const d = points.map((s, i) => `${i === 0 ? 'M' : 'L'} ${s.x} ${s.y}`).join(' ')
+  const d = routeOrthogonal(points)
+
+  const handleClick = (e: MouseEvent<SVGPathElement>) => {
+    e.stopPropagation()
+    onClick?.(line)
+  }
 
   return (
     <path
@@ -27,6 +35,7 @@ export function LinePath({ line, stations, selected }: LinePathProps) {
       strokeLinecap="round"
       strokeLinejoin="round"
       opacity={selected ? 1 : 0.9}
+      onClick={handleClick}
       style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
     />
   )

@@ -4,6 +4,7 @@ import type { Line, Station, Tool } from '../types'
 import { useZoomPan } from './useZoomPan'
 import { StationNode } from './StationNode'
 import { LinePath } from './LinePath'
+import { routeOrthogonal } from './routing'
 
 interface MapCanvasProps {
   tool: Tool
@@ -124,6 +125,11 @@ export function MapCanvas({
     }
   }
 
+  const handleLineClick = (line: Line) => {
+    if (tool !== 'select') return
+    onSetSelection([], [line.id])
+  }
+
   const handlePointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (tool === 'draw-line') {
       setCursorWorld(toWorld(e.clientX, e.clientY))
@@ -171,11 +177,8 @@ export function MapCanvas({
   }
 
   const draftPoints = draftLineStationIds.map(id => stations[id]).filter(Boolean) as Station[]
-  const draftPath =
-    draftPoints.length > 0
-      ? draftPoints.map((s, i) => `${i === 0 ? 'M' : 'L'} ${s.x} ${s.y}`).join(' ') +
-        (cursorWorld ? ` L ${cursorWorld.x} ${cursorWorld.y}` : '')
-      : ''
+  const draftPreviewPoints = cursorWorld ? [...draftPoints, cursorWorld] : draftPoints
+  const draftPath = draftPreviewPoints.length > 0 ? routeOrthogonal(draftPreviewPoints) : ''
 
   const cursor = tool === 'add-station' ? 'crosshair' : tool === 'draw-line' ? 'crosshair' : 'default'
 
@@ -200,7 +203,13 @@ export function MapCanvas({
         />
 
         {lineList.map(line => (
-          <LinePath key={line.id} line={line} stations={stations} selected={selectedLineIds.includes(line.id)} />
+          <LinePath
+            key={line.id}
+            line={line}
+            stations={stations}
+            selected={selectedLineIds.includes(line.id)}
+            onClick={handleLineClick}
+          />
         ))}
 
         {draftPath && (

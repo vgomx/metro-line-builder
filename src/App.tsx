@@ -1,6 +1,7 @@
-import { Button, IconButton, LineIndicator, Toolbar } from 'metro-ds'
+import { Button, IconButton, Input, LineIndicator, Toolbar } from 'metro-ds'
 import { useMapState } from './state/useMapState'
 import { MapCanvas } from './canvas/MapCanvas'
+import { LINE_COLORS } from './lineColors'
 import type { Tool } from './types'
 
 const CursorIcon = () => (
@@ -35,7 +36,14 @@ function App() {
     setSelection,
     clearSelection,
     deleteSelected,
+    renameLine,
+    recolorLine,
   } = useMapState()
+
+  const selectedLine =
+    state.selectedLineIds.length === 1 && state.selectedStationIds.length === 0
+      ? state.lines[state.selectedLineIds[0]]
+      : null
 
   const tools: { tool: Tool; label: string; icon: JSX.Element }[] = [
     { tool: 'select', label: 'Select', icon: <CursorIcon /> },
@@ -63,6 +71,40 @@ function App() {
           <Button variant="primary" onClick={finishDraftLine}>
             Finish line ({state.draftLineStationIds.length} stations)
           </Button>
+        )}
+
+        {selectedLine && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
+            <div style={{ width: '160px' }}>
+              <Input
+                value={selectedLine.name}
+                onChange={e => renameLine(selectedLine.id, e.target.value)}
+                size="sm"
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 'var(--gap-tight)' }}>
+              {LINE_COLORS.map(color => (
+                <button
+                  key={color}
+                  type="button"
+                  aria-label={`Set line color ${color}`}
+                  onClick={() => recolorLine(selectedLine.id, color)}
+                  style={{
+                    width: '18px',
+                    height: '18px',
+                    borderRadius: 'var(--radius-full)',
+                    background: color,
+                    border:
+                      selectedLine.color === color
+                        ? '2px solid var(--ink-900)'
+                        : '2px solid transparent',
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
         )}
       </header>
 

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useReducer } from 'react'
+import { useCallback, useEffect, useMemo, useReducer } from 'react'
 import type { Line, Station, Tool } from '../types'
 import { nextLineColor } from '../lineColors'
 
@@ -25,8 +25,10 @@ type Action =
   | { type: 'setSelection'; stationIds: string[]; lineIds: string[] }
   | { type: 'clearSelection' }
   | { type: 'deleteSelected' }
+  | { type: 'renameLine'; lineId: string; name: string }
+  | { type: 'recolorLine'; lineId: string; color: string }
 
-const initialState: MapState = {
+const emptyState: MapState = {
   stations: {},
   stationOrder: [],
   lines: {},
@@ -37,6 +39,33 @@ const initialState: MapState = {
   draftLineStationIds: [],
   nextStationNumber: 1,
   nextLineNumber: 1,
+}
+
+const STORAGE_KEY = 'metro-line-builder:map'
+
+interface PersistedMap {
+  stations: Record<string, Station>
+  stationOrder: string[]
+  lines: Record<string, Line>
+  lineOrder: string[]
+  nextStationNumber: number
+  nextLineNumber: number
+}
+
+function loadPersisted(): PersistedMap | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as PersistedMap
+  } catch {
+    return null
+  }
+}
+
+function initState(): MapState {
+  const persisted = loadPersisted()
+  if (!persisted) return emptyState
+  return { ...emptyState, ...persisted }
 }
 
 function reducer(state: MapState, action: Action): MapState {
@@ -113,6 +142,18 @@ function reducer(state: MapState, action: Action): MapState {
     case 'clearSelection':
       return { ...state, selectedStationIds: [], selectedLineIds: [] }
 
+    case 'renameLine': {
+      const line = state.lines[action.lineId]
+      if (!line) return state
+      return { ...state, lines: { ...state.lines, [action.lineId]: { ...line, name: action.name } } }
+    }
+
+    case 'recolorLine': {
+      const line = state.lines[action.lineId]
+      if (!line) return state
+      return { ...state, lines: { ...state.lines, [action.lineId]: { ...line, color: action.color } } }
+    }
+
     case 'deleteSelected': {
       const removedStationIds = new Set(state.selectedStationIds)
       const removedLineIds = new Set(state.selectedLineIds)
@@ -159,7 +200,19 @@ function reducer(state: MapState, action: Action): MapState {
 }
 
 export function useMapState() {
-  const [state, dispatch] = useReducer(reducer, initialState)
+  const [state, dispatch] = useReducer(reducer, undefined, initState)
+
+  useEffect(() => {
+    const persisted: PersistedMap = {
+      stations: state.stations,
+      stationOrder: state.stationOrder,
+      lines: state.lines,
+      lineOrder: state.lineOrder,
+      nextStationNumber: state.nextStationNumber,
+      nextLineNumber: state.nextLineNumber,
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted))
+  }, [state.stations, state.stationOrder, state.lines, state.lineOrder, state.nextStationNumber, state.nextLineNumber])
 
   const setTool = useCallback((tool: Tool) => dispatch({ type: 'setTool', tool }), [])
   const addStation = useCallback((x: number, y: number) => dispatch({ type: 'addStation', x, y }), [])
@@ -179,6 +232,8 @@ export function useMapState() {
   )
   const clearSelection = useCallback(() => dispatch({ type: 'clearSelection' }), [])
   const deleteSelected = useCallback(() => dispatch({ type: 'deleteSelected' }), [])
+  const renameLine = useCallback((lineId: string, name: string) => dispatch({ type: 'renameLine', lineId, name }), [])
+  const recolorLine = useCallback((lineId: string, color: string) => dispatch({ type: 'recolorLine', lineId, color }), [])
 
   const stationList = useMemo(() => state.stationOrder.map(id => state.stations[id]), [state.stationOrder, state.stations])
   const lineList = useMemo(() => state.lineOrder.map(id => state.lines[id]), [state.lineOrder, state.lines])
@@ -196,5 +251,7 @@ export function useMapState() {
     setSelection,
     clearSelection,
     deleteSelected,
+    renameLine,
+    recolorLine,
   }
 }
