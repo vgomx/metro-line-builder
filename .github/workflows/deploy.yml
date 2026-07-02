@@ -1,0 +1,64 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout metro-line-builder
+        uses: actions/checkout@v4
+        with:
+          path: metro-line-builder
+
+      # metro-ds is consumed via a local file: dependency, so it needs to be
+      # checked out as a sibling directory (matching local dev setup).
+      - name: Checkout metro-ds
+        uses: actions/checkout@v4
+        with:
+          repository: vgomx/metro-ds
+          path: metro-ds
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build metro-ds
+        working-directory: metro-ds
+        run: |
+          npm install
+          npm run build
+
+      - name: Build metro-line-builder
+        working-directory: metro-line-builder
+        env:
+          GITHUB_PAGES: true
+        run: |
+          npm install
+          npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: metro-line-builder/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
