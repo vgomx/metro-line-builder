@@ -1,17 +1,27 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { select } from 'd3-selection'
+import type { Selection } from 'd3-selection'
 import { zoom, zoomIdentity } from 'd3-zoom'
-import type { D3ZoomEvent, ZoomTransform } from 'd3-zoom'
+import type { D3ZoomEvent, ZoomBehavior, ZoomTransform } from 'd3-zoom'
+import 'd3-transition'
+
+const ZOOM_STEP = 1.2
 
 /**
- * Wheel always zooms (d3-zoom default). Drag-to-pan is deliberately restricted to the
- * middle mouse button or space-held-left-drag, so plain left-drag stays free for
+ * Wheel always zooms (d3-zoom default). Drag-to-pan is restricted to the middle
+ * mouse button, space-held-left-drag, or (when panMode is true, i.e. the Hand
+ * tool is active) plain left-drag — otherwise left-drag stays free for
  * marquee-select / station-dragging in the caller.
  */
-export function useZoomPan(svgRef: RefObject<SVGSVGElement | null>) {
+export function useZoomPan(svgRef: RefObject<SVGSVGElement | null>, panMode: boolean) {
   const [transform, setTransform] = useState<ZoomTransform>(zoomIdentity)
   const spaceHeldRef = useRef(false)
+  const panModeRef = useRef(panMode)
+  panModeRef.current = panMode
+
+  const behaviorRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null)
+  const selectionRef = useRef<Selection<SVGSVGElement, unknown, null, undefined> | null>(null)
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -37,7 +47,7 @@ export function useZoomPan(svgRef: RefObject<SVGSVGElement | null>) {
       .filter((event: Event) => {
         if (event.type === 'wheel') return true
         if (event instanceof MouseEvent) {
-          return event.button === 1 || spaceHeldRef.current
+          return event.button === 1 || spaceHeldRef.current || panModeRef.current
         }
         return true
       })
@@ -47,11 +57,25 @@ export function useZoomPan(svgRef: RefObject<SVGSVGElement | null>) {
 
     const selection = select(svg)
     selection.call(zoomBehavior)
+    behaviorRef.current = zoomBehavior
+    selectionRef.current = selection
 
     return () => {
       selection.on('.zoom', null)
+      behaviorRef.current = null
+      selectionRef.current = null
     }
   }, [svgRef])
 
-  return transform
+  const zoomBy = useCallback((factor: number) => {
+    const behavior = behaviorRef.current
+    const selection = selectionRef.current
+    if (!behavior || !selection) return
+    behavior.scaleBy(selection.transition().duration(150), factor)
+  }, [])
+
+  const zoomIn = useCallback(() => zoomBy(ZOOM_STEP), [zoomBy])
+  const zoomOut = useCallback(() => zoomBy(1 / ZOOM_STEP), [zoomBy])
+
+  return { transform, zoomIn, zoomOut }
 }

@@ -11,6 +11,7 @@ export interface Line {
   name: string
   color: string
   stationIds: string[]
+  visible: boolean
 }
 
-export type Tool = 'select' | 'add-station' | 'draw-line'
+export type Tool = 'select' | 'add-station' | 'draw-line' | 'pan'

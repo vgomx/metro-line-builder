@@ -1,10 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
+import type { ZoomTransform } from 'd3-zoom'
 import type { Line, Station, Tool } from '../types'
 import { useZoomPan } from './useZoomPan'
 import { StationNode } from './StationNode'
 import { LinePath } from './LinePath'
 import { routeOrthogonal } from './routing'
+
+export interface MapCanvasHandle {
+  zoomIn: () => void
+  zoomOut: () => void
+}
 
 interface MapCanvasProps {
   tool: Tool
@@ -14,6 +20,7 @@ interface MapCanvasProps {
   selectedStationIds: string[]
   selectedLineIds: string[]
   draftLineStationIds: string[]
+  showGrid: boolean
   onAddStation: (x: number, y: number) => void
   onMoveStations: (ids: string[], dx: number, dy: number) => void
   onAddToDraftLine: (stationId: string) => void
@@ -22,6 +29,7 @@ interface MapCanvasProps {
   onSetSelection: (stationIds: string[], lineIds: string[]) => void
   onClearSelection: () => void
   onDeleteSelected: () => void
+  onTransformChange?: (transform: ZoomTransform) => void
 }
 
 function safeSetPointerCapture(target: Element, pointerId: number) {
@@ -39,27 +47,41 @@ type DragState =
   | { kind: 'marquee'; startX: number; startY: number; x: number; y: number }
   | { kind: 'stations'; ids: string[]; lastX: number; lastY: number; moved: boolean }
 
-export function MapCanvas({
-  tool,
-  stationList,
-  lineList,
-  stations,
-  selectedStationIds,
-  selectedLineIds,
-  draftLineStationIds,
-  onAddStation,
-  onMoveStations,
-  onAddToDraftLine,
-  onFinishDraftLine,
-  onCancelDraftLine,
-  onSetSelection,
-  onClearSelection,
-  onDeleteSelected,
-}: MapCanvasProps) {
+const GRID_SIZE = 40
+const GRID_EXTENT = 4000
+
+export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function MapCanvas(
+  {
+    tool,
+    stationList,
+    lineList,
+    stations,
+    selectedStationIds,
+    selectedLineIds,
+    draftLineStationIds,
+    showGrid,
+    onAddStation,
+    onMoveStations,
+    onAddToDraftLine,
+    onFinishDraftLine,
+    onCancelDraftLine,
+    onSetSelection,
+    onClearSelection,
+    onDeleteSelected,
+    onTransformChange,
+  },
+  ref,
+) {
   const svgRef = useRef<SVGSVGElement>(null)
-  const transform = useZoomPan(svgRef)
+  const { transform, zoomIn, zoomOut } = useZoomPan(svgRef, tool === 'pan')
   const [drag, setDrag] = useState<DragState>({ kind: 'none' })
   const [cursorWorld, setCursorWorld] = useState<{ x: number; y: number } | null>(null)
+
+  useImperativeHandle(ref, () => ({ zoomIn, zoomOut }), [zoomIn, zoomOut])
+
+  useEffect(() => {
+    onTransformChange?.(transform)
+  }, [transform, onTransformChange])
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -108,7 +130,6 @@ export function MapCanvas({
 
   const handleStationPointerDown = (e: ReactPointerEvent<SVGGElement>, station: Station) => {
     if (e.button !== 0) return
-    if (tool === 'draw-line') return
     if (tool !== 'select') return
     e.stopPropagation()
     safeSetPointerCapture(e.target as Element, e.pointerId)
@@ -180,7 +201,18 @@ export function MapCanvas({
   const draftPreviewPoints = cursorWorld ? [...draftPoints, cursorWorld] : draftPoints
   const draftPath = draftPreviewPoints.length > 0 ? routeOrthogonal(draftPreviewPoints) : ''
 
-  const cursor = tool === 'add-station' ? 'crosshair' : tool === 'draw-line' ? 'crosshair' : 'default'
+  const cursor =
+    tool === 'add-station' ? 'crosshair' : tool === 'draw-line' ? 'crosshair' : tool === 'pan' ? 'grab' : 'default'
+
+  const gridLines = []
+  if (showGrid) {
+    for (let x = -GRID_EXTENT; x <= GRID_EXTENT; x += GRID_SIZE) {
+      gridLines.push(<line key={`v${x}`} x1={x} y1={-GRID_EXTENT} x2={x} y2={GRID_EXTENT} />)
+    }
+    for (let y = -GRID_EXTENT; y <= GRID_EXTENT; y += GRID_SIZE) {
+      gridLines.push(<line key={`h${y}`} x1={-GRID_EXTENT} y1={y} x2={GRID_EXTENT} y2={y} />)
+    }
+  }
 
   return (
     <svg
@@ -202,15 +234,23 @@ export function MapCanvas({
           onPointerDown={handleBackgroundPointerDown}
         />
 
-        {lineList.map(line => (
-          <LinePath
-            key={line.id}
-            line={line}
-            stations={stations}
-            selected={selectedLineIds.includes(line.id)}
-            onClick={handleLineClick}
-          />
-        ))}
+        {showGrid && (
+          <g stroke="var(--ink-200)" strokeWidth={1 / transform.k} opacity={0.4}>
+            {gridLines}
+          </g>
+        )}
+
+        {lineList
+          .filter(line => line.visible)
+          .map(line => (
+            <LinePath
+              key={line.id}
+              line={line}
+              stations={stations}
+              selected={selectedLineIds.includes(line.id)}
+              onClick={handleLineClick}
+            />
+          ))}
 
         {draftPath && (
           <path d={draftPath} fill="none" stroke="var(--brand-400)" strokeWidth={3} strokeDasharray="6 4" />
@@ -241,4 +281,4 @@ export function MapCanvas({
       </g>
     </svg>
   )
-}
+})

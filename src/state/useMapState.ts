@@ -3,6 +3,7 @@ import type { Line, Station, Tool } from '../types'
 import { nextLineColor } from '../lineColors'
 
 interface MapState {
+  mapName: string
   stations: Record<string, Station>
   stationOrder: string[]
   lines: Record<string, Line>
@@ -17,18 +18,25 @@ interface MapState {
 
 type Action =
   | { type: 'setTool'; tool: Tool }
+  | { type: 'setMapName'; name: string }
   | { type: 'addStation'; x: number; y: number }
   | { type: 'moveStations'; ids: string[]; dx: number; dy: number }
+  | { type: 'renameStation'; stationId: string; name: string }
+  | { type: 'toggleStationTransfer'; stationId: string }
   | { type: 'addToDraftLine'; stationId: string }
   | { type: 'finishDraftLine' }
   | { type: 'cancelDraftLine' }
   | { type: 'setSelection'; stationIds: string[]; lineIds: string[] }
   | { type: 'clearSelection' }
   | { type: 'deleteSelected' }
+  | { type: 'deleteLine'; lineId: string }
+  | { type: 'deleteStation'; stationId: string }
   | { type: 'renameLine'; lineId: string; name: string }
   | { type: 'recolorLine'; lineId: string; color: string }
+  | { type: 'toggleLineVisibility'; lineId: string }
 
 const emptyState: MapState = {
+  mapName: 'Untitled Map',
   stations: {},
   stationOrder: [],
   lines: {},
@@ -44,6 +52,7 @@ const emptyState: MapState = {
 const STORAGE_KEY = 'metro-line-builder:map'
 
 interface PersistedMap {
+  mapName: string
   stations: Record<string, Station>
   stationOrder: string[]
   lines: Record<string, Line>
@@ -56,7 +65,12 @@ function loadPersisted(): PersistedMap | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
-    return JSON.parse(raw) as PersistedMap
+    const parsed = JSON.parse(raw) as PersistedMap
+    // Backfill fields added after earlier saves.
+    for (const line of Object.values(parsed.lines ?? {})) {
+      if (line.visible === undefined) line.visible = true
+    }
+    return parsed
   } catch {
     return null
   }
@@ -66,6 +80,26 @@ function initState(): MapState {
   const persisted = loadPersisted()
   if (!persisted) return emptyState
   return { ...emptyState, ...persisted }
+}
+
+function removeStationsFromLines(
+  lines: Record<string, Line>,
+  lineOrder: string[],
+  removedStationIds: Set<string>,
+): { lines: Record<string, Line>; lineOrder: string[] } {
+  const nextLines = { ...lines }
+  const nextOrder = [...lineOrder]
+  for (const id of [...nextOrder]) {
+    const line = nextLines[id]
+    const stationIds = line.stationIds.filter(sid => !removedStationIds.has(sid))
+    if (stationIds.length < 2) {
+      delete nextLines[id]
+      nextOrder.splice(nextOrder.indexOf(id), 1)
+    } else if (stationIds.length !== line.stationIds.length) {
+      nextLines[id] = { ...line, stationIds }
+    }
+  }
+  return { lines: nextLines, lineOrder: nextOrder }
 }
 
 function reducer(state: MapState, action: Action): MapState {
@@ -78,6 +112,9 @@ function reducer(state: MapState, action: Action): MapState {
         selectedStationIds: [],
         selectedLineIds: [],
       }
+
+    case 'setMapName':
+      return { ...state, mapName: action.name }
 
     case 'addStation': {
       const id = `station-${state.nextStationNumber}`
@@ -106,6 +143,21 @@ function reducer(state: MapState, action: Action): MapState {
       return { ...state, stations }
     }
 
+    case 'renameStation': {
+      const station = state.stations[action.stationId]
+      if (!station) return state
+      return { ...state, stations: { ...state.stations, [action.stationId]: { ...station, name: action.name } } }
+    }
+
+    case 'toggleStationTransfer': {
+      const station = state.stations[action.stationId]
+      if (!station) return state
+      return {
+        ...state,
+        stations: { ...state.stations, [action.stationId]: { ...station, transfer: !station.transfer } },
+      }
+    }
+
     case 'addToDraftLine': {
       if (state.draftLineStationIds[state.draftLineStationIds.length - 1] === action.stationId) {
         return state
@@ -123,6 +175,7 @@ function reducer(state: MapState, action: Action): MapState {
         name: `Line ${state.nextLineNumber}`,
         color: nextLineColor(state.lineOrder.length),
         stationIds: state.draftLineStationIds,
+        visible: true,
       }
       return {
         ...state,
@@ -154,6 +207,39 @@ function reducer(state: MapState, action: Action): MapState {
       return { ...state, lines: { ...state.lines, [action.lineId]: { ...line, color: action.color } } }
     }
 
+    case 'toggleLineVisibility': {
+      const line = state.lines[action.lineId]
+      if (!line) return state
+      return { ...state, lines: { ...state.lines, [action.lineId]: { ...line, visible: !line.visible } } }
+    }
+
+    case 'deleteLine': {
+      const lines = { ...state.lines }
+      delete lines[action.lineId]
+      return {
+        ...state,
+        lines,
+        lineOrder: state.lineOrder.filter(id => id !== action.lineId),
+        selectedLineIds: state.selectedLineIds.filter(id => id !== action.lineId),
+      }
+    }
+
+    case 'deleteStation': {
+      const removed = new Set([action.stationId])
+      const stations = { ...state.stations }
+      delete stations[action.stationId]
+      const stationOrder = state.stationOrder.filter(id => id !== action.stationId)
+      const { lines, lineOrder } = removeStationsFromLines(state.lines, state.lineOrder, removed)
+      return {
+        ...state,
+        stations,
+        stationOrder,
+        lines,
+        lineOrder,
+        selectedStationIds: state.selectedStationIds.filter(id => id !== action.stationId),
+      }
+    }
+
     case 'deleteSelected': {
       const removedStationIds = new Set(state.selectedStationIds)
       const removedLineIds = new Set(state.selectedLineIds)
@@ -162,26 +248,20 @@ function reducer(state: MapState, action: Action): MapState {
       for (const id of removedStationIds) delete stations[id]
       const stationOrder = state.stationOrder.filter(id => !removedStationIds.has(id))
 
-      const lines = { ...state.lines }
-      const lineOrder = state.lineOrder.filter(id => {
+      const linesAfterExplicitRemoval = { ...state.lines }
+      const lineOrderAfterExplicitRemoval = state.lineOrder.filter(id => {
         if (removedLineIds.has(id)) {
-          delete lines[id]
+          delete linesAfterExplicitRemoval[id]
           return false
         }
         return true
       })
 
-      // Drop removed stations from surviving lines; drop lines that fall below 2 stations.
-      for (const id of [...lineOrder]) {
-        const line = lines[id]
-        const stationIds = line.stationIds.filter(sid => !removedStationIds.has(sid))
-        if (stationIds.length < 2) {
-          delete lines[id]
-          lineOrder.splice(lineOrder.indexOf(id), 1)
-        } else if (stationIds.length !== line.stationIds.length) {
-          lines[id] = { ...line, stationIds }
-        }
-      }
+      const { lines, lineOrder } = removeStationsFromLines(
+        linesAfterExplicitRemoval,
+        lineOrderAfterExplicitRemoval,
+        removedStationIds,
+      )
 
       return {
         ...state,
@@ -204,6 +284,7 @@ export function useMapState() {
 
   useEffect(() => {
     const persisted: PersistedMap = {
+      mapName: state.mapName,
       stations: state.stations,
       stationOrder: state.stationOrder,
       lines: state.lines,
@@ -212,12 +293,29 @@ export function useMapState() {
       nextLineNumber: state.nextLineNumber,
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted))
-  }, [state.stations, state.stationOrder, state.lines, state.lineOrder, state.nextStationNumber, state.nextLineNumber])
+  }, [
+    state.mapName,
+    state.stations,
+    state.stationOrder,
+    state.lines,
+    state.lineOrder,
+    state.nextStationNumber,
+    state.nextLineNumber,
+  ])
 
   const setTool = useCallback((tool: Tool) => dispatch({ type: 'setTool', tool }), [])
+  const setMapName = useCallback((name: string) => dispatch({ type: 'setMapName', name }), [])
   const addStation = useCallback((x: number, y: number) => dispatch({ type: 'addStation', x, y }), [])
   const moveStations = useCallback(
     (ids: string[], dx: number, dy: number) => dispatch({ type: 'moveStations', ids, dx, dy }),
+    [],
+  )
+  const renameStation = useCallback(
+    (stationId: string, name: string) => dispatch({ type: 'renameStation', stationId, name }),
+    [],
+  )
+  const toggleStationTransfer = useCallback(
+    (stationId: string) => dispatch({ type: 'toggleStationTransfer', stationId }),
     [],
   )
   const addToDraftLine = useCallback(
@@ -232,8 +330,14 @@ export function useMapState() {
   )
   const clearSelection = useCallback(() => dispatch({ type: 'clearSelection' }), [])
   const deleteSelected = useCallback(() => dispatch({ type: 'deleteSelected' }), [])
+  const deleteLine = useCallback((lineId: string) => dispatch({ type: 'deleteLine', lineId }), [])
+  const deleteStation = useCallback((stationId: string) => dispatch({ type: 'deleteStation', stationId }), [])
   const renameLine = useCallback((lineId: string, name: string) => dispatch({ type: 'renameLine', lineId, name }), [])
   const recolorLine = useCallback((lineId: string, color: string) => dispatch({ type: 'recolorLine', lineId, color }), [])
+  const toggleLineVisibility = useCallback(
+    (lineId: string) => dispatch({ type: 'toggleLineVisibility', lineId }),
+    [],
+  )
 
   const stationList = useMemo(() => state.stationOrder.map(id => state.stations[id]), [state.stationOrder, state.stations])
   const lineList = useMemo(() => state.lineOrder.map(id => state.lines[id]), [state.lineOrder, state.lines])
@@ -243,15 +347,21 @@ export function useMapState() {
     stationList,
     lineList,
     setTool,
+    setMapName,
     addStation,
     moveStations,
+    renameStation,
+    toggleStationTransfer,
     addToDraftLine,
     finishDraftLine,
     cancelDraftLine,
     setSelection,
     clearSelection,
     deleteSelected,
+    deleteLine,
+    deleteStation,
     renameLine,
     recolorLine,
+    toggleLineVisibility,
   }
 }

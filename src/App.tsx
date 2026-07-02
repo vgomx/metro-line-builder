@@ -1,26 +1,13 @@
-import { Button, IconButton, Input, LineIndicator, Toolbar } from 'metro-ds'
+import { useRef, useState } from 'react'
+import { Button } from 'metro-ds'
 import { useMapState } from './state/useMapState'
 import { MapCanvas } from './canvas/MapCanvas'
-import { LINE_COLORS } from './lineColors'
-import type { Tool } from './types'
-
-const CursorIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-    <path d="M3 2l10 4.2-4 1.3-1.3 4L3 2z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-  </svg>
-)
-const PlusIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-    <path d="M8 2v12M2 8h12" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-  </svg>
-)
-const LineIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-    <circle cx="3" cy="13" r="1.75" fill="currentColor" />
-    <circle cx="13" cy="3" r="1.75" fill="currentColor" />
-    <path d="M4.2 11.8L11.8 4.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-  </svg>
-)
+import type { MapCanvasHandle } from './canvas/MapCanvas'
+import { TopBar } from './components/TopBar'
+import { LeftToolbar } from './components/LeftToolbar'
+import { RightPanel } from './components/RightPanel'
+import { CanvasOverlay } from './components/CanvasOverlay'
+import { exportMapAsJson } from './export'
 
 function App() {
   const {
@@ -28,128 +15,62 @@ function App() {
     stationList,
     lineList,
     setTool,
+    setMapName,
     addStation,
     moveStations,
+    renameStation,
+    toggleStationTransfer,
     addToDraftLine,
     finishDraftLine,
     cancelDraftLine,
     setSelection,
     clearSelection,
     deleteSelected,
+    deleteLine,
+    deleteStation,
     renameLine,
     recolorLine,
+    toggleLineVisibility,
   } = useMapState()
+
+  const mapCanvasRef = useRef<MapCanvasHandle>(null)
+  const [zoom, setZoom] = useState(1)
+  const [showGrid, setShowGrid] = useState(false)
 
   const selectedLine =
     state.selectedLineIds.length === 1 && state.selectedStationIds.length === 0
-      ? state.lines[state.selectedLineIds[0]]
+      ? (state.lines[state.selectedLineIds[0]] ?? null)
+      : null
+  const selectedStation =
+    state.selectedStationIds.length === 1 && state.selectedLineIds.length === 0
+      ? (state.stations[state.selectedStationIds[0]] ?? null)
       : null
 
-  const tools: { tool: Tool; label: string; icon: JSX.Element }[] = [
-    { tool: 'select', label: 'Select', icon: <CursorIcon /> },
-    { tool: 'add-station', label: 'Add station', icon: <PlusIcon /> },
-    { tool: 'draw-line', label: 'Draw line', icon: <LineIcon /> },
-  ]
+  const selectionLabel = selectedStation
+    ? `Station: ${selectedStation.name}`
+    : selectedLine
+      ? `Line: ${selectedLine.name}`
+      : null
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100svh' }}>
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: 'var(--space-4)',
-          borderBottom: '1px solid var(--border-subtle)',
-          background: 'var(--bg-surface)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
-          <LineIndicator id="1" color="var(--brand-500)" shape="pill" />
-          <h1 style={{ fontSize: 'var(--text-xl)', margin: 0 }}>Metro Line Builder</h1>
-        </div>
-        {state.draftLineStationIds.length >= 2 && (
-          <Button variant="primary" onClick={finishDraftLine}>
-            Finish line ({state.draftLineStationIds.length} stations)
-          </Button>
-        )}
-
-        {selectedLine && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)' }}>
-            <div style={{ width: '160px' }}>
-              <Input
-                value={selectedLine.name}
-                onChange={e => renameLine(selectedLine.id, e.target.value)}
-                size="sm"
-              />
-            </div>
-            <div style={{ display: 'flex', gap: 'var(--gap-tight)' }}>
-              {LINE_COLORS.map(color => (
-                <button
-                  key={color}
-                  type="button"
-                  aria-label={`Set line color ${color}`}
-                  onClick={() => recolorLine(selectedLine.id, color)}
-                  style={{
-                    width: '18px',
-                    height: '18px',
-                    borderRadius: 'var(--radius-full)',
-                    background: color,
-                    border:
-                      selectedLine.color === color
-                        ? '2px solid var(--ink-900)'
-                        : '2px solid transparent',
-                    cursor: 'pointer',
-                    padding: 0,
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-      </header>
+      <TopBar
+        mapName={state.mapName}
+        onMapNameChange={setMapName}
+        zoom={zoom}
+        onZoomIn={() => mapCanvasRef.current?.zoomIn()}
+        onZoomOut={() => mapCanvasRef.current?.zoomOut()}
+        showGrid={showGrid}
+        onToggleGrid={() => setShowGrid(g => !g)}
+        onExport={() => exportMapAsJson(state.mapName, stationList, lineList)}
+      />
 
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <aside
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            padding: 'var(--space-3)',
-            borderRight: '1px solid var(--border-subtle)',
-          }}
-        >
-          <Toolbar orientation="vertical">
-            {tools.map(({ tool, label, icon }) => (
-              <IconButton
-                key={tool}
-                icon={icon}
-                label={label}
-                active={state.tool === tool}
-                onClick={() => setTool(tool)}
-              />
-            ))}
-          </Toolbar>
+        <LeftToolbar tool={state.tool} onSetTool={setTool} />
 
-          <p
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '9px',
-              lineHeight: 1.6,
-              color: 'var(--text-muted)',
-              width: '120px',
-              margin: 0,
-            }}
-          >
-            SCROLL ZOOM
-            <br />
-            SPACE+DRAG PAN
-            <br />
-            DEL REMOVES
-          </p>
-        </aside>
-
-        <main style={{ flex: 1, minWidth: 0 }}>
+        <main style={{ flex: 1, minWidth: 0, position: 'relative' }}>
           <MapCanvas
+            ref={mapCanvasRef}
             tool={state.tool}
             stationList={stationList}
             lineList={lineList}
@@ -157,6 +78,7 @@ function App() {
             selectedStationIds={state.selectedStationIds}
             selectedLineIds={state.selectedLineIds}
             draftLineStationIds={state.draftLineStationIds}
+            showGrid={showGrid}
             onAddStation={addStation}
             onMoveStations={moveStations}
             onAddToDraftLine={addToDraftLine}
@@ -165,8 +87,43 @@ function App() {
             onSetSelection={setSelection}
             onClearSelection={clearSelection}
             onDeleteSelected={deleteSelected}
+            onTransformChange={t => setZoom(t.k)}
           />
+
+          <CanvasOverlay
+            lineCount={lineList.length}
+            stationCount={stationList.length}
+            zoom={zoom}
+            selectionLabel={selectionLabel}
+          />
+
+          {state.draftLineStationIds.length >= 2 && (
+            <div style={{ position: 'absolute', top: 'var(--space-3)', left: '50%', transform: 'translateX(-50%)' }}>
+              <Button variant="primary" onClick={finishDraftLine}>
+                Finish line ({state.draftLineStationIds.length} stations)
+              </Button>
+            </div>
+          )}
         </main>
+
+        <RightPanel
+          lineList={lineList}
+          stationList={stationList}
+          lines={state.lines}
+          stations={state.stations}
+          selectedLine={selectedLine}
+          selectedStation={selectedStation}
+          onSelectLine={id => setSelection([], [id])}
+          onSelectStation={id => setSelection([id], [])}
+          onToggleLineVisibility={toggleLineVisibility}
+          onAddLine={() => setTool('draw-line')}
+          onRenameLine={renameLine}
+          onRecolorLine={recolorLine}
+          onDeleteLine={deleteLine}
+          onRenameStation={renameStation}
+          onToggleTransfer={toggleStationTransfer}
+          onDeleteStation={deleteStation}
+        />
       </div>
     </div>
   )
