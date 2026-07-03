@@ -1,44 +1,138 @@
-import { Badge, Button, Divider, Input, Tag, Toggle } from 'metro-ds'
-import { TrashIcon } from '../icons'
+import { Badge, Button, Divider, Input, Select, Tag, Toggle } from 'metro-ds'
+import { BuildingIcon, ParkIcon, PenIcon, RiverIcon, TrashIcon } from '../icons'
 import { LINE_COLORS } from '../lineColors'
-import type { Line, Station } from '../types'
+import type { Company, GeoFeature, Line, Station } from '../types'
+import { lineHasStation, stationIdsOfLine } from '../canvas/lineNodes'
 
 interface InspectorProps {
   selectedLine: Line | null
   selectedStation: Station | null
+  selectedGeoFeature: GeoFeature | null
+  selectedCompany: Company | null
   stations: Record<string, Station>
   lines: Record<string, Line>
+  companyList: Company[]
+  authorityDisplayName: string
   onRenameLine: (lineId: string, name: string) => void
   onRecolorLine: (lineId: string, color: string) => void
+  onSetLineCompany: (lineId: string, companyId: string | null) => void
+  onExtendLine: (lineId: string) => void
   onDeleteLine: (lineId: string) => void
   onRenameStation: (stationId: string, name: string) => void
   onToggleTransfer: (stationId: string) => void
   onDeleteStation: (stationId: string) => void
+  onRenameGeoFeature: (geoFeatureId: string, name: string) => void
+  onDeleteGeoFeature: (geoFeatureId: string) => void
+  onRenameCompany: (companyId: string, name: string) => void
+  onSetCompanyType: (companyId: string, type: Company['type']) => void
+  onDeleteCompany: (companyId: string) => void
 }
 
 export function Inspector({
   selectedLine,
   selectedStation,
+  selectedGeoFeature,
+  selectedCompany,
   stations,
   lines,
+  companyList,
+  authorityDisplayName,
   onRenameLine,
   onRecolorLine,
+  onSetLineCompany,
+  onExtendLine,
   onDeleteLine,
   onRenameStation,
   onToggleTransfer,
   onDeleteStation,
+  onRenameGeoFeature,
+  onDeleteGeoFeature,
+  onRenameCompany,
+  onSetCompanyType,
+  onDeleteCompany,
 }: InspectorProps) {
-  if (!selectedLine && !selectedStation) {
+  if (!selectedLine && !selectedStation && !selectedGeoFeature && !selectedCompany) {
     return (
       <div style={{ padding: 'var(--space-5)', color: 'var(--text-muted)', fontSize: 'var(--text-sm)', textAlign: 'center' }}>
-        Select a line or station to inspect its properties.
+        Select a line, station, company, or geography feature to inspect its properties.
+      </div>
+    )
+  }
+
+  if (selectedCompany) {
+    const company = selectedCompany
+    const companyLines = Object.values(lines).filter(l => l.companyId === company.id)
+
+    return (
+      <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)' }}>
+          <span style={{ color: 'var(--text-muted)' }}>
+            <BuildingIcon />
+          </span>
+          <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-primary)' }}>Company properties</span>
+        </div>
+        <Divider />
+
+        <Input label="Company name" value={company.name} onChange={e => onRenameCompany(company.id, e.target.value)} />
+
+        <Toggle
+          checked={company.type === 'private'}
+          onChange={checked => onSetCompanyType(company.id, checked ? 'private' : 'public')}
+          label={company.type === 'private' ? 'Private company' : 'Public company'}
+          size="sm"
+        />
+
+        <Divider label="Lines" />
+        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+          {companyLines.length === 0 && (
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>No lines assigned yet</span>
+          )}
+          {companyLines.map(l => (
+            <Tag key={l.id} color={l.color}>
+              {l.name}
+            </Tag>
+          ))}
+        </div>
+
+        <Divider />
+        <Button variant="destructive" size="sm" icon={<TrashIcon />} onClick={() => onDeleteCompany(company.id)}>
+          Delete company
+        </Button>
+      </div>
+    )
+  }
+
+  if (selectedGeoFeature) {
+    const feature = selectedGeoFeature
+    return (
+      <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)' }}>
+          <span style={{ color: feature.type === 'river' ? '#3B82F6' : '#16A34A' }}>
+            {feature.type === 'river' ? <RiverIcon /> : <ParkIcon />}
+          </span>
+          <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-primary)' }}>
+            {feature.type === 'river' ? 'River' : 'Park'} properties
+          </span>
+        </div>
+        <Divider />
+
+        <Input
+          label="Name"
+          value={feature.name}
+          onChange={e => onRenameGeoFeature(feature.id, e.target.value)}
+        />
+
+        <Divider />
+        <Button variant="destructive" size="sm" icon={<TrashIcon />} onClick={() => onDeleteGeoFeature(feature.id)}>
+          Delete {feature.type}
+        </Button>
       </div>
     )
   }
 
   if (selectedLine) {
     const line = selectedLine
-    const lineStations = line.stationIds.map(id => stations[id]).filter((s): s is Station => Boolean(s))
+    const lineStations = stationIdsOfLine(line).map(id => stations[id]).filter((s): s is Station => Boolean(s))
 
     return (
       <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
@@ -75,6 +169,17 @@ export function Inspector({
           </div>
         </div>
 
+        <Select
+          label="Company"
+          size="sm"
+          value={line.companyId ?? ''}
+          options={[
+            { label: `${authorityDisplayName} (Local Transport Authority)`, value: '' },
+            ...companyList.map(c => ({ label: c.name, value: c.id })),
+          ]}
+          onChange={value => onSetLineCompany(line.id, value === '' ? null : String(value))}
+        />
+
         <Divider label="Stations" />
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           {lineStations.map(s => (
@@ -100,6 +205,9 @@ export function Inspector({
         </div>
 
         <Divider />
+        <Button variant="secondary" size="sm" icon={<PenIcon />} onClick={() => onExtendLine(line.id)}>
+          Extend line
+        </Button>
         <Button variant="destructive" size="sm" icon={<TrashIcon />} onClick={() => onDeleteLine(line.id)}>
           Delete line
         </Button>
@@ -109,7 +217,7 @@ export function Inspector({
 
   if (selectedStation) {
     const station = selectedStation
-    const stationLines = Object.values(lines).filter(l => l.stationIds.includes(station.id))
+    const stationLines = Object.values(lines).filter(l => lineHasStation(l, station.id))
 
     return (
       <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>

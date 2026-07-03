@@ -5,12 +5,15 @@ interface StationNodeProps {
   station: Station
   selected: boolean
   inDraftLine: boolean
+  /** True when the station sits on 2+ distinct lines — rendered as an interchange. */
+  interchange: boolean
   onPointerDown: (e: ReactPointerEvent<SVGGElement>, station: Station) => void
   onClick: (station: Station) => void
 }
 
-export function StationNode({ station, selected, inDraftLine, onPointerDown, onClick }: StationNodeProps) {
-  const radius = station.transfer ? 9 : 6.5
+export function StationNode({ station, selected, inDraftLine, interchange, onPointerDown, onClick }: StationNodeProps) {
+  const isInterchange = interchange || station.transfer
+  const radius = isInterchange ? 10 : 6.5
 
   return (
     <g
@@ -22,12 +25,24 @@ export function StationNode({ station, selected, inDraftLine, onPointerDown, onC
       {selected && (
         <circle r={radius + 5} fill="none" stroke="var(--brand-500)" strokeWidth={2} opacity={0.5} />
       )}
-      <circle
-        r={radius}
-        fill={inDraftLine ? 'var(--brand-500)' : '#FFFFFF'}
-        stroke={inDraftLine ? 'var(--brand-500)' : 'var(--ink-900)'}
-        strokeWidth={2.5}
-      />
+      {isInterchange ? (
+        <>
+          <circle
+            r={radius}
+            fill={inDraftLine ? 'var(--brand-500)' : '#FFFFFF'}
+            stroke={inDraftLine ? 'var(--brand-500)' : 'var(--ink-900)'}
+            strokeWidth={3.5}
+          />
+          <circle r={radius - 4.5} fill="none" stroke={inDraftLine ? 'var(--brand-500)' : 'var(--ink-900)'} strokeWidth={1.25} />
+        </>
+      ) : (
+        <circle
+          r={radius}
+          fill={inDraftLine ? 'var(--brand-500)' : '#FFFFFF'}
+          stroke={inDraftLine ? 'var(--brand-500)' : 'var(--ink-900)'}
+          strokeWidth={2.5}
+        />
+      )}
       <text
         x={0}
         y={radius + 14}

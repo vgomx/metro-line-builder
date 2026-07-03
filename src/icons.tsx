@@ -1,3 +1,43 @@
+export const MoreIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <circle cx="8" cy="3" r="1.3" fill="currentColor" />
+    <circle cx="8" cy="8" r="1.3" fill="currentColor" />
+    <circle cx="8" cy="13" r="1.3" fill="currentColor" />
+  </svg>
+)
+
+export const BuildingIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <rect x="3" y="1.5" width="7" height="13" rx="0.5" stroke="currentColor" strokeWidth="1.3" />
+    <path d="M10 6.5h3v8H3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M5 4h1.2M5 6.5h1.2M5 9h1.2M7.8 4h1.2M7.8 6.5h1.2M7.8 9h1.2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+  </svg>
+)
+
+export const RiverIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <path
+      d="M1 5c2 0 2 2.5 4 2.5S7 5 9 5s2 2.5 4 2.5S15 5 15 5M1 10c2 0 2 2.5 4 2.5S7 10 9 10s2 2.5 4 2.5 2-2.5 4-2.5"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
+export const ParkIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <path
+      d="M8 1.5 3 8h2.5L2 13.5h4.5V15h3v-1.5H14L10.5 8H13L8 1.5z"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinejoin="round"
+      strokeLinecap="round"
+    />
+  </svg>
+)
+
 export const UndoIcon = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
     <path

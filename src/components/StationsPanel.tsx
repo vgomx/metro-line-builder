@@ -1,5 +1,6 @@
 import { Badge } from 'metro-ds'
 import type { Line, Station } from '../types'
+import { lineHasStation } from '../canvas/lineNodes'
 
 interface StationsPanelProps {
   stations: Station[]
@@ -9,7 +10,7 @@ interface StationsPanelProps {
 }
 
 export function StationsPanel({ stations, lines, selectedStationId, onSelect }: StationsPanelProps) {
-  const primaryLineFor = (stationId: string) => lines.find(l => l.stationIds.includes(stationId))
+  const primaryLineFor = (stationId: string) => lines.find(l => lineHasStation(l, stationId))
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>

@@ -1,12 +1,15 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import type { PointerEvent as ReactPointerEvent } from 'react'
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import type { ZoomTransform } from 'd3-zoom'
-import type { Line, Station, Tool } from '../types'
+import type { GeoFeature, Line, LineNode, Point, Station, Tool } from '../types'
 import { useZoomPan } from './useZoomPan'
 import { StationNode } from './StationNode'
 import { LinePath } from './LinePath'
+import { GeoFeaturePath } from './GeoFeaturePath'
 import { TrainMarker } from './TrainMarker'
 import { routeOrthogonal } from './routing'
+import { GRID_SIZE, snapToGrid } from '../grid'
+import { closestSegmentIndex, resolveLineNodes, stationIdsOfLine } from './lineNodes'
 
 export interface MapCanvasHandle {
   zoomIn: () => void
@@ -17,18 +20,26 @@ interface MapCanvasProps {
   tool: Tool
   stationList: Station[]
   lineList: Line[]
+  geoFeatureList: GeoFeature[]
   stations: Record<string, Station>
   selectedStationIds: string[]
   selectedLineIds: string[]
-  draftLineStationIds: string[]
+  selectedGeoFeatureIds: string[]
+  draftLineNodes: LineNode[]
+  draftGeoPoints: Point[]
   showGrid: boolean
   showTrains: boolean
   onAddStation: (x: number, y: number) => void
   onMoveStations: (ids: string[], dx: number, dy: number) => void
-  onAddToDraftLine: (stationId: string) => void
+  onAppendDraftLineNode: (node: LineNode) => void
+  onInsertDraftLineStation: (x: number, y: number, index: number) => void
+  onInsertLineStation: (lineId: string, x: number, y: number, index: number) => void
   onFinishDraftLine: () => void
   onCancelDraftLine: () => void
-  onSetSelection: (stationIds: string[], lineIds: string[]) => void
+  onAddGeoPoint: (x: number, y: number) => void
+  onFinishGeoFeature: () => void
+  onCancelGeoFeature: () => void
+  onSetSelection: (stationIds: string[], lineIds: string[], geoFeatureIds: string[]) => void
   onClearSelection: () => void
   onDeleteSelected: () => void
   onCheckpoint: () => void
@@ -50,27 +61,47 @@ function safeSetPointerCapture(target: Element, pointerId: number) {
 type DragState =
   | { kind: 'none' }
   | { kind: 'marquee'; startX: number; startY: number; x: number; y: number; union: boolean }
-  | { kind: 'stations'; ids: string[]; lastX: number; lastY: number; moved: boolean }
+  | {
+      kind: 'stations'
+      ids: string[]
+      anchorId: string
+      startAnchorX: number
+      startAnchorY: number
+      startPointerX: number
+      startPointerY: number
+      moved: boolean
+      originalPositions: Record<string, Point>
+    }
 
-const GRID_SIZE = 40
 const GRID_EXTENT = 4000
+const DRAW_TOOLS: Tool[] = ['add-station', 'draw-line', 'draw-river', 'draw-park']
+const RIVER_DRAFT_STROKE = '#60A5FA'
+const PARK_DRAFT_STROKE = '#4ADE80'
 
 export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function MapCanvas(
   {
     tool,
     stationList,
     lineList,
+    geoFeatureList,
     stations,
     selectedStationIds,
     selectedLineIds,
-    draftLineStationIds,
+    selectedGeoFeatureIds,
+    draftLineNodes,
+    draftGeoPoints,
     showGrid,
     showTrains,
     onAddStation,
     onMoveStations,
-    onAddToDraftLine,
+    onAppendDraftLineNode,
+    onInsertDraftLineStation,
+    onInsertLineStation,
     onFinishDraftLine,
     onCancelDraftLine,
+    onAddGeoPoint,
+    onFinishGeoFeature,
+    onCancelGeoFeature,
     onSetSelection,
     onClearSelection,
     onDeleteSelected,
@@ -98,15 +129,17 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
 
       if (e.key === 'Escape') {
-        if (draftLineStationIds.length > 0) onCancelDraftLine()
+        if (draftLineNodes.length > 0) onCancelDraftLine()
+        else if (draftGeoPoints.length > 0) onCancelGeoFeature()
         else onClearSelection()
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedStationIds.length > 0 || selectedLineIds.length > 0) {
+        if (selectedStationIds.length > 0 || selectedLineIds.length > 0 || selectedGeoFeatureIds.length > 0) {
           e.preventDefault()
           onDeleteSelected()
         }
       } else if (e.key === 'Enter') {
-        if (draftLineStationIds.length >= 2) onFinishDraftLine()
+        if (draftLineNodes.length >= 2) onFinishDraftLine()
+        else if (draftGeoPoints.length >= 2) onFinishGeoFeature()
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault()
         if (e.shiftKey) onRedo()
@@ -119,13 +152,17 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [
-    draftLineStationIds,
+    draftLineNodes,
+    draftGeoPoints,
     selectedStationIds,
     selectedLineIds,
+    selectedGeoFeatureIds,
     onCancelDraftLine,
+    onCancelGeoFeature,
     onClearSelection,
     onDeleteSelected,
     onFinishDraftLine,
+    onFinishGeoFeature,
     onUndo,
     onRedo,
   ])
@@ -144,7 +181,17 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     if (e.button !== 0) return
     if (tool === 'add-station') {
       const { x, y } = toWorld(e.clientX, e.clientY)
-      onAddStation(x, y)
+      onAddStation(snapToGrid(x), snapToGrid(y))
+      return
+    }
+    if (tool === 'draw-line') {
+      const { x, y } = toWorld(e.clientX, e.clientY)
+      onAppendDraftLineNode({ kind: 'point', x: snapToGrid(x), y: snapToGrid(y) })
+      return
+    }
+    if (tool === 'draw-river' || tool === 'draw-park') {
+      const { x, y } = toWorld(e.clientX, e.clientY)
+      onAddGeoPoint(snapToGrid(x), snapToGrid(y))
       return
     }
     if (tool === 'select') {
@@ -164,44 +211,83 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       const nextIds = isSelected
         ? selectedStationIds.filter(id => id !== station.id)
         : [...selectedStationIds, station.id]
-      onSetSelection(nextIds, [])
+      onSetSelection(nextIds, [], [])
       return
     }
 
     safeSetPointerCapture(e.target as Element, e.pointerId)
     const ids = selectedStationIds.includes(station.id) ? selectedStationIds : [station.id]
     if (!selectedStationIds.includes(station.id)) {
-      onSetSelection([station.id], [])
+      onSetSelection([station.id], [], [])
     }
-    setDrag({ kind: 'stations', ids, lastX: e.clientX, lastY: e.clientY, moved: false })
+    const pointerWorld = toWorld(e.clientX, e.clientY)
+    const originalPositions: Record<string, Point> = {}
+    for (const id of ids) {
+      const s = stations[id]
+      if (s) originalPositions[id] = { x: s.x, y: s.y }
+    }
+    setDrag({
+      kind: 'stations',
+      ids,
+      anchorId: station.id,
+      startAnchorX: station.x,
+      startAnchorY: station.y,
+      startPointerX: pointerWorld.x,
+      startPointerY: pointerWorld.y,
+      moved: false,
+      originalPositions,
+    })
   }
 
   const handleStationClick = (station: Station) => {
     if (tool === 'draw-line') {
-      onAddToDraftLine(station.id)
+      onAppendDraftLineNode({ kind: 'station', stationId: station.id })
     }
   }
 
-  const handleLineClick = (line: Line) => {
+  const handleLineClick = (line: Line, e: ReactMouseEvent<SVGPathElement>) => {
+    if (tool === 'select') {
+      onSetSelection([], [line.id], [])
+      return
+    }
+    if (tool === 'add-station') {
+      const { x, y } = toWorld(e.clientX, e.clientY)
+      const snapped = { x: snapToGrid(x), y: snapToGrid(y) }
+      const points = resolveLineNodes(line.nodes, stations)
+      const index = closestSegmentIndex(points, snapped)
+      onInsertLineStation(line.id, snapped.x, snapped.y, index + 1)
+    }
+  }
+
+  const handleGeoFeatureClick = (feature: GeoFeature) => {
     if (tool !== 'select') return
-    onSetSelection([], [line.id])
+    onSetSelection([], [], [feature.id])
   }
 
   const handlePointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
-    if (tool === 'draw-line') {
-      setCursorWorld(toWorld(e.clientX, e.clientY))
+    if (tool === 'draw-line' || tool === 'draw-river' || tool === 'draw-park') {
+      const w = toWorld(e.clientX, e.clientY)
+      setCursorWorld({ x: snapToGrid(w.x), y: snapToGrid(w.y) })
     }
 
     if (drag.kind === 'marquee') {
       const { x, y } = toWorld(e.clientX, e.clientY)
       setDrag({ ...drag, x, y })
     } else if (drag.kind === 'stations') {
-      const dx = (e.clientX - drag.lastX) / transform.k
-      const dy = (e.clientY - drag.lastY) / transform.k
-      if (dx !== 0 || dy !== 0) {
-        if (!drag.moved) onCheckpoint()
-        onMoveStations(drag.ids, dx, dy)
-        setDrag({ ...drag, lastX: e.clientX, lastY: e.clientY, moved: true })
+      const pointerWorld = toWorld(e.clientX, e.clientY)
+      const rawX = drag.startAnchorX + (pointerWorld.x - drag.startPointerX)
+      const rawY = drag.startAnchorY + (pointerWorld.y - drag.startPointerY)
+      const targetX = snapToGrid(rawX)
+      const targetY = snapToGrid(rawY)
+      const anchor = stations[drag.anchorId]
+      if (anchor) {
+        const dx = targetX - anchor.x
+        const dy = targetY - anchor.y
+        if (dx !== 0 || dy !== 0) {
+          if (!drag.moved) onCheckpoint()
+          onMoveStations(drag.ids, dx, dy)
+          setDrag({ ...drag, moved: true })
+        }
       }
     }
   }
@@ -219,7 +305,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           .filter(s => s.x >= minX && s.x <= maxX && s.y >= minY && s.y <= maxY)
           .map(s => s.id)
         const ids = drag.union ? Array.from(new Set([...selectedStationIds, ...hitIds])) : hitIds
-        onSetSelection(ids, [])
+        onSetSelection(ids, [], [])
       } else if (!drag.union) {
         onClearSelection()
       }
@@ -230,17 +316,57 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   }
 
   const handleDoubleClick = () => {
-    if (tool === 'draw-line' && draftLineStationIds.length >= 2) {
+    if (tool === 'draw-line' && draftLineNodes.length >= 2) {
       onFinishDraftLine()
+    } else if ((tool === 'draw-river' || tool === 'draw-park') && draftGeoPoints.length >= 2) {
+      onFinishGeoFeature()
     }
   }
 
-  const draftPoints = draftLineStationIds.map(id => stations[id]).filter(Boolean) as Station[]
-  const draftPreviewPoints = cursorWorld ? [...draftPoints, cursorWorld] : draftPoints
-  const draftPath = draftPreviewPoints.length > 0 ? routeOrthogonal(draftPreviewPoints) : ''
+  const handleDraftPathClick = (e: ReactMouseEvent<SVGPathElement>) => {
+    if (tool !== 'draw-line') return
+    e.stopPropagation()
+    const { x, y } = toWorld(e.clientX, e.clientY)
+    const snapped = { x: snapToGrid(x), y: snapToGrid(y) }
+    const index = closestSegmentIndex(draftPoints, snapped)
+    onInsertDraftLineStation(snapped.x, snapped.y, index + 1)
+  }
 
-  const cursor =
-    tool === 'add-station' ? 'crosshair' : tool === 'draw-line' ? 'crosshair' : tool === 'pan' ? 'grab' : 'default'
+  // Split into the already-committed portion (clickable to insert a station mid-route)
+  // and a separate rubber-band segment to the live cursor (preview only, not clickable).
+  const draftPoints = resolveLineNodes(draftLineNodes, stations)
+  const draftCommittedPath = draftPoints.length >= 2 ? routeOrthogonal(draftPoints) : ''
+  const draftCursorPath =
+    cursorWorld && draftPoints.length >= 1 ? routeOrthogonal([draftPoints[draftPoints.length - 1], cursorWorld]) : ''
+
+  const draftGeoPreviewPoints = cursorWorld ? [...draftGeoPoints, cursorWorld] : draftGeoPoints
+  const draftGeoPath = draftGeoPreviewPoints.length > 1 ? routeOrthogonal(draftGeoPreviewPoints) : ''
+
+  const ghostLines =
+    drag.kind === 'stations' && drag.moved
+      ? lineList
+          .filter(line => line.visible && stationIdsOfLine(line).some(id => id in drag.originalPositions))
+          .map(line => {
+            const points = line.nodes
+              .map(n => (n.kind === 'station' ? (drag.originalPositions[n.stationId] ?? stations[n.stationId]) : n))
+              .filter((p): p is Point => Boolean(p))
+            return { id: line.id, color: line.color, d: points.length >= 2 ? routeOrthogonal(points) : '' }
+          })
+          .filter(g => g.d)
+      : []
+
+  const lineCountByStation: Record<string, number> = {}
+  for (const line of lineList) {
+    for (const id of new Set(stationIdsOfLine(line))) {
+      lineCountByStation[id] = (lineCountByStation[id] ?? 0) + 1
+    }
+  }
+
+  const draftLineStationIdSet = new Set(
+    draftLineNodes.filter((n): n is Extract<LineNode, { kind: 'station' }> => n.kind === 'station').map(n => n.stationId),
+  )
+
+  const cursor = DRAW_TOOLS.includes(tool) ? 'crosshair' : tool === 'pan' ? 'grab' : 'default'
 
   const gridLines = []
   if (showGrid) {
@@ -278,6 +404,30 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           </g>
         )}
 
+        {geoFeatureList.map(feature => (
+          <GeoFeaturePath
+            key={feature.id}
+            feature={feature}
+            selected={selectedGeoFeatureIds.includes(feature.id)}
+            onClick={handleGeoFeatureClick}
+          />
+        ))}
+
+        {ghostLines.map(g => (
+          <path
+            key={`ghost-${g.id}`}
+            d={g.d}
+            fill="none"
+            stroke={g.color}
+            strokeWidth={5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray="4 4"
+            opacity={0.25}
+            style={{ pointerEvents: 'none' }}
+          />
+        ))}
+
         {lineList
           .filter(line => line.visible)
           .map(line => (
@@ -290,8 +440,49 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             />
           ))}
 
-        {draftPath && (
-          <path d={draftPath} fill="none" stroke="var(--brand-400)" strokeWidth={3} strokeDasharray="6 4" />
+        {draftCommittedPath && (
+          <>
+            {/* Wider transparent hit target makes it easy to click the thin dashed line to insert a station mid-route. */}
+            <path
+              d={draftCommittedPath}
+              fill="none"
+              stroke="transparent"
+              strokeWidth={16}
+              onClick={handleDraftPathClick}
+              style={{ cursor: 'copy' }}
+            />
+            <path
+              d={draftCommittedPath}
+              fill="none"
+              stroke="var(--brand-400)"
+              strokeWidth={3}
+              strokeDasharray="6 4"
+              style={{ pointerEvents: 'none' }}
+            />
+          </>
+        )}
+
+        {draftCursorPath && (
+          <path
+            d={draftCursorPath}
+            fill="none"
+            stroke="var(--brand-400)"
+            strokeWidth={3}
+            strokeDasharray="2 5"
+            opacity={0.55}
+            style={{ pointerEvents: 'none' }}
+          />
+        )}
+
+        {draftGeoPath && (
+          <path
+            d={draftGeoPath}
+            fill="none"
+            stroke={tool === 'draw-park' ? PARK_DRAFT_STROKE : RIVER_DRAFT_STROKE}
+            strokeWidth={4}
+            strokeDasharray="6 4"
+            strokeLinecap="round"
+          />
         )}
 
         {stationList.map(station => (
@@ -299,7 +490,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             key={station.id}
             station={station}
             selected={selectedStationIds.includes(station.id)}
-            inDraftLine={draftLineStationIds.includes(station.id)}
+            inDraftLine={draftLineStationIdSet.has(station.id)}
+            interchange={(lineCountByStation[station.id] ?? 0) >= 2}
             onPointerDown={handleStationPointerDown}
             onClick={handleStationClick}
           />
@@ -307,8 +499,16 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
 
         {showTrains &&
           lineList
-            .filter(line => line.visible && line.stationIds.length >= 2)
-            .map(line => <TrainMarker key={line.id} lineId={line.id} color={line.color} />)}
+            .filter(line => line.visible && stationIdsOfLine(line).length >= 2)
+            .map(line => (
+              <TrainMarker
+                key={line.id}
+                lineId={line.id}
+                color={line.color}
+                pathPoints={resolveLineNodes(line.nodes, stations)}
+                stopFlags={line.nodes.map(n => n.kind === 'station')}
+              />
+            ))}
 
         {drag.kind === 'marquee' && (
           <rect
