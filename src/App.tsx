@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Button } from 'metro-ds'
+import { Button, Toast } from 'metro-ds'
 import { useMapState } from './state/useMapState'
 import { MapCanvas } from './canvas/MapCanvas'
 import type { MapCanvasHandle } from './canvas/MapCanvas'
@@ -8,7 +8,7 @@ import { LeftToolbar } from './components/LeftToolbar'
 import { RightPanel } from './components/RightPanel'
 import { CanvasOverlay } from './components/CanvasOverlay'
 import { LineAnnouncer } from './components/LineAnnouncer'
-import { exportMapAsJson } from './export'
+import { exportMapAsJson, pickMapFile } from './export'
 import { stationIdsOfLine } from './canvas/lineNodes'
 
 function App() {
@@ -18,9 +18,11 @@ function App() {
     lineList,
     geoFeatureList,
     companyList,
+    snapshot,
     setTool,
     setMapName,
     setAuthorityName,
+    loadMap,
     addCompany,
     renameCompany,
     setCompanyType,
@@ -61,6 +63,21 @@ function App() {
   const [showGrid, setShowGrid] = useState(false)
   const [showTrains, setShowTrains] = useState(false)
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
+
+  const handleOpen = () => {
+    pickMapFile(
+      data => {
+        const ok = loadMap(data)
+        setToast(
+          ok
+            ? { message: 'Map opened. Press Ctrl+Z to undo.', variant: 'success' }
+            : { message: "That file doesn't look like a metro map.", variant: 'error' },
+        )
+      },
+      message => setToast({ message, variant: 'error' }),
+    )
+  }
 
   // Company selection lives outside the reducer's station/line/geo selection (companies
   // aren't canvas entities), so canvas selection and company selection stay mutually
@@ -117,7 +134,8 @@ function App() {
         onToggleGrid={() => setShowGrid(g => !g)}
         showTrains={showTrains}
         onToggleTrains={() => setShowTrains(t => !t)}
-        onExport={() => exportMapAsJson(state.mapName, stationList, lineList)}
+        onOpen={handleOpen}
+        onExport={() => exportMapAsJson(snapshot)}
         onUndo={undo}
         onRedo={redo}
         canUndo={canUndo}
@@ -214,6 +232,12 @@ function App() {
               <Button variant="primary" onClick={finishGeoFeature}>
                 Finish {geoDraftLabel} ({state.draftGeoPoints.length} points)
               </Button>
+            </div>
+          )}
+
+          {toast && (
+            <div style={{ position: 'absolute', bottom: 'var(--space-3)', right: 'var(--space-3)' }}>
+              <Toast message={toast.message} variant={toast.variant} onDismiss={() => setToast(null)} />
             </div>
           )}
         </main>

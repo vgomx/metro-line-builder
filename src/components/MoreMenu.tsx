@@ -114,7 +114,16 @@ export function MoreMenu() {
           </p>
           <Divider />
           <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: 0 }}>
-            Created by Vitor Gomes.
+            Created by{' '}
+            <a
+              href="https://vitorgomes.design"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: 'var(--text-link)', textDecoration: 'underline' }}
+            >
+              Vitor Gomes
+            </a>
+            .
             <br />
             © 2026 Vitor Gomes. Licensed under the MIT License.
           </p>

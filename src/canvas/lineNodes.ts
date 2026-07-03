@@ -18,6 +18,19 @@ export function lineHasStation(line: Line, stationId: string): boolean {
   return line.nodes.some(n => n.kind === 'station' && n.stationId === stationId)
 }
 
+export function connectedLineCount(stationId: string, lines: Line[]): number {
+  let count = 0
+  for (const line of lines) {
+    if (lineHasStation(line, stationId)) count++
+  }
+  return count
+}
+
+/** A station reads as a transfer hub either because it's manually flagged, or because it sits on 2+ lines. */
+export function isTransferStation(station: Station, lines: Line[]): boolean {
+  return station.transfer || connectedLineCount(station.id, lines) >= 2
+}
+
 export function sameNode(a: LineNode, b: LineNode): boolean {
   if (a.kind !== b.kind) return false
   return a.kind === 'station' && b.kind === 'station' ? a.stationId === b.stationId : a.kind === 'point' && b.kind === 'point' && a.x === b.x && a.y === b.y

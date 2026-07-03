@@ -183,3 +183,15 @@ export const DownloadIcon = () => (
     <path d="M7 1v8m0 0L4 6m3 3l3-3M1 11v1.5A1.5 1.5 0 0 0 2.5 14h9a1.5 1.5 0 0 0 1.5-1.5V11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 )
+
+export const FolderOpenIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <path
+      d="M1 3.5a1 1 0 0 1 1-1h3l1.2 1.5H12a1 1 0 0 1 1 1V4H3.2a1 1 0 0 0-.98.8L1 10V3.5z"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinejoin="round"
+    />
+    <path d="M1.2 10L2.4 5.3A1 1 0 0 1 3.4 4.5H13l-1.4 5.3a1 1 0 0 1-.97.7H2.1a1 1 0 0 1-.9-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+  </svg>
+)

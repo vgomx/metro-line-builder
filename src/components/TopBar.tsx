@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { Button, IconButton } from 'metro-ds'
 import logoUrl from 'metro-ds/assets/logo.svg'
-import { DownloadIcon, GridIcon, RedoIcon, TrainIcon, UndoIcon, ZoomInIcon, ZoomOutIcon } from '../icons'
+import { DownloadIcon, FolderOpenIcon, GridIcon, RedoIcon, TrainIcon, UndoIcon, ZoomInIcon, ZoomOutIcon } from '../icons'
 
 interface TopBarProps {
   mapName: string
@@ -14,6 +14,7 @@ interface TopBarProps {
   onToggleGrid: () => void
   showTrains: boolean
   onToggleTrains: () => void
+  onOpen: () => void
   onExport: () => void
   onUndo: () => void
   onRedo: () => void
@@ -31,6 +32,7 @@ export function TopBar({
   onToggleGrid,
   showTrains,
   onToggleTrains,
+  onOpen,
   onExport,
   onUndo,
   onRedo,
@@ -116,6 +118,10 @@ export function TopBar({
       <IconButton icon={<GridIcon />} label="Toggle grid" size="sm" active={showGrid} onClick={onToggleGrid} />
       <IconButton icon={<TrainIcon />} label="Toggle trains" size="sm" active={showTrains} onClick={onToggleTrains} />
       <div style={{ width: 'var(--space-2)' }} />
+      <Button size="sm" variant="ghost" icon={<FolderOpenIcon />} onClick={onOpen}>
+        Open
+      </Button>
+      <div style={{ width: 'var(--gap-tight)' }} />
       <Button size="sm" variant="ghost" icon={<DownloadIcon />} onClick={onExport}>
         Export
       </Button>

@@ -2,7 +2,7 @@ import { Badge, Button, Divider, Input, Select, Tag, Toggle } from 'metro-ds'
 import { BuildingIcon, ParkIcon, PenIcon, RiverIcon, TrashIcon } from '../icons'
 import { LINE_COLORS } from '../lineColors'
 import type { Company, GeoFeature, Line, Station } from '../types'
-import { lineHasStation, stationIdsOfLine } from '../canvas/lineNodes'
+import { connectedLineCount, isTransferStation, lineHasStation, stationIdsOfLine } from '../canvas/lineNodes'
 
 interface InspectorProps {
   selectedLine: Line | null
@@ -182,26 +182,29 @@ export function Inspector({
 
         <Divider label="Stations" />
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          {lineStations.map(s => (
-            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-tight)', padding: '4px 0' }}>
-              <div
-                style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: 'var(--radius-full)',
-                  border: `2px solid ${line.color}`,
-                  background: s.transfer ? line.color : 'var(--bg-surface)',
-                  flexShrink: 0,
-                }}
-              />
-              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', flex: 1 }}>{s.name}</span>
-              {s.transfer && (
-                <Badge variant="primary" style={{ fontSize: '9px', padding: '1px 5px' }}>
-                  Transfer
-                </Badge>
-              )}
-            </div>
-          ))}
+          {lineStations.map(s => {
+            const transfer = isTransferStation(s, Object.values(lines))
+            return (
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-tight)', padding: '4px 0' }}>
+                <div
+                  style={{
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: 'var(--radius-full)',
+                    border: `2px solid ${line.color}`,
+                    background: transfer ? line.color : 'var(--bg-surface)',
+                    flexShrink: 0,
+                  }}
+                />
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', flex: 1 }}>{s.name}</span>
+                {transfer && (
+                  <Badge variant="primary" style={{ fontSize: '9px', padding: '1px 5px' }}>
+                    Transfer
+                  </Badge>
+                )}
+              </div>
+            )
+          })}
         </div>
 
         <Divider />
@@ -217,7 +220,11 @@ export function Inspector({
 
   if (selectedStation) {
     const station = selectedStation
-    const stationLines = Object.values(lines).filter(l => lineHasStation(l, station.id))
+    const lineValues = Object.values(lines)
+    const stationLines = lineValues.filter(l => lineHasStation(l, station.id))
+    const lineCount = connectedLineCount(station.id, lineValues)
+    const autoTransfer = lineCount >= 2
+    const transfer = station.transfer || autoTransfer
 
     return (
       <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
@@ -228,7 +235,7 @@ export function Inspector({
               height: '14px',
               borderRadius: 'var(--radius-full)',
               border: `2px solid ${stationLines[0]?.color ?? 'var(--ink-300)'}`,
-              background: station.transfer ? (stationLines[0]?.color ?? 'var(--ink-300)') : 'var(--bg-surface)',
+              background: transfer ? (stationLines[0]?.color ?? 'var(--ink-300)') : 'var(--bg-surface)',
               flexShrink: 0,
             }}
           />
@@ -257,7 +264,14 @@ export function Inspector({
           </div>
         </div>
 
-        <Toggle checked={station.transfer} onChange={() => onToggleTransfer(station.id)} label="Transfer station" size="sm" />
+        <Toggle
+          checked={transfer}
+          disabled={autoTransfer}
+          onChange={() => onToggleTransfer(station.id)}
+          label="Transfer station"
+          hint={autoTransfer ? `Automatic — connected to ${lineCount} lines` : undefined}
+          size="sm"
+        />
 
         <Divider />
         <Button variant="destructive" size="sm" icon={<TrashIcon />} onClick={() => onDeleteStation(station.id)}>

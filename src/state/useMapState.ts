@@ -4,7 +4,7 @@ import { nextLineColor } from '../lineColors'
 import { snapToGrid } from '../grid'
 import { sameNode } from '../canvas/lineNodes'
 
-interface DataSnapshot {
+export interface DataSnapshot {
   mapName: string
   /** Custom Local Transport Authority name; empty string means it's synced to (derived from) mapName. */
   authorityName: string
@@ -70,6 +70,7 @@ type Action =
   | { type: 'checkpoint' }
   | { type: 'undo' }
   | { type: 'redo' }
+  | { type: 'loadMap'; snapshot: DataSnapshot }
 
 const MAX_HISTORY = 50
 
@@ -88,6 +89,7 @@ const MIN_GEO_POINTS: Record<GeoFeatureType, number> = {
 // draft line) and moveStations (fired continuously during a drag — the caller
 // dispatches an explicit 'checkpoint' once at drag-start instead) are excluded.
 const RECORDABLE_ACTIONS = new Set<Action['type']>([
+  'loadMap',
   'setMapName',
   'setAuthorityName',
   'addCompany',
@@ -167,46 +169,80 @@ const emptyState: MapState = {
 
 const STORAGE_KEY = 'metro-line-builder:map'
 
+/** For a save that predates a counter field: derive a safe next-id number from the highest existing id suffix. */
+function deriveNextNumber(ids: string[], prefix: string): number {
+  let max = 0
+  const pattern = new RegExp(`^${prefix}-(\\d+)$`)
+  for (const id of ids) {
+    const match = id.match(pattern)
+    if (match) max = Math.max(max, parseInt(match[1], 10))
+  }
+  return max + 1
+}
+
+/**
+ * Backfills fields added after earlier saves (including the minimal shape produced
+ * by early versions of "Export"), so both the localStorage autosave and an
+ * imported/opened JSON file load through the same compatibility path.
+ */
+function normalizeSnapshot(parsed: DataSnapshot): DataSnapshot {
+  if (!parsed.mapName) parsed.mapName = 'Untitled Map'
+  if (parsed.authorityName === undefined) parsed.authorityName = ''
+  if (!parsed.stations) parsed.stations = {}
+  if (!parsed.stationOrder) parsed.stationOrder = Object.keys(parsed.stations)
+  if (!parsed.lines) parsed.lines = {}
+  if (!parsed.lineOrder) parsed.lineOrder = Object.keys(parsed.lines)
+  if (!parsed.geoFeatures) parsed.geoFeatures = {}
+  if (!parsed.geoFeatureOrder) parsed.geoFeatureOrder = Object.keys(parsed.geoFeatures)
+  if (!parsed.companies) parsed.companies = {}
+  if (!parsed.companyOrder) parsed.companyOrder = Object.keys(parsed.companies)
+
+  for (const line of Object.values(parsed.lines)) {
+    if (line.visible === undefined) line.visible = true
+    if (line.companyId === undefined) line.companyId = null
+    // Older saves stored a line as a flat station-id sequence; convert to nodes.
+    const legacy = line as unknown as { stationIds?: string[] }
+    if (!line.nodes && legacy.stationIds) {
+      line.nodes = legacy.stationIds.map(stationId => ({ kind: 'station', stationId }))
+      delete legacy.stationIds
+    }
+  }
+
+  if (!parsed.nextStationNumber) parsed.nextStationNumber = deriveNextNumber(parsed.stationOrder, 'station')
+  if (!parsed.nextLineNumber) parsed.nextLineNumber = deriveNextNumber(parsed.lineOrder, 'line')
+  if (!parsed.nextGeoFeatureNumber) parsed.nextGeoFeatureNumber = deriveNextNumber(parsed.geoFeatureOrder, 'geo')
+  if (!parsed.nextCompanyNumber) parsed.nextCompanyNumber = deriveNextNumber(parsed.companyOrder, 'company')
+
+  // Older saves predate grid-snapping (or predate it applying unconditionally),
+  // so a station or geo point from that era can sit a few px off-grid — invisible
+  // on its own, but it kinks any straight run through freshly-snapped neighbors.
+  // Re-snapping on load keeps the whole map on-grid without a one-off migration step.
+  for (const station of Object.values(parsed.stations)) {
+    station.x = snapToGrid(station.x)
+    station.y = snapToGrid(station.y)
+  }
+  for (const feature of Object.values(parsed.geoFeatures)) {
+    feature.points = feature.points.map(p => ({ x: snapToGrid(p.x), y: snapToGrid(p.y) }))
+  }
+
+  return parsed
+}
+
 function loadPersisted(): DataSnapshot | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
-    const parsed = JSON.parse(raw) as DataSnapshot
-    // Backfill fields added after earlier saves.
-    for (const line of Object.values(parsed.lines ?? {})) {
-      if (line.visible === undefined) line.visible = true
-      if (line.companyId === undefined) line.companyId = null
-      // Older saves stored a line as a flat station-id sequence; convert to nodes.
-      const legacy = line as unknown as { stationIds?: string[] }
-      if (!line.nodes && legacy.stationIds) {
-        line.nodes = legacy.stationIds.map(stationId => ({ kind: 'station', stationId }))
-        delete legacy.stationIds
-      }
-    }
-    if (!parsed.geoFeatures) parsed.geoFeatures = {}
-    if (!parsed.geoFeatureOrder) parsed.geoFeatureOrder = []
-    if (!parsed.nextGeoFeatureNumber) parsed.nextGeoFeatureNumber = 1
-    if (!parsed.companies) parsed.companies = {}
-    if (!parsed.companyOrder) parsed.companyOrder = []
-    if (!parsed.nextCompanyNumber) parsed.nextCompanyNumber = 1
-    if (parsed.authorityName === undefined) parsed.authorityName = ''
-
-    // Older saves predate grid-snapping (or predate it applying unconditionally),
-    // so a station or geo point from that era can sit a few px off-grid — invisible
-    // on its own, but it kinks any straight run through freshly-snapped neighbors.
-    // Re-snapping on load keeps the whole map on-grid without a one-off migration step.
-    for (const station of Object.values(parsed.stations ?? {})) {
-      station.x = snapToGrid(station.x)
-      station.y = snapToGrid(station.y)
-    }
-    for (const feature of Object.values(parsed.geoFeatures)) {
-      feature.points = feature.points.map(p => ({ x: snapToGrid(p.x), y: snapToGrid(p.y) }))
-    }
-
-    return parsed
+    return normalizeSnapshot(JSON.parse(raw) as DataSnapshot)
   } catch {
     return null
   }
+}
+
+/** Minimal shape check for an imported file — everything else normalizeSnapshot can backfill. */
+function isDataSnapshotLike(value: unknown): value is DataSnapshot {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Record<string, unknown>
+  return typeof candidate.stations === 'object' && typeof candidate.lines === 'object'
 }
 
 function initState(): MapState {
@@ -269,6 +305,19 @@ function reducer(rawState: MapState, action: Action): MapState {
         selectedGeoFeatureIds: [],
       }
     }
+
+    case 'loadMap':
+      return {
+        ...state,
+        ...action.snapshot,
+        tool: 'select',
+        selectedStationIds: [],
+        selectedLineIds: [],
+        selectedGeoFeatureIds: [],
+        draftLineNodes: [],
+        draftLineId: null,
+        draftGeoPoints: [],
+      }
 
     case 'setTool':
       return {
@@ -670,6 +719,11 @@ export function useMapState() {
   const setTool = useCallback((tool: Tool) => dispatch({ type: 'setTool', tool }), [])
   const setMapName = useCallback((name: string) => dispatch({ type: 'setMapName', name }), [])
   const setAuthorityName = useCallback((name: string) => dispatch({ type: 'setAuthorityName', name }), [])
+  const loadMap = useCallback((raw: unknown): boolean => {
+    if (!isDataSnapshotLike(raw)) return false
+    dispatch({ type: 'loadMap', snapshot: normalizeSnapshot(raw) })
+    return true
+  }, [])
   const addCompany = useCallback(() => dispatch({ type: 'addCompany' }), [])
   const renameCompany = useCallback(
     (companyId: string, name: string) => dispatch({ type: 'renameCompany', companyId, name }),
@@ -752,6 +806,40 @@ export function useMapState() {
     () => state.companyOrder.map(id => state.companies[id]),
     [state.companyOrder, state.companies],
   )
+  const snapshot: DataSnapshot = useMemo(
+    () => ({
+      mapName: state.mapName,
+      authorityName: state.authorityName,
+      stations: state.stations,
+      stationOrder: state.stationOrder,
+      lines: state.lines,
+      lineOrder: state.lineOrder,
+      geoFeatures: state.geoFeatures,
+      geoFeatureOrder: state.geoFeatureOrder,
+      companies: state.companies,
+      companyOrder: state.companyOrder,
+      nextStationNumber: state.nextStationNumber,
+      nextLineNumber: state.nextLineNumber,
+      nextGeoFeatureNumber: state.nextGeoFeatureNumber,
+      nextCompanyNumber: state.nextCompanyNumber,
+    }),
+    [
+      state.mapName,
+      state.authorityName,
+      state.stations,
+      state.stationOrder,
+      state.lines,
+      state.lineOrder,
+      state.geoFeatures,
+      state.geoFeatureOrder,
+      state.companies,
+      state.companyOrder,
+      state.nextStationNumber,
+      state.nextLineNumber,
+      state.nextGeoFeatureNumber,
+      state.nextCompanyNumber,
+    ],
+  )
 
   return {
     state,
@@ -759,9 +847,11 @@ export function useMapState() {
     lineList,
     geoFeatureList,
     companyList,
+    snapshot,
     setTool,
     setMapName,
     setAuthorityName,
+    loadMap,
     addCompany,
     renameCompany,
     setCompanyType,
