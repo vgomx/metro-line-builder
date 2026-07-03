@@ -143,17 +143,3 @@ export const DownloadIcon = () => (
     <path d="M7 1v8m0 0L4 6m3 3l3-3M1 11v1.5A1.5 1.5 0 0 0 2.5 14h9a1.5 1.5 0 0 0 1.5-1.5V11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 )
-
-export const LogoMark = () => (
-  <svg width="28" height="28" viewBox="0 0 52 52" fill="none">
-    <circle cx="26" cy="26" r="24" fill="none" stroke="#111111" strokeWidth="4" />
-    <path
-      d="M17 34 L17 18 L26 28 L35 18 L35 34"
-      fill="none"
-      stroke="#111111"
-      strokeWidth="5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-)

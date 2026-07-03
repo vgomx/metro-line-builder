@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { Button, IconButton } from 'metro-ds'
-import { DownloadIcon, GridIcon, LogoMark, RedoIcon, TrainIcon, UndoIcon, ZoomInIcon, ZoomOutIcon } from '../icons'
+import logoUrl from 'metro-ds/assets/logo.svg'
+import { DownloadIcon, GridIcon, RedoIcon, TrainIcon, UndoIcon, ZoomInIcon, ZoomOutIcon } from '../icons'
 
 interface TopBarProps {
   mapName: string
@@ -56,16 +57,12 @@ export function TopBar({
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 'var(--gap-md)',
           marginRight: 'var(--space-4)',
           paddingRight: 'var(--space-4)',
           borderRight: '1px solid var(--border-subtle)',
         }}
       >
-        <LogoMark />
-        <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em', whiteSpace: 'nowrap' }}>
-          Metro Line Builder
-        </span>
+        <img src={logoUrl} alt="Metro Line Builder" height={24} />
       </div>
 
       <input
