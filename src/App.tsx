@@ -62,7 +62,7 @@ function App() {
   const mapCanvasRef = useRef<MapCanvasHandle>(null)
   const { theme, toggleTheme } = useTheme()
   const [zoom, setZoom] = useState(1)
-  const [showGrid, setShowGrid] = useState(false)
+  const [showGrid, setShowGrid] = useState(true)
   const [showTrains, setShowTrains] = useState(false)
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)

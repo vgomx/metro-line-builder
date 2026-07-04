@@ -398,6 +398,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     draftLineNodes.filter((n): n is Extract<LineNode, { kind: 'station' }> => n.kind === 'station').map(n => n.stationId),
   )
 
+  const draggingStationIdSet = new Set(drag.kind === 'stations' ? drag.ids : [])
+
   const cursor = spaceHeld || tool === 'pan' ? 'grab' : DRAW_TOOLS.includes(tool) ? 'crosshair' : 'default'
 
   const gridLines = []
@@ -415,7 +417,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       ref={svgRef}
       width="100%"
       height="100%"
-      style={{ display: 'block', background: 'var(--bg-page)', cursor }}
+      style={{ display: 'block', background: 'var(--bg-page)', cursor, userSelect: 'none', WebkitUserSelect: 'none' }}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onDoubleClick={handleDoubleClick}
@@ -454,7 +456,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             strokeWidth={5}
             strokeLinecap="round"
             strokeLinejoin="round"
-            strokeDasharray="4 4"
+            strokeDasharray="2 12"
             opacity={0.25}
             style={{ pointerEvents: 'none' }}
           />
@@ -547,6 +549,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             selected={selectedStationIds.includes(station.id)}
             inDraftLine={draftLineStationIdSet.has(station.id)}
             interchange={(lineCountByStation[station.id] ?? 0) >= 2}
+            dragging={draggingStationIdSet.has(station.id)}
             labelPlacement={labelPlacementByStation[station.id]}
             onPointerDown={handleStationPointerDown}
             onClick={handleStationClick}

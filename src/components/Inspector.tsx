@@ -245,11 +245,6 @@ export function Inspector({
 
         <Input label="Station name" value={station.name} onChange={e => onRenameStation(station.id, e.target.value)} />
 
-        <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
-          <Input label="X" value={Math.round(station.x)} size="sm" style={{ flex: 1 }} disabled />
-          <Input label="Y" value={Math.round(station.y)} size="sm" style={{ flex: 1 }} disabled />
-        </div>
-
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
           <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--text-secondary)' }}>Lines</label>
           <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
