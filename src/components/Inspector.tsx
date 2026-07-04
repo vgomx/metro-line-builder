@@ -16,7 +16,7 @@ interface InspectorProps {
   onRenameLine: (lineId: string, name: string) => void
   onRecolorLine: (lineId: string, color: string) => void
   onSetLineCompany: (lineId: string, companyId: string | null) => void
-  onExtendLine: (lineId: string) => void
+  onExtendLine: (lineId: string, end: 'start' | 'end') => void
   onDeleteLine: (lineId: string) => void
   onRenameStation: (stationId: string, name: string) => void
   onToggleTransfer: (stationId: string) => void
@@ -208,9 +208,42 @@ export function Inspector({
         </div>
 
         <Divider />
-        <Button variant="secondary" size="sm" icon={<PenIcon />} onClick={() => onExtendLine(line.id)}>
-          Extend line
-        </Button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+          <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--text-secondary)' }}>
+            Extend line from
+          </label>
+          <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
+            <div title={`Extend from ${lineStations[0]?.name ?? 'start'}`} style={{ flex: 1, minWidth: 0 }}>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<PenIcon />}
+                style={{ width: '100%' }}
+                onClick={() => onExtendLine(line.id, 'start')}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {lineStations[0]?.name ?? 'Start'}
+                </span>
+              </Button>
+            </div>
+            <div
+              title={`Extend from ${lineStations[lineStations.length - 1]?.name ?? 'end'}`}
+              style={{ flex: 1, minWidth: 0 }}
+            >
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<PenIcon />}
+                style={{ width: '100%' }}
+                onClick={() => onExtendLine(line.id, 'end')}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {lineStations[lineStations.length - 1]?.name ?? 'End'}
+                </span>
+              </Button>
+            </div>
+          </div>
+        </div>
         <Button variant="destructive" size="sm" icon={<TrashIcon />} onClick={() => onDeleteLine(line.id)}>
           Delete line
         </Button>

@@ -33,6 +33,7 @@ interface MapCanvasProps {
   showTrains: boolean
   onAddStation: (x: number, y: number) => void
   onMoveStations: (ids: string[], dx: number, dy: number) => void
+  onMergeStations: (survivorId: string, mergedId: string) => void
   onAppendDraftLineNode: (node: LineNode) => void
   onInsertDraftLineStation: (x: number, y: number, index: number) => void
   onInsertLineStation: (lineId: string, x: number, y: number, index: number) => void
@@ -96,6 +97,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     showTrains,
     onAddStation,
     onMoveStations,
+    onMergeStations,
     onAppendDraftLineNode,
     onInsertDraftLineStation,
     onInsertLineStation,
@@ -193,7 +195,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     }
     if (tool === 'draw-line') {
       const { x, y } = toWorld(e.clientX, e.clientY)
-      onAppendDraftLineNode({ kind: 'point', x: snapToGrid(x), y: snapToGrid(y) })
+      // A real, draggable station rather than a bare waypoint — otherwise there'd be
+      // nothing to grab if the user tries to reposition this new end/start later.
+      onInsertDraftLineStation(snapToGrid(x), snapToGrid(y), draftLineNodes.length)
       return
     }
     if (tool === 'draw-river' || tool === 'draw-park') {
@@ -323,6 +327,17 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     } else if (drag.kind === 'stations' && !drag.moved) {
       // plain click on an already-selected station: keep single selection
     } else if (drag.kind === 'stations' && drag.moved) {
+      // Dropping a station exactly onto another (stationary) one merges them into a
+      // single shared station instead of leaving two markers silently stacked.
+      for (const draggedId of drag.ids) {
+        const draggedStation = stations[draggedId]
+        if (!draggedStation) continue
+        const target = stationList.find(
+          s => !drag.ids.includes(s.id) && s.x === draggedStation.x && s.y === draggedStation.y,
+        )
+        if (target) onMergeStations(target.id, draggedId)
+      }
+
       snapSessionRef.current += 1
       const session = snapSessionRef.current
       const affected = lineList

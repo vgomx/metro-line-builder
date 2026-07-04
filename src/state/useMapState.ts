@@ -30,6 +30,8 @@ interface MapState extends DataSnapshot {
   draftLineNodes: LineNode[]
   /** Set while the draft line is extending an existing line (vs. drafting a new one). */
   draftLineId: string | null
+  /** True when extending from the line's start — draftLineNodes is reversed so appends still land at its end. */
+  draftLineReversed: boolean
   draftGeoPoints: Point[]
   past: DataSnapshot[]
   future: DataSnapshot[]
@@ -46,12 +48,13 @@ type Action =
   | { type: 'setLineCompany'; lineId: string; companyId: string | null }
   | { type: 'addStation'; x: number; y: number }
   | { type: 'moveStations'; ids: string[]; dx: number; dy: number }
+  | { type: 'mergeStations'; survivorId: string; mergedId: string }
   | { type: 'renameStation'; stationId: string; name: string }
   | { type: 'toggleStationTransfer'; stationId: string }
   | { type: 'appendDraftLineNode'; node: LineNode }
   | { type: 'insertDraftLineStation'; x: number; y: number; index: number }
   | { type: 'insertLineStation'; lineId: string; x: number; y: number; index: number }
-  | { type: 'startExtendLine'; lineId: string }
+  | { type: 'startExtendLine'; lineId: string; end: 'start' | 'end' }
   | { type: 'finishDraftLine' }
   | { type: 'cancelDraftLine' }
   | { type: 'addGeoPoint'; x: number; y: number }
@@ -158,6 +161,7 @@ const emptyState: MapState = {
   selectedGeoFeatureIds: [],
   draftLineNodes: [],
   draftLineId: null,
+  draftLineReversed: false,
   draftGeoPoints: [],
   nextStationNumber: 1,
   nextLineNumber: 1,
@@ -271,6 +275,16 @@ function initState(): MapState {
   return { ...emptyState, ...persisted }
 }
 
+/**
+ * Positions are always grid-snapped before a station is placed, so an exact-coordinate
+ * match reliably means "this spot is already a station" — used to make drawing a line
+ * across an existing station (from another line or the same one) reuse it as a shared
+ * transfer point instead of stacking a duplicate station on top of it.
+ */
+function findStationAt(stations: Record<string, Station>, x: number, y: number): Station | undefined {
+  return Object.values(stations).find(s => s.x === x && s.y === y)
+}
+
 function removeStationsFromLines(
   lines: Record<string, Line>,
   lineOrder: string[],
@@ -345,6 +359,7 @@ function reducer(rawState: MapState, action: Action): MapState {
         tool: action.tool,
         draftLineNodes: [],
         draftLineId: null,
+        draftLineReversed: false,
         draftGeoPoints: [],
         selectedStationIds: [],
         selectedLineIds: [],
@@ -405,6 +420,9 @@ function reducer(rawState: MapState, action: Action): MapState {
     }
 
     case 'addStation': {
+      // Clicking exactly where a station already sits would otherwise stack an
+      // identical duplicate on top of it instead of doing nothing useful.
+      if (findStationAt(state.stations, action.x, action.y)) return state
       const id = `station-${state.nextStationNumber}`
       const station: Station = {
         id,
@@ -431,6 +449,54 @@ function reducer(rawState: MapState, action: Action): MapState {
       return { ...state, stations }
     }
 
+    // Not recordable on its own — fired right after a drag lands one station on top
+    // of another, as part of the same gesture the caller already checkpointed at
+    // drag-start, so a single undo reverts the move and the merge together.
+    case 'mergeStations': {
+      const survivor = state.stations[action.survivorId]
+      const merged = state.stations[action.mergedId]
+      if (!survivor || !merged) return state
+
+      const lines = { ...state.lines }
+      const lineOrder = [...state.lineOrder]
+      for (const id of [...lineOrder]) {
+        const line = lines[id]
+        const remapped = line.nodes.map(n =>
+          n.kind === 'station' && n.stationId === action.mergedId
+            ? ({ kind: 'station', stationId: action.survivorId } as const)
+            : n,
+        )
+        // Collapse consecutive duplicate references the remap may have just created.
+        const collapsed: LineNode[] = []
+        for (const n of remapped) {
+          const last = collapsed[collapsed.length - 1]
+          if (last && sameNode(last, n)) continue
+          collapsed.push(n)
+        }
+        if (collapsed.length < 2) {
+          delete lines[id]
+          lineOrder.splice(lineOrder.indexOf(id), 1)
+        } else {
+          lines[id] = { ...line, nodes: collapsed }
+        }
+      }
+
+      const stations = { ...state.stations }
+      delete stations[action.mergedId]
+      stations[action.survivorId] = { ...survivor, transfer: survivor.transfer || merged.transfer }
+
+      return {
+        ...state,
+        stations,
+        stationOrder: state.stationOrder.filter(id => id !== action.mergedId),
+        lines,
+        lineOrder,
+        selectedStationIds: Array.from(
+          new Set(state.selectedStationIds.map(id => (id === action.mergedId ? action.survivorId : id))),
+        ),
+      }
+    }
+
     case 'renameStation': {
       const station = state.stations[action.stationId]
       if (!station) return state
@@ -453,6 +519,14 @@ function reducer(rawState: MapState, action: Action): MapState {
     }
 
     case 'insertDraftLineStation': {
+      // Landing on an existing station's spot — e.g. crossing another line — makes
+      // it a shared transfer point instead of stacking a duplicate on top of it.
+      const existing = findStationAt(state.stations, action.x, action.y)
+      const nodes = [...state.draftLineNodes]
+      if (existing) {
+        nodes.splice(action.index, 0, { kind: 'station', stationId: existing.id })
+        return { ...state, draftLineNodes: nodes }
+      }
       const id = `station-${state.nextStationNumber}`
       const station: Station = {
         id,
@@ -461,7 +535,6 @@ function reducer(rawState: MapState, action: Action): MapState {
         y: action.y,
         transfer: false,
       }
-      const nodes = [...state.draftLineNodes]
       nodes.splice(action.index, 0, { kind: 'station', stationId: id })
       return {
         ...state,
@@ -475,6 +548,14 @@ function reducer(rawState: MapState, action: Action): MapState {
     case 'insertLineStation': {
       const line = state.lines[action.lineId]
       if (!line) return state
+      // Landing on an existing station's spot — e.g. crossing another line — makes
+      // it a shared transfer point instead of stacking a duplicate on top of it.
+      const existing = findStationAt(state.stations, action.x, action.y)
+      const nodes = [...line.nodes]
+      if (existing) {
+        nodes.splice(action.index, 0, { kind: 'station', stationId: existing.id })
+        return { ...state, lines: { ...state.lines, [action.lineId]: { ...line, nodes } } }
+      }
       const id = `station-${state.nextStationNumber}`
       const station: Station = {
         id,
@@ -483,7 +564,6 @@ function reducer(rawState: MapState, action: Action): MapState {
         y: action.y,
         transfer: false,
       }
-      const nodes = [...line.nodes]
       nodes.splice(action.index, 0, { kind: 'station', stationId: id })
       return {
         ...state,
@@ -497,11 +577,16 @@ function reducer(rawState: MapState, action: Action): MapState {
     case 'startExtendLine': {
       const line = state.lines[action.lineId]
       if (!line) return state
+      // New stations always get appended to the end of draftLineNodes, so extending
+      // from the start instead reverses the working copy — the append lands on
+      // what's visually the front, and finishDraftLine flips it back before saving.
+      const reversed = action.end === 'start'
       return {
         ...state,
         tool: 'draw-line',
-        draftLineNodes: [...line.nodes],
+        draftLineNodes: reversed ? [...line.nodes].reverse() : [...line.nodes],
         draftLineId: action.lineId,
+        draftLineReversed: reversed,
         selectedStationIds: [],
         selectedLineIds: [],
         selectedGeoFeatureIds: [],
@@ -510,16 +595,18 @@ function reducer(rawState: MapState, action: Action): MapState {
 
     case 'finishDraftLine': {
       if (state.draftLineNodes.length < 2) {
-        return { ...state, draftLineNodes: [], draftLineId: null }
+        return { ...state, draftLineNodes: [], draftLineId: null, draftLineReversed: false }
       }
       if (state.draftLineId) {
         const line = state.lines[state.draftLineId]
-        if (!line) return { ...state, draftLineNodes: [], draftLineId: null }
+        if (!line) return { ...state, draftLineNodes: [], draftLineId: null, draftLineReversed: false }
+        const nodes = state.draftLineReversed ? [...state.draftLineNodes].reverse() : state.draftLineNodes
         return {
           ...state,
-          lines: { ...state.lines, [state.draftLineId]: { ...line, nodes: state.draftLineNodes } },
+          lines: { ...state.lines, [state.draftLineId]: { ...line, nodes } },
           draftLineNodes: [],
           draftLineId: null,
+          draftLineReversed: false,
         }
       }
       const id = `line-${state.nextLineNumber}`
@@ -541,7 +628,7 @@ function reducer(rawState: MapState, action: Action): MapState {
     }
 
     case 'cancelDraftLine':
-      return { ...state, draftLineNodes: [], draftLineId: null }
+      return { ...state, draftLineNodes: [], draftLineId: null, draftLineReversed: false }
 
     case 'addGeoPoint':
       return { ...state, draftGeoPoints: [...state.draftGeoPoints, { x: action.x, y: action.y }] }
@@ -763,6 +850,10 @@ export function useMapState() {
     (ids: string[], dx: number, dy: number) => dispatch({ type: 'moveStations', ids, dx, dy }),
     [],
   )
+  const mergeStations = useCallback(
+    (survivorId: string, mergedId: string) => dispatch({ type: 'mergeStations', survivorId, mergedId }),
+    [],
+  )
   const renameStation = useCallback(
     (stationId: string, name: string) => dispatch({ type: 'renameStation', stationId, name }),
     [],
@@ -783,7 +874,10 @@ export function useMapState() {
     (lineId: string, x: number, y: number, index: number) => dispatch({ type: 'insertLineStation', lineId, x, y, index }),
     [],
   )
-  const startExtendLine = useCallback((lineId: string) => dispatch({ type: 'startExtendLine', lineId }), [])
+  const startExtendLine = useCallback(
+    (lineId: string, end: 'start' | 'end') => dispatch({ type: 'startExtendLine', lineId, end }),
+    [],
+  )
   const finishDraftLine = useCallback(() => dispatch({ type: 'finishDraftLine' }), [])
   const cancelDraftLine = useCallback(() => dispatch({ type: 'cancelDraftLine' }), [])
   const addGeoPoint = useCallback((x: number, y: number) => dispatch({ type: 'addGeoPoint', x, y }), [])
@@ -879,6 +973,7 @@ export function useMapState() {
     setLineCompany,
     addStation,
     moveStations,
+    mergeStations,
     renameStation,
     toggleStationTransfer,
     appendDraftLineNode,

@@ -31,6 +31,7 @@ function App() {
     setLineCompany,
     addStation,
     moveStations,
+    mergeStations,
     renameStation,
     toggleStationTransfer,
     appendDraftLineNode,
@@ -166,6 +167,7 @@ function App() {
             showTrains={showTrains}
             onAddStation={addStation}
             onMoveStations={moveStations}
+            onMergeStations={mergeStations}
             onAppendDraftLineNode={appendDraftLineNode}
             onInsertDraftLineStation={insertDraftLineStation}
             onInsertLineStation={insertLineStation}
