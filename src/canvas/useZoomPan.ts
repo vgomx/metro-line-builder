@@ -16,6 +16,7 @@ const ZOOM_STEP = 1.2
  */
 export function useZoomPan(svgRef: RefObject<SVGSVGElement | null>, panMode: boolean) {
   const [transform, setTransform] = useState<ZoomTransform>(zoomIdentity)
+  const [spaceHeld, setSpaceHeld] = useState(false)
   const spaceHeldRef = useRef(false)
   const panModeRef = useRef(panMode)
   panModeRef.current = panMode
@@ -25,10 +26,19 @@ export function useZoomPan(svgRef: RefObject<SVGSVGElement | null>, panMode: boo
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space') spaceHeldRef.current = true
+      if (e.code !== 'Space') return
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+      e.preventDefault() // stop the page from scrolling on every auto-repeat while held
+      if (!spaceHeldRef.current) {
+        spaceHeldRef.current = true
+        setSpaceHeld(true)
+      }
     }
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space') spaceHeldRef.current = false
+      if (e.code !== 'Space') return
+      spaceHeldRef.current = false
+      setSpaceHeld(false)
     }
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
@@ -77,5 +87,5 @@ export function useZoomPan(svgRef: RefObject<SVGSVGElement | null>, panMode: boo
   const zoomIn = useCallback(() => zoomBy(ZOOM_STEP), [zoomBy])
   const zoomOut = useCallback(() => zoomBy(1 / ZOOM_STEP), [zoomBy])
 
-  return { transform, zoomIn, zoomOut }
+  return { transform, zoomIn, zoomOut, spaceHeld }
 }

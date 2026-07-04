@@ -7,9 +7,11 @@ import { StationNode } from './StationNode'
 import { LinePath } from './LinePath'
 import { GeoFeaturePath } from './GeoFeaturePath'
 import { TrainMarker } from './TrainMarker'
+import { SnapAnimation } from './SnapAnimation'
 import { routeOrthogonal } from './routing'
 import { GRID_SIZE, snapToGrid } from '../grid'
 import { closestSegmentIndex, resolveLineNodes, stationIdsOfLine } from './lineNodes'
+import { computeLabelPlacement } from './labelPlacement'
 
 export interface MapCanvasHandle {
   zoomIn: () => void
@@ -113,9 +115,13 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   ref,
 ) {
   const svgRef = useRef<SVGSVGElement>(null)
-  const { transform, zoomIn, zoomOut } = useZoomPan(svgRef, tool === 'pan')
+  const { transform, zoomIn, zoomOut, spaceHeld } = useZoomPan(svgRef, tool === 'pan')
   const [drag, setDrag] = useState<DragState>({ kind: 'none' })
   const [cursorWorld, setCursorWorld] = useState<{ x: number; y: number } | null>(null)
+  const [snapAnimations, setSnapAnimations] = useState<
+    { key: string; lineId: string; color: string; from: Point[]; to: Point[] }[]
+  >([])
+  const snapSessionRef = useRef(0)
 
   useImperativeHandle(ref, () => ({ zoomIn, zoomOut }), [zoomIn, zoomOut])
 
@@ -179,6 +185,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
 
   const handleBackgroundPointerDown = (e: ReactPointerEvent<SVGRectElement>) => {
     if (e.button !== 0) return
+    if (spaceHeld) return // space-held drag is pan-only; let useZoomPan's own drag handle it
     if (tool === 'add-station') {
       const { x, y } = toWorld(e.clientX, e.clientY)
       onAddStation(snapToGrid(x), snapToGrid(y))
@@ -203,6 +210,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
 
   const handleStationPointerDown = (e: ReactPointerEvent<SVGGElement>, station: Station) => {
     if (e.button !== 0) return
+    if (spaceHeld) return // space-held drag is pan-only, even when starting on a station
     if (tool !== 'select') return
     e.stopPropagation()
 
@@ -240,12 +248,14 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   }
 
   const handleStationClick = (station: Station) => {
+    if (spaceHeld) return
     if (tool === 'draw-line') {
       onAppendDraftLineNode({ kind: 'station', stationId: station.id })
     }
   }
 
   const handleLineClick = (line: Line, e: ReactMouseEvent<SVGPathElement>) => {
+    if (spaceHeld) return
     if (tool === 'select') {
       onSetSelection([], [line.id], [])
       return
@@ -260,6 +270,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   }
 
   const handleGeoFeatureClick = (feature: GeoFeature) => {
+    if (spaceHeld) return
     if (tool !== 'select') return
     onSetSelection([], [], [feature.id])
   }
@@ -311,11 +322,26 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       }
     } else if (drag.kind === 'stations' && !drag.moved) {
       // plain click on an already-selected station: keep single selection
+    } else if (drag.kind === 'stations' && drag.moved) {
+      snapSessionRef.current += 1
+      const session = snapSessionRef.current
+      const affected = lineList
+        .filter(line => line.visible && stationIdsOfLine(line).some(id => id in drag.originalPositions))
+        .map(line => {
+          const fromPoints = line.nodes
+            .map(n => (n.kind === 'station' ? (drag.originalPositions[n.stationId] ?? stations[n.stationId]) : n))
+            .filter((p): p is Point => Boolean(p))
+          const toPoints = resolveLineNodes(line.nodes, stations)
+          return { key: `${session}-${line.id}`, lineId: line.id, color: line.color, from: fromPoints, to: toPoints }
+        })
+        .filter(a => a.from.length >= 2 && a.to.length >= 2)
+      if (affected.length > 0) setSnapAnimations(affected)
     }
     setDrag({ kind: 'none' })
   }
 
   const handleDoubleClick = () => {
+    if (spaceHeld) return
     if (tool === 'draw-line' && draftLineNodes.length >= 2) {
       onFinishDraftLine()
     } else if ((tool === 'draw-river' || tool === 'draw-park') && draftGeoPoints.length >= 2) {
@@ -324,6 +350,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   }
 
   const handleDraftPathClick = (e: ReactMouseEvent<SVGPathElement>) => {
+    if (spaceHeld) return
     if (tool !== 'draw-line') return
     e.stopPropagation()
     const { x, y } = toWorld(e.clientX, e.clientY)
@@ -362,11 +389,16 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     }
   }
 
+  const labelPlacementByStation: Record<string, ReturnType<typeof computeLabelPlacement>> = {}
+  for (const station of stationList) {
+    labelPlacementByStation[station.id] = computeLabelPlacement(station.id, lineList, stations)
+  }
+
   const draftLineStationIdSet = new Set(
     draftLineNodes.filter((n): n is Extract<LineNode, { kind: 'station' }> => n.kind === 'station').map(n => n.stationId),
   )
 
-  const cursor = DRAW_TOOLS.includes(tool) ? 'crosshair' : tool === 'pan' ? 'grab' : 'default'
+  const cursor = spaceHeld || tool === 'pan' ? 'grab' : DRAW_TOOLS.includes(tool) ? 'crosshair' : 'default'
 
   const gridLines = []
   if (showGrid) {
@@ -425,6 +457,16 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             strokeDasharray="4 4"
             opacity={0.25}
             style={{ pointerEvents: 'none' }}
+          />
+        ))}
+
+        {snapAnimations.map(a => (
+          <SnapAnimation
+            key={a.key}
+            color={a.color}
+            fromPoints={a.from}
+            toPoints={a.to}
+            onComplete={() => setSnapAnimations(prev => prev.filter(p => p.key !== a.key))}
           />
         ))}
 
@@ -505,6 +547,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             selected={selectedStationIds.includes(station.id)}
             inDraftLine={draftLineStationIdSet.has(station.id)}
             interchange={(lineCountByStation[station.id] ?? 0) >= 2}
+            labelPlacement={labelPlacementByStation[station.id]}
             onPointerDown={handleStationPointerDown}
             onClick={handleStationClick}
           />

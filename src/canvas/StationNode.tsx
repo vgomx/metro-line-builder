@@ -1,5 +1,6 @@
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { Station } from '../types'
+import type { LabelPlacement } from './labelPlacement'
 
 interface StationNodeProps {
   station: Station
@@ -7,13 +8,18 @@ interface StationNodeProps {
   inDraftLine: boolean
   /** True when the station sits on 2+ distinct lines — rendered as an interchange. */
   interchange: boolean
+  /** Compass direction (away from every line touching this station) to place the name in. */
+  labelPlacement: LabelPlacement
   onPointerDown: (e: ReactPointerEvent<SVGGElement>, station: Station) => void
   onClick: (station: Station) => void
 }
 
-export function StationNode({ station, selected, inDraftLine, interchange, onPointerDown, onClick }: StationNodeProps) {
+export function StationNode({ station, selected, inDraftLine, interchange, labelPlacement, onPointerDown, onClick }: StationNodeProps) {
   const isInterchange = interchange || station.transfer
   const radius = isInterchange ? 10 : 6.5
+  const labelDistance = radius + 12
+  const labelX = Math.cos(labelPlacement.angle) * labelDistance
+  const labelY = Math.sin(labelPlacement.angle) * labelDistance
 
   return (
     <g
@@ -44,9 +50,10 @@ export function StationNode({ station, selected, inDraftLine, interchange, onPoi
         />
       )}
       <text
-        x={0}
-        y={radius + 14}
-        textAnchor="middle"
+        x={labelX}
+        y={labelY}
+        textAnchor={labelPlacement.anchor}
+        dominantBaseline="middle"
         fontSize={11}
         fontFamily="'Barlow Condensed', system-ui, sans-serif"
         fontWeight={600}
