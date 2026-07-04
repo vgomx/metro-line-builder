@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer } from 'react'
 import type { Company, CompanyType, GeoFeature, GeoFeatureType, Line, LineNode, Point, Station, Tool } from '../types'
 import { nextLineColor } from '../lineColors'
 import { snapToGrid } from '../grid'
-import { sameNode } from '../canvas/lineNodes'
+import { exactSegmentIndex, lineHasStation, resolveLineNodes, sameNode } from '../canvas/lineNodes'
 
 export interface DataSnapshot {
   mapName: string
@@ -285,6 +285,51 @@ function findStationAt(stations: Record<string, Station>, x: number, y: number):
   return Object.values(stations).find(s => s.x === x && s.y === y)
 }
 
+/** Folds `mergedId` into `survivorId`: remaps every line's node references, collapses
+ * any now-consecutive duplicates, drops lines that fall below 2 points, unions the
+ * `transfer` flag, and removes the merged station. Shared by the drag-to-merge action
+ * and by enabling "Transfer station" on a station that coincides with another one. */
+function mergeStationsInState(state: MapState, survivorId: string, mergedId: string): MapState {
+  const survivor = state.stations[survivorId]
+  const merged = state.stations[mergedId]
+  if (!survivor || !merged) return state
+
+  const lines = { ...state.lines }
+  const lineOrder = [...state.lineOrder]
+  for (const id of [...lineOrder]) {
+    const line = lines[id]
+    const remapped = line.nodes.map(n =>
+      n.kind === 'station' && n.stationId === mergedId ? ({ kind: 'station', stationId: survivorId } as const) : n,
+    )
+    // Collapse consecutive duplicate references the remap may have just created.
+    const collapsed: LineNode[] = []
+    for (const n of remapped) {
+      const last = collapsed[collapsed.length - 1]
+      if (last && sameNode(last, n)) continue
+      collapsed.push(n)
+    }
+    if (collapsed.length < 2) {
+      delete lines[id]
+      lineOrder.splice(lineOrder.indexOf(id), 1)
+    } else {
+      lines[id] = { ...line, nodes: collapsed }
+    }
+  }
+
+  const stations = { ...state.stations }
+  delete stations[mergedId]
+  stations[survivorId] = { ...survivor, transfer: survivor.transfer || merged.transfer }
+
+  return {
+    ...state,
+    stations,
+    stationOrder: state.stationOrder.filter(id => id !== mergedId),
+    lines,
+    lineOrder,
+    selectedStationIds: Array.from(new Set(state.selectedStationIds.map(id => (id === mergedId ? survivorId : id)))),
+  }
+}
+
 function removeStationsFromLines(
   lines: Record<string, Line>,
   lineOrder: string[],
@@ -452,50 +497,8 @@ function reducer(rawState: MapState, action: Action): MapState {
     // Not recordable on its own — fired right after a drag lands one station on top
     // of another, as part of the same gesture the caller already checkpointed at
     // drag-start, so a single undo reverts the move and the merge together.
-    case 'mergeStations': {
-      const survivor = state.stations[action.survivorId]
-      const merged = state.stations[action.mergedId]
-      if (!survivor || !merged) return state
-
-      const lines = { ...state.lines }
-      const lineOrder = [...state.lineOrder]
-      for (const id of [...lineOrder]) {
-        const line = lines[id]
-        const remapped = line.nodes.map(n =>
-          n.kind === 'station' && n.stationId === action.mergedId
-            ? ({ kind: 'station', stationId: action.survivorId } as const)
-            : n,
-        )
-        // Collapse consecutive duplicate references the remap may have just created.
-        const collapsed: LineNode[] = []
-        for (const n of remapped) {
-          const last = collapsed[collapsed.length - 1]
-          if (last && sameNode(last, n)) continue
-          collapsed.push(n)
-        }
-        if (collapsed.length < 2) {
-          delete lines[id]
-          lineOrder.splice(lineOrder.indexOf(id), 1)
-        } else {
-          lines[id] = { ...line, nodes: collapsed }
-        }
-      }
-
-      const stations = { ...state.stations }
-      delete stations[action.mergedId]
-      stations[action.survivorId] = { ...survivor, transfer: survivor.transfer || merged.transfer }
-
-      return {
-        ...state,
-        stations,
-        stationOrder: state.stationOrder.filter(id => id !== action.mergedId),
-        lines,
-        lineOrder,
-        selectedStationIds: Array.from(
-          new Set(state.selectedStationIds.map(id => (id === action.mergedId ? action.survivorId : id))),
-        ),
-      }
-    }
+    case 'mergeStations':
+      return mergeStationsInState(state, action.survivorId, action.mergedId)
 
     case 'renameStation': {
       const station = state.stations[action.stationId]
@@ -506,10 +509,33 @@ function reducer(rawState: MapState, action: Action): MapState {
     case 'toggleStationTransfer': {
       const station = state.stations[action.stationId]
       if (!station) return state
-      return {
-        ...state,
-        stations: { ...state.stations, [action.stationId]: { ...station, transfer: !station.transfer } },
+      if (station.transfer) {
+        return { ...state, stations: { ...state.stations, [action.stationId]: { ...station, transfer: false } } }
       }
+
+      // Enabling transfer on a station that sits exactly on another one — e.g. two
+      // lines drawn independently that happen to coincide — merges them into one
+      // shared station instead of leaving a hidden duplicate stacked underneath.
+      const otherStations = { ...state.stations }
+      delete otherStations[station.id]
+      const coincident = findStationAt(otherStations, station.x, station.y)
+      if (coincident) return mergeStationsInState(state, station.id, coincident.id)
+
+      // Otherwise, splice this station into any other line whose path happens to
+      // cross exactly through this point without already stopping here.
+      let lines = state.lines
+      for (const id of state.lineOrder) {
+        const line = lines[id]
+        if (lineHasStation(line, station.id)) continue
+        const points = resolveLineNodes(line.nodes, state.stations)
+        const index = exactSegmentIndex(points, station)
+        if (index === -1) continue
+        const nodes = [...line.nodes]
+        nodes.splice(index + 1, 0, { kind: 'station', stationId: station.id })
+        lines = { ...lines, [id]: { ...line, nodes } }
+      }
+
+      return { ...state, lines, stations: { ...state.stations, [action.stationId]: { ...station, transfer: true } } }
     }
 
     case 'appendDraftLineNode': {

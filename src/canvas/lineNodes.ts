@@ -36,24 +36,39 @@ export function sameNode(a: LineNode, b: LineNode): boolean {
   return a.kind === 'station' && b.kind === 'station' ? a.stationId === b.stationId : a.kind === 'point' && b.kind === 'point' && a.x === b.x && a.y === b.y
 }
 
+function distanceToSegment(a: Point, b: Point, p: Point): number {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const lenSq = dx * dx + dy * dy
+  const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq))
+  const projX = a.x + t * dx
+  const projY = a.y + t * dy
+  return Math.hypot(p.x - projX, p.y - projY)
+}
+
 /** Index i such that inserting a new node between points[i] and points[i+1] is closest to `click`. */
 export function closestSegmentIndex(points: Point[], click: Point): number {
   let bestIndex = 0
   let bestDist = Infinity
   for (let i = 0; i < points.length - 1; i++) {
-    const a = points[i]
-    const b = points[i + 1]
-    const dx = b.x - a.x
-    const dy = b.y - a.y
-    const lenSq = dx * dx + dy * dy
-    const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((click.x - a.x) * dx + (click.y - a.y) * dy) / lenSq))
-    const projX = a.x + t * dx
-    const projY = a.y + t * dy
-    const dist = Math.hypot(click.x - projX, click.y - projY)
+    const dist = distanceToSegment(points[i], points[i + 1], click)
     if (dist < bestDist) {
       bestDist = dist
       bestIndex = i
     }
   }
   return bestIndex
+}
+
+/**
+ * Index i such that `point` sits exactly on the segment between points[i] and
+ * points[i+1] — a real geometric crossing, not just the nearest one — or -1 if the
+ * point isn't on any segment. Only checks each line's own node-to-node segments,
+ * not the rounded elbow routeOrthogonal adds when two nodes aren't h/v/45°-aligned.
+ */
+export function exactSegmentIndex(points: Point[], point: Point): number {
+  for (let i = 0; i < points.length - 1; i++) {
+    if (distanceToSegment(points[i], points[i + 1], point) < 0.5) return i
+  }
+  return -1
 }
