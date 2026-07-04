@@ -181,13 +181,33 @@ function deriveNextNumber(ids: string[], prefix: string): number {
 }
 
 /**
+ * The very first "Export" shipped stations/lines as plain arrays (under a top-level
+ * "name" field) instead of today's id-keyed Record + matching *Order array. Convert
+ * back to a Record here so every lookup by id downstream (station-by-id, transfer
+ * counting, line-node resolution, ...) works — without this, array indices leak in
+ * as fake "ids" and any lookup by real id silently misses.
+ */
+function arrayToRecord<T extends { id: string }>(value: unknown): Record<string, T> | undefined {
+  if (!Array.isArray(value)) return undefined
+  const record: Record<string, T> = {}
+  for (const item of value as T[]) {
+    if (item && typeof item.id === 'string') record[item.id] = item
+  }
+  return record
+}
+
+/**
  * Backfills fields added after earlier saves (including the minimal shape produced
  * by early versions of "Export"), so both the localStorage autosave and an
  * imported/opened JSON file load through the same compatibility path.
  */
 function normalizeSnapshot(parsed: DataSnapshot): DataSnapshot {
-  if (!parsed.mapName) parsed.mapName = 'Untitled Map'
+  if (!parsed.mapName) parsed.mapName = (parsed as unknown as { name?: string }).name || 'Untitled Map'
   if (parsed.authorityName === undefined) parsed.authorityName = ''
+  parsed.stations = arrayToRecord<Station>(parsed.stations) ?? parsed.stations
+  parsed.lines = arrayToRecord<Line>(parsed.lines) ?? parsed.lines
+  parsed.geoFeatures = arrayToRecord<GeoFeature>(parsed.geoFeatures) ?? parsed.geoFeatures
+  parsed.companies = arrayToRecord<Company>(parsed.companies) ?? parsed.companies
   if (!parsed.stations) parsed.stations = {}
   if (!parsed.stationOrder) parsed.stationOrder = Object.keys(parsed.stations)
   if (!parsed.lines) parsed.lines = {}
