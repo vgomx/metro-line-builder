@@ -63,7 +63,7 @@ export function LinesPanel({ lines, selectedLineId, onSelect, onToggleVisibility
                 border: 'none',
                 cursor: 'pointer',
                 padding: '2px',
-                color: line.visible ? 'var(--ink-600)' : 'var(--ink-300)',
+                color: line.visible ? 'var(--text-secondary)' : 'var(--text-disabled)',
               }}
             >
               {line.visible ? <EyeIcon /> : <EyeOffIcon />}

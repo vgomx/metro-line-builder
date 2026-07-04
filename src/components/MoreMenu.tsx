@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { Dialog, Divider, IconButton } from 'metro-ds'
-import logoUrl from 'metro-ds/assets/logo-mark.svg'
+import logoLightUrl from 'metro-ds/assets/logo-mark.svg'
+import logoDarkUrl from 'metro-ds/assets/logo-mark-white.svg'
 import { MoreIcon } from '../icons'
 import { LEGAL_NOTICES } from '../legalNotices'
+import type { Theme } from '../useTheme'
 
 const APP_VERSION = '0.1.0'
 
-export function MoreMenu() {
+interface MoreMenuProps {
+  theme: Theme
+}
+
+export function MoreMenu({ theme }: MoreMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeDialog, setActiveDialog] = useState<'legal' | 'about' | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -102,7 +108,7 @@ export function MoreMenu() {
 
       <Dialog open={activeDialog === 'about'} onClose={() => setActiveDialog(null)} title="" width="360px">
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--gap-md)', textAlign: 'center' }}>
-          <img src={logoUrl} alt="" width={56} height={56} />
+          <img src={theme === 'dark' ? logoDarkUrl : logoLightUrl} alt="" width={56} height={56} />
           <div>
             <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)' }}>Metro Line Builder</div>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>

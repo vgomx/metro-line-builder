@@ -29,17 +29,17 @@ export function StationNode({ station, selected, inDraftLine, interchange, onPoi
         <>
           <circle
             r={radius}
-            fill={inDraftLine ? 'var(--brand-500)' : '#FFFFFF'}
-            stroke={inDraftLine ? 'var(--brand-500)' : 'var(--ink-900)'}
+            fill={inDraftLine ? 'var(--brand-500)' : 'var(--bg-page)'}
+            stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
             strokeWidth={3.5}
           />
-          <circle r={radius - 4.5} fill="none" stroke={inDraftLine ? 'var(--brand-500)' : 'var(--ink-900)'} strokeWidth={1.25} />
+          <circle r={radius - 4.5} fill="none" stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'} strokeWidth={1.25} />
         </>
       ) : (
         <circle
           r={radius}
-          fill={inDraftLine ? 'var(--brand-500)' : '#FFFFFF'}
-          stroke={inDraftLine ? 'var(--brand-500)' : 'var(--ink-900)'}
+          fill={inDraftLine ? 'var(--brand-500)' : 'var(--bg-page)'}
+          stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
           strokeWidth={2.5}
         />
       )}

@@ -399,7 +399,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         />
 
         {showGrid && (
-          <g stroke="var(--ink-200)" strokeWidth={1 / transform.k} opacity={0.4}>
+          <g stroke="var(--border-default)" strokeWidth={1 / transform.k} opacity={0.4}>
             {gridLines}
           </g>
         )}
@@ -485,18 +485,6 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           />
         )}
 
-        {stationList.map(station => (
-          <StationNode
-            key={station.id}
-            station={station}
-            selected={selectedStationIds.includes(station.id)}
-            inDraftLine={draftLineStationIdSet.has(station.id)}
-            interchange={(lineCountByStation[station.id] ?? 0) >= 2}
-            onPointerDown={handleStationPointerDown}
-            onClick={handleStationClick}
-          />
-        ))}
-
         {showTrains &&
           lineList
             .filter(line => line.visible && stationIdsOfLine(line).length >= 2)
@@ -509,6 +497,18 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
                 stopFlags={line.nodes.map(n => n.kind === 'station')}
               />
             ))}
+
+        {stationList.map(station => (
+          <StationNode
+            key={station.id}
+            station={station}
+            selected={selectedStationIds.includes(station.id)}
+            inDraftLine={draftLineStationIdSet.has(station.id)}
+            interchange={(lineCountByStation[station.id] ?? 0) >= 2}
+            onPointerDown={handleStationPointerDown}
+            onClick={handleStationClick}
+          />
+        ))}
 
         {drag.kind === 'marquee' && (
           <rect

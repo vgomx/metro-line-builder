@@ -234,8 +234,8 @@ export function Inspector({
               width: '14px',
               height: '14px',
               borderRadius: 'var(--radius-full)',
-              border: `2px solid ${stationLines[0]?.color ?? 'var(--ink-300)'}`,
-              background: transfer ? (stationLines[0]?.color ?? 'var(--ink-300)') : 'var(--bg-surface)',
+              border: `2px solid ${stationLines[0]?.color ?? 'var(--border-strong)'}`,
+              background: transfer ? (stationLines[0]?.color ?? 'var(--border-strong)') : 'var(--bg-surface)',
               flexShrink: 0,
             }}
           />

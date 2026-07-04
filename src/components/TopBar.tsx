@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { Button, IconButton } from 'metro-ds'
-import logoUrl from 'metro-ds/assets/logo.svg'
-import { DownloadIcon, FolderOpenIcon, GridIcon, RedoIcon, TrainIcon, UndoIcon, ZoomInIcon, ZoomOutIcon } from '../icons'
+import logoLightUrl from 'metro-ds/assets/logo.svg'
+import logoDarkUrl from 'metro-ds/assets/logo-horizontal-white.svg'
+import { DownloadIcon, FolderOpenIcon, GridIcon, MoonIcon, RedoIcon, SunIcon, TrainIcon, UndoIcon, ZoomInIcon, ZoomOutIcon } from '../icons'
+import type { Theme } from '../useTheme'
 
 interface TopBarProps {
   mapName: string
@@ -14,6 +16,8 @@ interface TopBarProps {
   onToggleGrid: () => void
   showTrains: boolean
   onToggleTrains: () => void
+  theme: Theme
+  onToggleTheme: () => void
   onOpen: () => void
   onExport: () => void
   onUndo: () => void
@@ -32,6 +36,8 @@ export function TopBar({
   onToggleGrid,
   showTrains,
   onToggleTrains,
+  theme,
+  onToggleTheme,
   onOpen,
   onExport,
   onUndo,
@@ -64,7 +70,7 @@ export function TopBar({
           borderRight: '1px solid var(--border-subtle)',
         }}
       >
-        <img src={logoUrl} alt="Metro Line Builder" height={24} />
+        <img src={theme === 'dark' ? logoDarkUrl : logoLightUrl} alt="Metro Line Builder" height={24} />
       </div>
 
       <input
@@ -117,6 +123,12 @@ export function TopBar({
 
       <IconButton icon={<GridIcon />} label="Toggle grid" size="sm" active={showGrid} onClick={onToggleGrid} />
       <IconButton icon={<TrainIcon />} label="Toggle trains" size="sm" active={showTrains} onClick={onToggleTrains} />
+      <IconButton
+        icon={theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+        label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+        size="sm"
+        onClick={onToggleTheme}
+      />
       <div style={{ width: 'var(--space-2)' }} />
       <Button size="sm" variant="ghost" icon={<FolderOpenIcon />} onClick={onOpen}>
         Open

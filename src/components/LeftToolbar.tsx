@@ -2,11 +2,13 @@ import { useEffect } from 'react'
 import { IconButton, Toolbar, ToolbarSeparator } from 'metro-ds'
 import { CursorIcon, HandIcon, ParkIcon, PenIcon, RiverIcon, StationIcon } from '../icons'
 import type { Tool } from '../types'
+import type { Theme } from '../useTheme'
 import { MoreMenu } from './MoreMenu'
 
 interface LeftToolbarProps {
   tool: Tool
   onSetTool: (tool: Tool) => void
+  theme: Theme
 }
 
 const TOOLS: { tool: Tool; label: string; icon: JSX.Element; key: string }[] = [
@@ -21,7 +23,7 @@ const GEO_TOOLS: { tool: Tool; label: string; icon: JSX.Element; key: string }[]
   { tool: 'draw-park', label: 'Draw park (G)', icon: <ParkIcon />, key: 'g' },
 ]
 
-export function LeftToolbar({ tool, onSetTool }: LeftToolbarProps) {
+export function LeftToolbar({ tool, onSetTool, theme }: LeftToolbarProps) {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
@@ -60,7 +62,7 @@ export function LeftToolbar({ tool, onSetTool }: LeftToolbarProps) {
 
       <div style={{ flex: 1 }} />
 
-      <MoreMenu />
+      <MoreMenu theme={theme} />
     </aside>
   )
 }

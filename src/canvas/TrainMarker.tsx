@@ -32,28 +32,38 @@ export function TrainMarker({ lineId, color, pathPoints, stopFlags, dwellMs = 14
   const groupRef = useRef<SVGGElement>(null)
   const segmentRefs = useRef<(SVGPathElement | null)[]>([])
   const lastAngleRef = useRef(0)
+  // Read fresh every frame instead of closing over the props, so the animation
+  // loop below can keep a stable start time (and thus keep playing without a
+  // jump) across re-renders that only touch positions — e.g. dragging a
+  // station or any unrelated canvas interaction — rather than restarting.
+  const pathPointsRef = useRef(pathPoints)
+  const stopFlagsRef = useRef(stopFlags)
+  pathPointsRef.current = pathPoints
+  stopFlagsRef.current = stopFlags
 
   useEffect(() => {
-    if (pathPoints.length < 2) return
+    if (pathPointsRef.current.length < 2) return
     let frameId: number
     const startTime = performance.now()
 
-    // Visits every point forward then back, e.g. [0,1,2,1,0] for a 3-point line —
-    // the shared terminus at each end gets two consecutive dwells across the loop
-    // seam, reading as a brief layover before reversing. Waypoints (stopFlags=false)
-    // get zero dwell, so the train passes through them without pausing.
-    const stopSequence: number[] = []
-    for (let i = 0; i < pathPoints.length; i++) stopSequence.push(i)
-    for (let i = pathPoints.length - 2; i >= 0; i--) stopSequence.push(i)
-
-    const dwellFor = (idx: number) => (stopFlags[idx] ? dwellMs : 0)
-
     const tick = (now: number) => {
       const group = groupRef.current
-      if (!group) {
+      const pathPoints = pathPointsRef.current
+      const stopFlags = stopFlagsRef.current
+      if (!group || pathPoints.length < 2) {
         frameId = requestAnimationFrame(tick)
         return
       }
+
+      // Visits every point forward then back, e.g. [0,1,2,1,0] for a 3-point line —
+      // the shared terminus at each end gets two consecutive dwells across the loop
+      // seam, reading as a brief layover before reversing. Waypoints (stopFlags=false)
+      // get zero dwell, so the train passes through them without pausing.
+      const stopSequence: number[] = []
+      for (let i = 0; i < pathPoints.length; i++) stopSequence.push(i)
+      for (let i = pathPoints.length - 2; i >= 0; i--) stopSequence.push(i)
+
+      const dwellFor = (idx: number) => (stopFlags[idx] ? dwellMs : 0)
 
       const segmentLengths: number[] = []
       for (let i = 0; i < pathPoints.length - 1; i++) {
@@ -125,7 +135,9 @@ export function TrainMarker({ lineId, color, pathPoints, stopFlags, dwellMs = 14
 
     frameId = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frameId)
-  }, [lineId, pathPoints, stopFlags, dwellMs, speed])
+    // Intentionally excludes pathPoints/stopFlags: those are read live via refs
+    // above so the loop's startTime survives re-renders instead of restarting.
+  }, [lineId, dwellMs, speed])
 
   if (pathPoints.length < 2) return null
 

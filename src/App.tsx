@@ -10,6 +10,7 @@ import { CanvasOverlay } from './components/CanvasOverlay'
 import { LineAnnouncer } from './components/LineAnnouncer'
 import { exportMapAsJson, pickMapFile } from './export'
 import { stationIdsOfLine } from './canvas/lineNodes'
+import { useTheme } from './useTheme'
 
 function App() {
   const {
@@ -59,6 +60,7 @@ function App() {
   } = useMapState()
 
   const mapCanvasRef = useRef<MapCanvasHandle>(null)
+  const { theme, toggleTheme } = useTheme()
   const [zoom, setZoom] = useState(1)
   const [showGrid, setShowGrid] = useState(false)
   const [showTrains, setShowTrains] = useState(false)
@@ -134,6 +136,8 @@ function App() {
         onToggleGrid={() => setShowGrid(g => !g)}
         showTrains={showTrains}
         onToggleTrains={() => setShowTrains(t => !t)}
+        theme={theme}
+        onToggleTheme={toggleTheme}
         onOpen={handleOpen}
         onExport={() => exportMapAsJson(snapshot)}
         onUndo={undo}
@@ -143,7 +147,7 @@ function App() {
       />
 
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <LeftToolbar tool={state.tool} onSetTool={setTool} />
+        <LeftToolbar tool={state.tool} onSetTool={setTool} theme={theme} />
 
         <main style={{ flex: 1, minWidth: 0, position: 'relative' }}>
           <MapCanvas

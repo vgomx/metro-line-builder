@@ -23,7 +23,7 @@ export function StationsPanel({ stations, lines, selectedStationId, onSelect }: 
       {stations.map(station => {
         const isSelected = station.id === selectedStationId
         const line = primaryLineFor(station.id)
-        const color = line?.color ?? 'var(--ink-300)'
+        const color = line?.color ?? 'var(--border-strong)'
         const transfer = isTransferStation(station, lines)
         return (
           <div

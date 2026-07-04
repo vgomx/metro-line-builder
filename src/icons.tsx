@@ -184,6 +184,29 @@ export const DownloadIcon = () => (
   </svg>
 )
 
+export const SunIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <circle cx="7" cy="7" r="3" stroke="currentColor" strokeWidth="1.4" />
+    <path
+      d="M7 0.5v2M7 11.5v2M13.5 7h-2M2.5 7h-2M11.5 2.5l-1.4 1.4M3.9 10.1l-1.4 1.4M11.5 11.5l-1.4-1.4M3.9 3.9 2.5 2.5"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+    />
+  </svg>
+)
+
+export const MoonIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <path
+      d="M12.5 8.8A5.5 5.5 0 0 1 5.2 1.5a5.5 5.5 0 1 0 7.3 7.3z"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
 export const FolderOpenIcon = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
     <path
