@@ -7,6 +7,7 @@ import { TopBar } from './components/TopBar'
 import { LeftToolbar } from './components/LeftToolbar'
 import { RightPanel } from './components/RightPanel'
 import { CanvasOverlay } from './components/CanvasOverlay'
+import { CanvasLegend } from './components/CanvasLegend'
 import { LineAnnouncer } from './components/LineAnnouncer'
 import { exportMapAsJson, pickMapFile } from './export'
 import { stationIdsOfLine } from './canvas/lineNodes'
@@ -48,6 +49,8 @@ function App() {
     renameGeoFeature,
     setSelection,
     clearSelection,
+    selectWaypoint,
+    deleteWaypoint,
     deleteSelected,
     deleteLine,
     deleteStation,
@@ -162,6 +165,7 @@ function App() {
             selectedStationIds={state.selectedStationIds}
             selectedLineIds={state.selectedLineIds}
             selectedGeoFeatureIds={state.selectedGeoFeatureIds}
+            selectedWaypoint={state.selectedWaypoint}
             draftLineNodes={state.draftLineNodes}
             draftGeoPoints={state.draftGeoPoints}
             showGrid={showGrid}
@@ -179,6 +183,8 @@ function App() {
             onCancelGeoFeature={cancelGeoFeature}
             onSetSelection={handleSetSelection}
             onClearSelection={handleClearSelection}
+            onSelectWaypoint={selectWaypoint}
+            onDeleteWaypoint={deleteWaypoint}
             onDeleteSelected={deleteSelected}
             onCheckpoint={checkpoint}
             onUndo={undo}
@@ -192,6 +198,8 @@ function App() {
             zoom={zoom}
             selectionLabel={selectionLabel}
           />
+
+          <CanvasLegend mapName={state.mapName} authorityName={state.authorityName} />
 
           {selectedLine && (
             <LineAnnouncer

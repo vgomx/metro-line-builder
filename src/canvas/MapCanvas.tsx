@@ -4,6 +4,7 @@ import type { ZoomTransform } from 'd3-zoom'
 import type { GeoFeature, Line, LineNode, Point, Station, Tool } from '../types'
 import { useZoomPan } from './useZoomPan'
 import { StationNode } from './StationNode'
+import { WaypointNode } from './WaypointNode'
 import { LinePath } from './LinePath'
 import { GeoFeaturePath } from './GeoFeaturePath'
 import { TrainMarker } from './TrainMarker'
@@ -34,6 +35,7 @@ interface MapCanvasProps {
   selectedStationIds: string[]
   selectedLineIds: string[]
   selectedGeoFeatureIds: string[]
+  selectedWaypoint: { lineId: string; index: number } | null
   draftLineNodes: LineNode[]
   draftGeoPoints: Point[]
   showGrid: boolean
@@ -51,6 +53,8 @@ interface MapCanvasProps {
   onCancelGeoFeature: () => void
   onSetSelection: (stationIds: string[], lineIds: string[], geoFeatureIds: string[]) => void
   onClearSelection: () => void
+  onSelectWaypoint: (lineId: string, index: number) => void
+  onDeleteWaypoint: (lineId: string, index: number) => void
   onDeleteSelected: () => void
   onCheckpoint: () => void
   onUndo: () => void
@@ -98,6 +102,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     selectedStationIds,
     selectedLineIds,
     selectedGeoFeatureIds,
+    selectedWaypoint,
     draftLineNodes,
     draftGeoPoints,
     showGrid,
@@ -115,6 +120,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onCancelGeoFeature,
     onSetSelection,
     onClearSelection,
+    onSelectWaypoint,
+    onDeleteWaypoint,
     onDeleteSelected,
     onCheckpoint,
     onUndo,
@@ -148,7 +155,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         else if (draftGeoPoints.length > 0) onCancelGeoFeature()
         else onClearSelection()
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedStationIds.length > 0 || selectedLineIds.length > 0 || selectedGeoFeatureIds.length > 0) {
+        if (selectedWaypoint) {
+          e.preventDefault()
+          onDeleteWaypoint(selectedWaypoint.lineId, selectedWaypoint.index)
+        } else if (selectedStationIds.length > 0 || selectedLineIds.length > 0 || selectedGeoFeatureIds.length > 0) {
           e.preventDefault()
           onDeleteSelected()
         }
@@ -172,9 +182,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     selectedStationIds,
     selectedLineIds,
     selectedGeoFeatureIds,
+    selectedWaypoint,
     onCancelDraftLine,
     onCancelGeoFeature,
     onClearSelection,
+    onDeleteWaypoint,
     onDeleteSelected,
     onFinishDraftLine,
     onFinishGeoFeature,
@@ -284,6 +296,13 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     if (spaceHeld) return
     if (tool !== 'select') return
     onSetSelection([], [], [feature.id])
+  }
+
+  const handleWaypointClick = (e: ReactMouseEvent<SVGRectElement>, lineId: string, index: number) => {
+    if (spaceHeld) return
+    if (tool !== 'select') return
+    e.stopPropagation()
+    onSelectWaypoint(lineId, index)
   }
 
   const handlePointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
@@ -523,6 +542,29 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
               onClick={handleLineClick}
             />
           ))}
+
+        {/* Bare waypoints on a selected line get a small marker so a stray or
+            unwanted route-shaping point can be selected and deleted — stations
+            already support this, waypoints otherwise have nothing to click. */}
+        {tool === 'select' &&
+          lineList
+            .filter(line => line.visible && selectedLineIds.includes(line.id))
+            .map(line => (
+              <g key={`waypoints-${line.id}`}>
+                {line.nodes.map((node, index) =>
+                  node.kind === 'point' ? (
+                    <WaypointNode
+                      key={index}
+                      x={node.x}
+                      y={node.y}
+                      color={line.color}
+                      selected={selectedWaypoint?.lineId === line.id && selectedWaypoint?.index === index}
+                      onClick={e => handleWaypointClick(e, line.id, index)}
+                    />
+                  ) : null,
+                )}
+              </g>
+            ))}
 
         {draftCommittedPath && (
           <>

@@ -27,6 +27,11 @@ interface MapState extends DataSnapshot {
   selectedStationIds: string[]
   selectedLineIds: string[]
   selectedGeoFeatureIds: string[]
+  /** A bare waypoint node selected on an already-selected line, by index into its
+   * nodes array — lets a stray route-shaping point be targeted for deletion, which
+   * stations already support but waypoints (having no id of their own) previously
+   * couldn't. */
+  selectedWaypoint: { lineId: string; index: number } | null
   draftLineNodes: LineNode[]
   /** Set while the draft line is extending an existing line (vs. drafting a new one). */
   draftLineId: string | null
@@ -69,6 +74,8 @@ type Action =
   | { type: 'renameGeoFeature'; geoFeatureId: string; name: string }
   | { type: 'setSelection'; stationIds: string[]; lineIds: string[]; geoFeatureIds: string[] }
   | { type: 'clearSelection' }
+  | { type: 'selectWaypoint'; lineId: string; index: number }
+  | { type: 'deleteWaypoint'; lineId: string; index: number }
   | { type: 'deleteSelected' }
   | { type: 'deleteLine'; lineId: string }
   | { type: 'deleteStation'; stationId: string }
@@ -119,6 +126,7 @@ const RECORDABLE_ACTIONS = new Set<Action['type']>([
   'toggleLineVisibility',
   'deleteLine',
   'deleteStation',
+  'deleteWaypoint',
   'deleteSelected',
 ])
 
@@ -164,6 +172,7 @@ const emptyState: MapState = {
   selectedStationIds: [],
   selectedLineIds: [],
   selectedGeoFeatureIds: [],
+  selectedWaypoint: null,
   draftLineNodes: [],
   draftLineId: null,
   draftLineReversed: false,
@@ -387,6 +396,7 @@ function reducer(rawState: MapState, action: Action): MapState {
         selectedStationIds: [],
         selectedLineIds: [],
         selectedGeoFeatureIds: [],
+        selectedWaypoint: null,
       }
     }
 
@@ -401,6 +411,7 @@ function reducer(rawState: MapState, action: Action): MapState {
         selectedStationIds: [],
         selectedLineIds: [],
         selectedGeoFeatureIds: [],
+        selectedWaypoint: null,
       }
     }
 
@@ -412,6 +423,7 @@ function reducer(rawState: MapState, action: Action): MapState {
         selectedStationIds: [],
         selectedLineIds: [],
         selectedGeoFeatureIds: [],
+        selectedWaypoint: null,
         draftLineNodes: [],
         draftLineId: null,
         draftGeoPoints: [],
@@ -432,6 +444,7 @@ function reducer(rawState: MapState, action: Action): MapState {
         selectedStationIds: [],
         selectedLineIds: [],
         selectedGeoFeatureIds: [],
+        selectedWaypoint: null,
       }
 
     case 'setMapName':
@@ -638,6 +651,7 @@ function reducer(rawState: MapState, action: Action): MapState {
         draftLineReversed: reversed,
         selectedStationIds: [],
         selectedLineIds: [],
+        selectedWaypoint: null,
         selectedGeoFeatureIds: [],
       }
     }
@@ -698,6 +712,7 @@ function reducer(rawState: MapState, action: Action): MapState {
         selectedStationIds: [],
         selectedLineIds: [],
         selectedGeoFeatureIds: [],
+        selectedWaypoint: null,
       }
     }
 
@@ -763,10 +778,42 @@ function reducer(rawState: MapState, action: Action): MapState {
         selectedStationIds: action.stationIds,
         selectedLineIds: action.lineIds,
         selectedGeoFeatureIds: action.geoFeatureIds,
+        selectedWaypoint: null,
       }
 
     case 'clearSelection':
-      return { ...state, selectedStationIds: [], selectedLineIds: [], selectedGeoFeatureIds: [] }
+      return { ...state, selectedStationIds: [], selectedLineIds: [], selectedGeoFeatureIds: [], selectedWaypoint: null }
+
+    case 'selectWaypoint':
+      return {
+        ...state,
+        selectedStationIds: [],
+        selectedLineIds: [action.lineId],
+        selectedGeoFeatureIds: [],
+        selectedWaypoint: { lineId: action.lineId, index: action.index },
+      }
+
+    case 'deleteWaypoint': {
+      const line = state.lines[action.lineId]
+      if (!line) return { ...state, selectedWaypoint: null }
+      const nodes = line.nodes.filter((_, i) => i !== action.index)
+      if (nodes.length < 2) {
+        const lines = { ...state.lines }
+        delete lines[action.lineId]
+        return {
+          ...state,
+          lines,
+          lineOrder: state.lineOrder.filter(id => id !== action.lineId),
+          selectedLineIds: state.selectedLineIds.filter(id => id !== action.lineId),
+          selectedWaypoint: null,
+        }
+      }
+      return {
+        ...state,
+        lines: { ...state.lines, [action.lineId]: { ...line, nodes } },
+        selectedWaypoint: null,
+      }
+    }
 
     case 'renameLine': {
       const line = state.lines[action.lineId]
@@ -794,6 +841,7 @@ function reducer(rawState: MapState, action: Action): MapState {
         lines,
         lineOrder: state.lineOrder.filter(id => id !== action.lineId),
         selectedLineIds: state.selectedLineIds.filter(id => id !== action.lineId),
+        selectedWaypoint: state.selectedWaypoint?.lineId === action.lineId ? null : state.selectedWaypoint,
       }
     }
 
@@ -857,6 +905,7 @@ function reducer(rawState: MapState, action: Action): MapState {
         selectedStationIds: [],
         selectedLineIds: [],
         selectedGeoFeatureIds: [],
+        selectedWaypoint: null,
       }
     }
 
@@ -981,6 +1030,14 @@ export function useMapState() {
     [],
   )
   const clearSelection = useCallback(() => dispatch({ type: 'clearSelection' }), [])
+  const selectWaypoint = useCallback(
+    (lineId: string, index: number) => dispatch({ type: 'selectWaypoint', lineId, index }),
+    [],
+  )
+  const deleteWaypoint = useCallback(
+    (lineId: string, index: number) => dispatch({ type: 'deleteWaypoint', lineId, index }),
+    [],
+  )
   const deleteSelected = useCallback(() => dispatch({ type: 'deleteSelected' }), [])
   const deleteLine = useCallback((lineId: string) => dispatch({ type: 'deleteLine', lineId }), [])
   const deleteStation = useCallback((stationId: string) => dispatch({ type: 'deleteStation', stationId }), [])
@@ -1084,6 +1141,8 @@ export function useMapState() {
     renameGeoFeature,
     setSelection,
     clearSelection,
+    selectWaypoint,
+    deleteWaypoint,
     deleteSelected,
     deleteLine,
     deleteStation,
