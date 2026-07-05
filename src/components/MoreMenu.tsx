@@ -136,10 +136,6 @@ export function MoreMenu({ theme }: MoreMenuProps) {
             </a>
           </p>
 
-          <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: 0, marginTop: 'var(--space-1)' }}>
-            Map style inspired by Harry Beck's 1933 London Underground diagram.
-          </p>
-
           <Divider />
 
           <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: 0 }}>

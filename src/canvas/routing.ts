@@ -5,6 +5,12 @@ interface Point {
 
 const DEFAULT_CORNER_RADIUS = 10
 
+// Points fed in after a perpendicular-offset (lane fanning) computation land within
+// floating-point noise of true H/V/45° alignment rather than exactly on it — without
+// this tolerance, buildVertices would insert a spurious near-zero-length elbow right
+// next to a real corner, splitting one smooth fillet into two tiny back-to-back ones.
+const ALIGNMENT_EPSILON = 1e-6
+
 /**
  * Builds an SVG path string that only uses horizontal, vertical, and 45-degree
  * segments (Harry Beck-style schematic routing), instead of freehand straight
@@ -22,7 +28,7 @@ export function routeOrthogonal(points: Point[], closed = false, cornerRadius = 
   return roundedPath(vertices, cornerRadius, closed)
 }
 
-function buildVertices(points: Point[], closed: boolean): Point[] {
+export function buildVertices(points: Point[], closed: boolean): Point[] {
   const routePoints = closed ? [...points, points[0]] : points
   const vertices: Point[] = [routePoints[0]]
 
@@ -34,7 +40,7 @@ function buildVertices(points: Point[], closed: boolean): Point[] {
     const adx = Math.abs(dx)
     const ady = Math.abs(dy)
 
-    if (adx === 0 || ady === 0 || adx === ady) {
+    if (adx < ALIGNMENT_EPSILON || ady < ALIGNMENT_EPSILON || Math.abs(adx - ady) < ALIGNMENT_EPSILON) {
       vertices.push(p2)
       continue
     }

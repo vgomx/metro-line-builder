@@ -10,7 +10,14 @@ import { TrainMarker } from './TrainMarker'
 import { SnapAnimation } from './SnapAnimation'
 import { routeOrthogonal } from './routing'
 import { GRID_SIZE, snapToGrid } from '../grid'
-import { buildSegmentLineMap, closestSegmentIndex, computeLaneOffsets, resolveLineNodes, stationIdsOfLine } from './lineNodes'
+import {
+  buildSegmentLineMap,
+  buildVertexSegmentLineMap,
+  closestSegmentIndex,
+  computeLaneOffsets,
+  resolveLineNodes,
+  stationIdsOfLine,
+} from './lineNodes'
 import { computeLabelPlacement } from './labelPlacement'
 
 export interface MapCanvasHandle {
@@ -416,6 +423,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const draggingStationIdSet = new Set(drag.kind === 'stations' ? drag.ids : [])
 
   const segmentLineMap = buildSegmentLineMap(lineList, stations)
+  // Finer-grained than segmentLineMap (keyed on routed vertices, not raw line nodes)
+  // so lines that only share part of a routed path fan out correctly instead of
+  // drawing on top of each other. Only the line-path renderer needs this — train
+  // animation stays on the coarser map since its stop points are real line nodes.
+  const lineRenderSegmentMap = buildVertexSegmentLineMap(lineList, stations)
 
   const cursor = spaceHeld || tool === 'pan' ? 'grab' : DRAW_TOOLS.includes(tool) ? 'crosshair' : 'default'
 
@@ -498,7 +510,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
               line={line}
               stations={stations}
               selected={selectedLineIds.includes(line.id)}
-              segmentLineMap={segmentLineMap}
+              segmentLineMap={lineRenderSegmentMap}
               onClick={handleLineClick}
             />
           ))}

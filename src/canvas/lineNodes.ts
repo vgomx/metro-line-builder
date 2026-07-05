@@ -1,4 +1,5 @@
 import type { Line, LineNode, Point, Station } from '../types'
+import { buildVertices } from './routing'
 
 export function resolveNodePoint(node: LineNode, stations: Record<string, Station>): Point | null {
   if (node.kind === 'point') return { x: node.x, y: node.y }
@@ -8,6 +9,17 @@ export function resolveNodePoint(node: LineNode, stations: Record<string, Statio
 
 export function resolveLineNodes(nodes: LineNode[], stations: Record<string, Station>): Point[] {
   return nodes.map(n => resolveNodePoint(n, stations)).filter((p): p is Point => Boolean(p))
+}
+
+/**
+ * Like resolveLineNodes, but expands every consecutive pair into the actual routed
+ * vertex list (including routeOrthogonal's auto-inserted elbow points). Two lines
+ * can share part of a routed path without sharing an exact raw node-to-node segment
+ * — e.g. a shared diagonal lead-out from one station before diverging at different
+ * elbows — and only this finer resolution catches that for shared-lane detection.
+ */
+export function resolveLineVertices(nodes: LineNode[], stations: Record<string, Station>): Point[] {
+  return buildVertices(resolveLineNodes(nodes, stations), false)
 }
 
 export function stationIdsOfLine(line: Line): string[] {
@@ -92,6 +104,28 @@ export function buildSegmentLineMap(lineList: Line[], stations: Record<string, S
     const points = resolveLineNodes(line.nodes, stations)
     for (let i = 0; i < points.length - 1; i++) {
       const key = segmentKey(points[i], points[i + 1])
+      const group = map.get(key)
+      if (group) group.push(line.id)
+      else map.set(key, [line.id])
+    }
+  }
+  return map
+}
+
+/**
+ * Fine-grained counterpart to buildSegmentLineMap, keyed on routed vertices
+ * (resolveLineVertices) instead of raw line nodes — lets the line-path renderer fan
+ * out lines that only share part of a routed segment instead of drawing them on top
+ * of each other. Train animation keeps using the coarser, node-based map since its
+ * stop points are tied to real line nodes, not synthetic elbow vertices.
+ */
+export function buildVertexSegmentLineMap(lineList: Line[], stations: Record<string, Station>): Map<string, string[]> {
+  const map = new Map<string, string[]>()
+  for (const line of lineList) {
+    if (!line.visible) continue
+    const vertices = resolveLineVertices(line.nodes, stations)
+    for (let i = 0; i < vertices.length - 1; i++) {
+      const key = segmentKey(vertices[i], vertices[i + 1])
       const group = map.get(key)
       if (group) group.push(line.id)
       else map.set(key, [line.id])

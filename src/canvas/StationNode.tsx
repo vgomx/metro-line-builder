@@ -25,65 +25,71 @@ export function StationNode({ station, selected, inDraftLine, interchange, dragg
   const labelY = Math.sin(labelPlacement.angle) * labelDistance
 
   return (
+    // Safari/WebKit fails to render (or clips) a CSS `filter` applied to the same
+    // SVG element that also carries a `transform` attribute — the drag shadow needs
+    // its own inner <g> with no transform of its own so it renders there too.
     <g
       transform={`translate(${station.x}, ${station.y})`}
       onPointerDown={e => onPointerDown(e, station)}
       onClick={() => onClick(station)}
-      style={{
-        cursor: 'pointer',
-        filter: dragging ? 'drop-shadow(0 4px 8px rgba(0,0,0,0.35)) drop-shadow(0 1px 3px rgba(0,0,0,0.25))' : 'none',
-        transition: 'filter 150ms ease',
-      }}
+      style={{ cursor: 'pointer' }}
     >
-      {selected && (
-        <circle
-          r={radius + 5}
-          fill="none"
-          stroke="var(--brand-500)"
-          strokeWidth={2}
-          opacity={0.5}
-          style={{ transition: 'r 150ms ease' }}
-        />
-      )}
-      {isInterchange ? (
-        <>
+      <g
+        style={{
+          filter: dragging ? 'drop-shadow(0 4px 8px rgba(0,0,0,0.35)) drop-shadow(0 1px 3px rgba(0,0,0,0.25))' : 'none',
+          transition: 'filter 150ms ease',
+        }}
+      >
+        {selected && (
+          <circle
+            r={radius + 5}
+            fill="none"
+            stroke="var(--brand-500)"
+            strokeWidth={2}
+            opacity={0.5}
+            style={{ transition: 'r 150ms ease' }}
+          />
+        )}
+        {isInterchange ? (
+          <>
+            <circle
+              r={radius}
+              fill={inDraftLine ? 'var(--brand-500)' : 'var(--bg-page)'}
+              stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
+              strokeWidth={3.5}
+              style={{ transition: 'r 150ms ease' }}
+            />
+            <circle
+              r={radius - 4.5}
+              fill="none"
+              stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
+              strokeWidth={1.25}
+              style={{ transition: 'r 150ms ease' }}
+            />
+          </>
+        ) : (
           <circle
             r={radius}
             fill={inDraftLine ? 'var(--brand-500)' : 'var(--bg-page)'}
             stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
-            strokeWidth={3.5}
+            strokeWidth={2.5}
             style={{ transition: 'r 150ms ease' }}
           />
-          <circle
-            r={radius - 4.5}
-            fill="none"
-            stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
-            strokeWidth={1.25}
-            style={{ transition: 'r 150ms ease' }}
-          />
-        </>
-      ) : (
-        <circle
-          r={radius}
-          fill={inDraftLine ? 'var(--brand-500)' : 'var(--bg-page)'}
-          stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
-          strokeWidth={2.5}
-          style={{ transition: 'r 150ms ease' }}
-        />
-      )}
-      <text
-        x={labelX}
-        y={labelY}
-        textAnchor={labelPlacement.anchor}
-        dominantBaseline="middle"
-        fontSize={11}
-        fontFamily="'Barlow Condensed', system-ui, sans-serif"
-        fontWeight={600}
-        fill="var(--text-primary)"
-        style={{ userSelect: 'none', pointerEvents: 'none' }}
-      >
-        {station.name}
-      </text>
+        )}
+        <text
+          x={labelX}
+          y={labelY}
+          textAnchor={labelPlacement.anchor}
+          dominantBaseline="middle"
+          fontSize={11}
+          fontFamily="'Barlow Condensed', system-ui, sans-serif"
+          fontWeight={600}
+          fill="var(--text-primary)"
+          style={{ userSelect: 'none', pointerEvents: 'none' }}
+        >
+          {station.name}
+        </text>
+      </g>
     </g>
   )
 }

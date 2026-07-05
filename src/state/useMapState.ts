@@ -237,7 +237,19 @@ function normalizeSnapshot(parsed: DataSnapshot): DataSnapshot {
       line.nodes = legacy.stationIds.map(stationId => ({ kind: 'station', stationId }))
       delete legacy.stationIds
     }
+    // A save from an even older/malformed export can still leave nodes missing —
+    // every renderer assumes an array, so this is the last line of defense.
+    if (!Array.isArray(line.nodes)) line.nodes = []
   }
+
+  // An *Order array can end up referencing an id that's missing from its record —
+  // e.g. a manually-edited export, or a save from a version with a data-model bug.
+  // Every renderer assumes `order.map(id => record[id])` always finds something, so
+  // this is the one place that keeps that invariant true for every load path.
+  parsed.stationOrder = parsed.stationOrder.filter(id => id in parsed.stations)
+  parsed.lineOrder = parsed.lineOrder.filter(id => id in parsed.lines)
+  parsed.geoFeatureOrder = parsed.geoFeatureOrder.filter(id => id in parsed.geoFeatures)
+  parsed.companyOrder = parsed.companyOrder.filter(id => id in parsed.companies)
 
   if (!parsed.nextStationNumber) parsed.nextStationNumber = deriveNextNumber(parsed.stationOrder, 'station')
   if (!parsed.nextLineNumber) parsed.nextLineNumber = deriveNextNumber(parsed.lineOrder, 'line')
@@ -982,14 +994,24 @@ export function useMapState() {
   const undo = useCallback(() => dispatch({ type: 'undo' }), [])
   const redo = useCallback(() => dispatch({ type: 'redo' }), [])
 
-  const stationList = useMemo(() => state.stationOrder.map(id => state.stations[id]), [state.stationOrder, state.stations])
-  const lineList = useMemo(() => state.lineOrder.map(id => state.lines[id]), [state.lineOrder, state.lines])
+  // Filters out an id that doesn't resolve — normalizeSnapshot already keeps a
+  // freshly-loaded *Order array in sync with its record, but this is cheap
+  // insurance against every renderer's assumption that these lists never contain
+  // a hole, in case some future mutation ever lets the two drift apart again.
+  const stationList = useMemo(
+    () => state.stationOrder.map(id => state.stations[id]).filter((s): s is Station => Boolean(s)),
+    [state.stationOrder, state.stations],
+  )
+  const lineList = useMemo(
+    () => state.lineOrder.map(id => state.lines[id]).filter((l): l is Line => Boolean(l)),
+    [state.lineOrder, state.lines],
+  )
   const geoFeatureList = useMemo(
-    () => state.geoFeatureOrder.map(id => state.geoFeatures[id]),
+    () => state.geoFeatureOrder.map(id => state.geoFeatures[id]).filter((f): f is GeoFeature => Boolean(f)),
     [state.geoFeatureOrder, state.geoFeatures],
   )
   const companyList = useMemo(
-    () => state.companyOrder.map(id => state.companies[id]),
+    () => state.companyOrder.map(id => state.companies[id]).filter((c): c is Company => Boolean(c)),
     [state.companyOrder, state.companies],
   )
   const snapshot: DataSnapshot = useMemo(
