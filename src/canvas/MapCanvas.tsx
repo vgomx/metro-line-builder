@@ -452,6 +452,15 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       onPointerLeave={() => setCursorWorld(null)}
       onDoubleClick={handleDoubleClick}
     >
+      <defs>
+        {/* Drag shadow for StationNode. A real SVG filter (not CSS drop-shadow())
+            because Safari doesn't reliably render CSS filters on SVG content. The
+            wide region keeps the blur from being clipped at the filter bounds. */}
+        <filter id="station-drag-shadow" x="-100%" y="-100%" width="300%" height="300%">
+          <feDropShadow dx="0" dy="4" stdDeviation="4" floodOpacity="0.35" />
+          <feDropShadow dx="0" dy="1" stdDeviation="1.5" floodOpacity="0.25" />
+        </filter>
+      </defs>
       <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.k})`}>
         <rect
           x={-10000}

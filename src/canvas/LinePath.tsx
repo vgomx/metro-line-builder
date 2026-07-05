@@ -13,61 +13,59 @@ interface LinePathProps {
   onClick?: (line: Line, e: MouseEvent<SVGPathElement>) => void
 }
 
-function unitPerp(a: Point, b: Point): Point {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  return { x: -dy / len, y: dx / len }
-}
-
 /**
- * Offsets a single vertex perpendicular to the path, mitering the incoming/outgoing
- * segment directions at an interior vertex instead of translating along one
- * direction derived from the whole path's start/end chord. A single-direction
- * translation only stays a constant visual width from the original path when it's
- * straight; across a bend it drifts, which is what made fanned-out parallel lines
- * look unevenly spaced near corners.
+ * Shifts each segment sideways by its own lane amount and places every interior
+ * vertex at the intersection of the two adjacent shifted segments — the classic
+ * variable-offset polyline construction. This keeps exactly one output vertex per
+ * input vertex and preserves each segment's direction exactly, so the fillet pass
+ * downstream sees clean corners and can apply its normal radius. (Earlier attempts
+ * that averaged or duplicated points at a lane merge/split created clusters of
+ * near-coincident vertices, which capped the fillet radius at ~1px there and made
+ * those corners look sharp.)
  */
-function offsetVertex(vertices: Point[], i: number, amount: number): Point {
-  const p = vertices[i]
-  if (amount === 0) return p
-  const prev = vertices[i - 1]
-  const next = vertices[i + 1]
-  const perpIn = prev ? unitPerp(prev, p) : null
-  const perpOut = next ? unitPerp(p, next) : null
-  if (perpIn && perpOut) {
-    const sumX = perpIn.x + perpOut.x
-    const sumY = perpIn.y + perpOut.y
-    const sumLen = Math.hypot(sumX, sumY)
-    // Anti-parallel perpendiculars (a straight 180° reversal) can't be mitered —
-    // fall back to the incoming direction rather than divide by ~0.
-    if (sumLen < 1e-6) return { x: p.x + perpIn.x * amount, y: p.y + perpIn.y * amount }
-    const cosTheta = perpIn.x * perpOut.x + perpIn.y * perpOut.y
-    const miterScale = Math.sqrt(2 / (1 + cosTheta))
-    return { x: p.x + (sumX / sumLen) * miterScale * amount, y: p.y + (sumY / sumLen) * miterScale * amount }
+function offsetPolyline(vertices: Point[], offsets: number[]): Point[] {
+  const n = vertices.length
+  if (n < 2) return vertices
+
+  const dirs: Point[] = []
+  const norms: Point[] = []
+  for (let i = 0; i < n - 1; i++) {
+    const dx = vertices[i + 1].x - vertices[i].x
+    const dy = vertices[i + 1].y - vertices[i].y
+    const len = Math.hypot(dx, dy) || 1
+    dirs.push({ x: dx / len, y: dy / len })
+    norms.push({ x: -dy / len, y: dx / len })
   }
-  const perp = (perpIn ?? perpOut)!
-  return { x: p.x + perp.x * amount, y: p.y + perp.y * amount }
+
+  const out: Point[] = [
+    { x: vertices[0].x + norms[0].x * offsets[0], y: vertices[0].y + norms[0].y * offsets[0] },
+  ]
+  for (let i = 1; i < n - 1; i++) {
+    // Endpoints of the two shifted segments meeting at this vertex.
+    const a = { x: vertices[i].x + norms[i - 1].x * offsets[i - 1], y: vertices[i].y + norms[i - 1].y * offsets[i - 1] }
+    const b = { x: vertices[i].x + norms[i].x * offsets[i], y: vertices[i].y + norms[i].y * offsets[i] }
+    const denom = dirs[i - 1].x * dirs[i].y - dirs[i - 1].y * dirs[i].x
+    if (Math.abs(denom) < 1e-9) {
+      // Collinear segments: no intersection. Equal offsets need only one point;
+      // an offset change along a straight run becomes a short perpendicular jog.
+      if (Math.abs(offsets[i - 1] - offsets[i]) < 1e-9) out.push(a)
+      else out.push(a, b)
+    } else {
+      const t = ((b.x - a.x) * dirs[i].y - (b.y - a.y) * dirs[i].x) / denom
+      out.push({ x: a.x + dirs[i - 1].x * t, y: a.y + dirs[i - 1].y * t })
+    }
+  }
+  const last = n - 1
+  out.push({
+    x: vertices[last].x + norms[last - 1].x * offsets[last - 1],
+    y: vertices[last].y + norms[last - 1].y * offsets[last - 1],
+  })
+  return out
 }
 
-/**
- * Offsets every vertex of the line by its lane amount and rounds the whole thing in
- * one pass, so a corner keeps a single smooth fillet regardless of whether it's a
- * real bend or a point where sharing starts/stops. A vertex sitting between two
- * segments with different lane amounts (a merge/split point, often a bare waypoint
- * rather than a station) uses their average instead of either one outright — easing
- * the offset across that single vertex instead of jumping, which is what previously
- * produced a duplicate point right next to a real corner and pinched the fillet.
- */
 function buildLanePath(vertices: Point[], lineId: string, segmentLineMap: Map<string, string[]>): string {
-  const segmentOffsets = computeLaneOffsets(vertices, lineId, segmentLineMap)
-  const offsetVertices = vertices.map((_, i) => {
-    const before = i > 0 ? segmentOffsets[i - 1] : undefined
-    const after = i < segmentOffsets.length ? segmentOffsets[i] : undefined
-    const amount = before === undefined ? after! : after === undefined ? before : (before + after) / 2
-    return offsetVertex(vertices, i, amount)
-  })
-  return routeOrthogonal(offsetVertices)
+  const offsets = computeLaneOffsets(vertices, lineId, segmentLineMap)
+  return routeOrthogonal(offsetPolyline(vertices, offsets))
 }
 
 /**

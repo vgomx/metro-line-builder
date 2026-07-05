@@ -25,21 +25,16 @@ export function StationNode({ station, selected, inDraftLine, interchange, dragg
   const labelY = Math.sin(labelPlacement.angle) * labelDistance
 
   return (
-    // Safari/WebKit fails to render (or clips) a CSS `filter` applied to the same
-    // SVG element that also carries a `transform` attribute — the drag shadow needs
-    // its own inner <g> with no transform of its own so it renders there too.
     <g
       transform={`translate(${station.x}, ${station.y})`}
       onPointerDown={e => onPointerDown(e, station)}
       onClick={() => onClick(station)}
       style={{ cursor: 'pointer' }}
     >
-      <g
-        style={{
-          filter: dragging ? 'drop-shadow(0 4px 8px rgba(0,0,0,0.35)) drop-shadow(0 1px 3px rgba(0,0,0,0.25))' : 'none',
-          transition: 'filter 150ms ease',
-        }}
-      >
+      {/* Safari doesn't reliably render CSS drop-shadow() filters on SVG content, so
+          the drag shadow is a real SVG <filter> (defined once in MapCanvas) applied
+          via the filter attribute — feDropShadow works across all engines. */}
+      <g filter={dragging ? 'url(#station-drag-shadow)' : undefined}>
         {selected && (
           <circle
             r={radius + 5}

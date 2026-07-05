@@ -19,7 +19,17 @@ export function resolveLineNodes(nodes: LineNode[], stations: Record<string, Sta
  * elbows — and only this finer resolution catches that for shared-lane detection.
  */
 export function resolveLineVertices(nodes: LineNode[], stations: Record<string, Station>): Point[] {
-  return buildVertices(resolveLineNodes(nodes, stations), false)
+  const vertices = buildVertices(resolveLineNodes(nodes, stations), false)
+  // A line can carry a bare waypoint at the exact coordinates of an adjacent
+  // station node (a leftover from drawing through it). The resulting zero-length
+  // segment has no direction, which degenerates the lane-offset intersection math
+  // downstream and pollutes the shared-segment map with useless keys.
+  const out: Point[] = []
+  for (const p of vertices) {
+    const last = out[out.length - 1]
+    if (!last || last.x !== p.x || last.y !== p.y) out.push(p)
+  }
+  return out
 }
 
 export function stationIdsOfLine(line: Line): string[] {
