@@ -10,7 +10,7 @@ import { TrainMarker } from './TrainMarker'
 import { SnapAnimation } from './SnapAnimation'
 import { routeOrthogonal } from './routing'
 import { GRID_SIZE, snapToGrid } from '../grid'
-import { closestSegmentIndex, resolveLineNodes, stationIdsOfLine } from './lineNodes'
+import { buildSegmentLineMap, closestSegmentIndex, computeLaneOffsets, resolveLineNodes, stationIdsOfLine } from './lineNodes'
 import { computeLabelPlacement } from './labelPlacement'
 
 export interface MapCanvasHandle {
@@ -415,6 +415,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
 
   const draggingStationIdSet = new Set(drag.kind === 'stations' ? drag.ids : [])
 
+  const segmentLineMap = buildSegmentLineMap(lineList, stations)
+
   const cursor = spaceHeld || tool === 'pan' ? 'grab' : DRAW_TOOLS.includes(tool) ? 'crosshair' : 'default'
 
   const gridLines = []
@@ -495,6 +497,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
               line={line}
               stations={stations}
               selected={selectedLineIds.includes(line.id)}
+              segmentLineMap={segmentLineMap}
               onClick={handleLineClick}
             />
           ))}
@@ -547,15 +550,19 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         {showTrains &&
           lineList
             .filter(line => line.visible && stationIdsOfLine(line).length >= 2)
-            .map(line => (
-              <TrainMarker
-                key={line.id}
-                lineId={line.id}
-                color={line.color}
-                pathPoints={resolveLineNodes(line.nodes, stations)}
-                stopFlags={line.nodes.map(n => n.kind === 'station')}
-              />
-            ))}
+            .map(line => {
+              const trainPoints = resolveLineNodes(line.nodes, stations)
+              return (
+                <TrainMarker
+                  key={line.id}
+                  lineId={line.id}
+                  color={line.color}
+                  pathPoints={trainPoints}
+                  stopFlags={line.nodes.map(n => n.kind === 'station')}
+                  laneOffsets={computeLaneOffsets(trainPoints, line.id, segmentLineMap)}
+                />
+              )
+            })}
 
         {stationList.map(station => (
           <StationNode

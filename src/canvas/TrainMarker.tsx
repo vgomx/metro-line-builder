@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { offsetSegment } from './lineNodes'
 import { routeOrthogonal } from './routing'
 
 interface Point {
@@ -13,6 +14,11 @@ interface TrainMarkerProps {
   pathPoints: Point[]
   /** Parallel to pathPoints — true where the train should dwell (real stations), false for waypoints it just glides through. */
   stopFlags: boolean[]
+  /** Parallel to each segment (pathPoints[i]-pathPoints[i+1]) — perpendicular lane
+   * offset so a train on a route shared with other lines rides its own line's lane
+   * instead of overlapping the others. Dwelling at a station still uses the true
+   * (unoffset) position, so parked trains sit at the actual station mark. */
+  laneOffsets: number[]
   /** How long the train dwells at each station, in ms. */
   dwellMs?: number
   /** Travel speed in px/ms. */
@@ -28,7 +34,7 @@ interface TrainMarkerProps {
  * Per-segment paths are rebuilt from live positions every frame, so this keeps
  * tracking correctly even while a line's stations are being dragged.
  */
-export function TrainMarker({ lineId, color, pathPoints, stopFlags, dwellMs = 1400, speed = 0.12 }: TrainMarkerProps) {
+export function TrainMarker({ lineId, color, pathPoints, stopFlags, laneOffsets, dwellMs = 1400, speed = 0.12 }: TrainMarkerProps) {
   const groupRef = useRef<SVGGElement>(null)
   const segmentRefs = useRef<(SVGPathElement | null)[]>([])
   const lastAngleRef = useRef(0)
@@ -38,8 +44,10 @@ export function TrainMarker({ lineId, color, pathPoints, stopFlags, dwellMs = 14
   // station or any unrelated canvas interaction — rather than restarting.
   const pathPointsRef = useRef(pathPoints)
   const stopFlagsRef = useRef(stopFlags)
+  const laneOffsetsRef = useRef(laneOffsets)
   pathPointsRef.current = pathPoints
   stopFlagsRef.current = stopFlags
+  laneOffsetsRef.current = laneOffsets
 
   useEffect(() => {
     if (pathPointsRef.current.length < 2) return
@@ -50,6 +58,7 @@ export function TrainMarker({ lineId, color, pathPoints, stopFlags, dwellMs = 14
       const group = groupRef.current
       const pathPoints = pathPointsRef.current
       const stopFlags = stopFlagsRef.current
+      const laneOffsets = laneOffsetsRef.current
       if (!group || pathPoints.length < 2) {
         frameId = requestAnimationFrame(tick)
         return
@@ -72,7 +81,7 @@ export function TrainMarker({ lineId, color, pathPoints, stopFlags, dwellMs = 14
           segmentLengths.push(0)
           continue
         }
-        seg.setAttribute('d', routeOrthogonal([pathPoints[i], pathPoints[i + 1]]))
+        seg.setAttribute('d', routeOrthogonal(offsetSegment(pathPoints[i], pathPoints[i + 1], laneOffsets[i] ?? 0)))
         segmentLengths.push(seg.getTotalLength())
       }
 

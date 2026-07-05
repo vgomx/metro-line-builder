@@ -70,8 +70,18 @@ export function useZoomPan(svgRef: RefObject<SVGSVGElement | null>, panMode: boo
     behaviorRef.current = zoomBehavior
     selectionRef.current = selection
 
+    // d3-zoom skips preventDefault on a wheel event that wouldn't change the scale
+    // (i.e. already at the scaleExtent limit) — past 400% that lets the gesture fall
+    // through as the browser's own pinch/ctrl+wheel zoom, scaling the whole page
+    // (panels included) instead of just the canvas. Always claim it ourselves.
+    const blockPageZoom = (e: WheelEvent) => {
+      if (e.ctrlKey) e.preventDefault()
+    }
+    svg.addEventListener('wheel', blockPageZoom, { passive: false })
+
     return () => {
       selection.on('.zoom', null)
+      svg.removeEventListener('wheel', blockPageZoom)
       behaviorRef.current = null
       selectionRef.current = null
     }

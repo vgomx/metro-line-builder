@@ -72,3 +72,64 @@ export function exactSegmentIndex(points: Point[], point: Point): number {
   }
   return -1
 }
+
+/** Direction-independent key for a segment, so A→B and B→A collide to the same key. */
+export function segmentKey(a: Point, b: Point): string {
+  const [p1, p2] = a.x < b.x || (a.x === b.x && a.y <= b.y) ? [a, b] : [b, a]
+  return `${p1.x},${p1.y}|${p2.x},${p2.y}`
+}
+
+/**
+ * Maps each segment (by its endpoint coordinates) to the ids of every visible line
+ * running along it, in a stable order — used to fan parallel colored strokes out
+ * across a shared route (Tube-map style, e.g. Circle/District/Hammersmith & City)
+ * instead of stacking them invisibly on top of each other.
+ */
+export function buildSegmentLineMap(lineList: Line[], stations: Record<string, Station>): Map<string, string[]> {
+  const map = new Map<string, string[]>()
+  for (const line of lineList) {
+    if (!line.visible) continue
+    const points = resolveLineNodes(line.nodes, stations)
+    for (let i = 0; i < points.length - 1; i++) {
+      const key = segmentKey(points[i], points[i + 1])
+      const group = map.get(key)
+      if (group) group.push(line.id)
+      else map.set(key, [line.id])
+    }
+  }
+  return map
+}
+
+/** Perpendicular spacing between parallel lanes when 2+ lines share the same route. */
+export const LANE_WIDTH = 7
+
+/** Perpendicular lane offset for each segment of `points` (length = points.length - 1),
+ * based on how many lines share that segment and where this line falls in that group —
+ * shared by the line-path renderer and the train animation so both fan out the same way. */
+export function computeLaneOffsets(points: Point[], lineId: string, segmentLineMap: Map<string, string[]>): number[] {
+  const offsets: number[] = []
+  for (let i = 0; i < points.length - 1; i++) {
+    const group = segmentLineMap.get(segmentKey(points[i], points[i + 1])) ?? [lineId]
+    if (group.length <= 1) {
+      offsets.push(0)
+      continue
+    }
+    const index = Math.max(0, group.indexOf(lineId))
+    offsets.push((index - (group.length - 1) / 2) * LANE_WIDTH)
+  }
+  return offsets
+}
+
+/** Shifts both endpoints of a segment perpendicular to its direction by `amount`. */
+export function offsetSegment(a: Point, b: Point, amount: number): [Point, Point] {
+  if (amount === 0) return [a, b]
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const len = Math.hypot(dx, dy) || 1
+  const ox = (-dy / len) * amount
+  const oy = (dx / len) * amount
+  return [
+    { x: a.x + ox, y: a.y + oy },
+    { x: b.x + ox, y: b.y + oy },
+  ]
+}
