@@ -22,6 +22,7 @@ interface InspectorProps {
   onToggleTransfer: (stationId: string) => void
   onDeleteStation: (stationId: string) => void
   onRenameGeoFeature: (geoFeatureId: string, name: string) => void
+  onExtendGeoFeature: (geoFeatureId: string, end: 'start' | 'end') => void
   onDeleteGeoFeature: (geoFeatureId: string) => void
   onRenameCompany: (companyId: string, name: string) => void
   onSetCompanyType: (companyId: string, type: Company['type']) => void
@@ -46,6 +47,7 @@ export function Inspector({
   onToggleTransfer,
   onDeleteStation,
   onRenameGeoFeature,
+  onExtendGeoFeature,
   onDeleteGeoFeature,
   onRenameCompany,
   onSetCompanyType,
@@ -121,6 +123,33 @@ export function Inspector({
           value={feature.name}
           onChange={e => onRenameGeoFeature(feature.id, e.target.value)}
         />
+
+        <Divider />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+          <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--text-secondary)' }}>
+            Extend {feature.type} from
+          </label>
+          <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<PenIcon />}
+              style={{ flex: 1 }}
+              onClick={() => onExtendGeoFeature(feature.id, 'start')}
+            >
+              Start
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<PenIcon />}
+              style={{ flex: 1 }}
+              onClick={() => onExtendGeoFeature(feature.id, 'end')}
+            >
+              End
+            </Button>
+          </div>
+        </div>
 
         <Divider />
         <Button variant="destructive" size="sm" icon={<TrashIcon />} onClick={() => onDeleteGeoFeature(feature.id)}>

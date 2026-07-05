@@ -41,6 +41,7 @@ function App() {
     finishDraftLine,
     cancelDraftLine,
     addGeoPoint,
+    startExtendGeoFeature,
     finishGeoFeature,
     cancelGeoFeature,
     deleteGeoFeature,
@@ -281,6 +282,7 @@ function App() {
           onToggleTransfer={toggleStationTransfer}
           onDeleteStation={deleteStation}
           onRenameGeoFeature={renameGeoFeature}
+          onExtendGeoFeature={startExtendGeoFeature}
           onDeleteGeoFeature={deleteGeoFeature}
           onRenameCompany={renameCompany}
           onSetCompanyType={setCompanyType}

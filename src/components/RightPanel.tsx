@@ -40,6 +40,7 @@ interface RightPanelProps {
   onToggleTransfer: (stationId: string) => void
   onDeleteStation: (stationId: string) => void
   onRenameGeoFeature: (geoFeatureId: string, name: string) => void
+  onExtendGeoFeature: (geoFeatureId: string, end: 'start' | 'end') => void
   onDeleteGeoFeature: (geoFeatureId: string) => void
   onRenameCompany: (companyId: string, name: string) => void
   onSetCompanyType: (companyId: string, type: Company['type']) => void
@@ -81,6 +82,7 @@ export function RightPanel({
   onToggleTransfer,
   onDeleteStation,
   onRenameGeoFeature,
+  onExtendGeoFeature,
   onDeleteGeoFeature,
   onRenameCompany,
   onSetCompanyType,
@@ -164,6 +166,7 @@ export function RightPanel({
             onToggleTransfer={onToggleTransfer}
             onDeleteStation={onDeleteStation}
             onRenameGeoFeature={onRenameGeoFeature}
+            onExtendGeoFeature={onExtendGeoFeature}
             onDeleteGeoFeature={onDeleteGeoFeature}
             onRenameCompany={onRenameCompany}
             onSetCompanyType={onSetCompanyType}

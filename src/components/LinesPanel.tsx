@@ -31,8 +31,8 @@ export function LinesPanel({ lines, selectedLineId, onSelect, onToggleVisibility
               gap: 'var(--gap-sm)',
               padding: '8px 12px',
               cursor: 'pointer',
-              background: isSelected ? 'var(--brand-50)' : 'transparent',
-              borderLeft: `3px solid ${isSelected ? 'var(--brand-500)' : 'transparent'}`,
+              background: isSelected ? 'var(--color-info-bg)' : 'transparent',
+              borderLeft: `3px solid ${isSelected ? 'var(--interactive-primary)' : 'transparent'}`,
               transition: 'background 100ms ease',
             }}
           >

@@ -77,8 +77,8 @@ export function CompaniesPanel({
               gap: 'var(--gap-sm)',
               padding: '8px 12px',
               cursor: 'pointer',
-              background: isSelected ? 'var(--brand-50)' : 'transparent',
-              borderLeft: `3px solid ${isSelected ? 'var(--brand-500)' : 'transparent'}`,
+              background: isSelected ? 'var(--color-info-bg)' : 'transparent',
+              borderLeft: `3px solid ${isSelected ? 'var(--interactive-primary)' : 'transparent'}`,
             }}
           >
             <span style={{ color: 'var(--text-muted)', flexShrink: 0, display: 'flex' }}>

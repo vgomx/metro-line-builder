@@ -280,7 +280,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   }
 
   const handlePointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
-    if (tool === 'draw-line' || tool === 'draw-river' || tool === 'draw-park') {
+    if (tool === 'draw-line' || tool === 'draw-river' || tool === 'draw-park' || tool === 'add-station') {
       const w = toWorld(e.clientX, e.clientY)
       setCursorWorld({ x: snapToGrid(w.x), y: snapToGrid(w.y) })
     }
@@ -437,6 +437,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       style={{ display: 'block', background: 'var(--bg-page)', cursor, userSelect: 'none', WebkitUserSelect: 'none' }}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerLeave={() => setCursorWorld(null)}
       onDoubleClick={handleDoubleClick}
     >
       <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.k})`}>
@@ -588,6 +589,15 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             stroke="var(--brand-500)"
             strokeWidth={1 / transform.k}
           />
+        )}
+
+        {/* Hot-spot cue: highlights the grid intersection a draw tool will snap to,
+            making precise placement easier to judge before clicking. */}
+        {DRAW_TOOLS.includes(tool) && cursorWorld && (
+          <g transform={`translate(${cursorWorld.x}, ${cursorWorld.y})`} style={{ pointerEvents: 'none' }}>
+            <circle r={10 / transform.k} fill="none" stroke="var(--interactive-primary)" strokeWidth={1.5 / transform.k} opacity={0.9} />
+            <circle r={2.5 / transform.k} fill="var(--interactive-primary)" />
+          </g>
         )}
       </g>
     </svg>

@@ -131,6 +131,18 @@ export function MoreMenu({ theme }: MoreMenuProps) {
             </a>
             .
             <br />
+            <a href="mailto:vgmxx@proton.me" style={{ color: 'var(--text-link)', textDecoration: 'underline' }}>
+              vgmxx@proton.me
+            </a>
+          </p>
+
+          <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: 0, marginTop: 'var(--space-1)' }}>
+            Map style inspired by Harry Beck's 1933 London Underground diagram.
+          </p>
+
+          <Divider />
+
+          <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: 0 }}>
             © 2026 Vitor Gomes. Licensed under the MIT License.
           </p>
           <button
@@ -148,6 +160,14 @@ export function MoreMenu({ theme }: MoreMenuProps) {
           >
             View open-source acknowledgements
           </button>
+          <a
+            href="https://github.com/vgomx/metro-line-builder"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: 'var(--text-xs)', color: 'var(--text-link)', textDecoration: 'underline' }}
+          >
+            View source on GitHub
+          </a>
         </div>
       </Dialog>
     </div>

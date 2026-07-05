@@ -33,6 +33,10 @@ interface MapState extends DataSnapshot {
   /** True when extending from the line's start — draftLineNodes is reversed so appends still land at its end. */
   draftLineReversed: boolean
   draftGeoPoints: Point[]
+  /** Set while the draft geo feature is extending an existing river/park (vs. drafting a new one). */
+  draftGeoFeatureId: string | null
+  /** True when extending from the feature's start — draftGeoPoints is reversed so appends still land at its end. */
+  draftGeoReversed: boolean
   past: DataSnapshot[]
   future: DataSnapshot[]
 }
@@ -58,6 +62,7 @@ type Action =
   | { type: 'finishDraftLine' }
   | { type: 'cancelDraftLine' }
   | { type: 'addGeoPoint'; x: number; y: number }
+  | { type: 'startExtendGeoFeature'; geoFeatureId: string; end: 'start' | 'end' }
   | { type: 'finishGeoFeature' }
   | { type: 'cancelGeoFeature' }
   | { type: 'deleteGeoFeature'; geoFeatureId: string }
@@ -163,6 +168,8 @@ const emptyState: MapState = {
   draftLineId: null,
   draftLineReversed: false,
   draftGeoPoints: [],
+  draftGeoFeatureId: null,
+  draftGeoReversed: false,
   nextStationNumber: 1,
   nextLineNumber: 1,
   nextGeoFeatureNumber: 1,
@@ -396,6 +403,8 @@ function reducer(rawState: MapState, action: Action): MapState {
         draftLineNodes: [],
         draftLineId: null,
         draftGeoPoints: [],
+        draftGeoFeatureId: null,
+        draftGeoReversed: false,
       }
 
     case 'setTool':
@@ -406,6 +415,8 @@ function reducer(rawState: MapState, action: Action): MapState {
         draftLineId: null,
         draftLineReversed: false,
         draftGeoPoints: [],
+        draftGeoFeatureId: null,
+        draftGeoReversed: false,
         selectedStationIds: [],
         selectedLineIds: [],
         selectedGeoFeatureIds: [],
@@ -659,10 +670,41 @@ function reducer(rawState: MapState, action: Action): MapState {
     case 'addGeoPoint':
       return { ...state, draftGeoPoints: [...state.draftGeoPoints, { x: action.x, y: action.y }] }
 
+    case 'startExtendGeoFeature': {
+      const feature = state.geoFeatures[action.geoFeatureId]
+      if (!feature) return state
+      // New points always get appended to the end of draftGeoPoints, so extending
+      // from the start instead reverses the working copy — the append lands on
+      // what's visually the front, and finishGeoFeature flips it back before saving.
+      const reversed = action.end === 'start'
+      return {
+        ...state,
+        tool: feature.type === 'river' ? 'draw-river' : 'draw-park',
+        draftGeoPoints: reversed ? [...feature.points].reverse() : [...feature.points],
+        draftGeoFeatureId: action.geoFeatureId,
+        draftGeoReversed: reversed,
+        selectedStationIds: [],
+        selectedLineIds: [],
+        selectedGeoFeatureIds: [],
+      }
+    }
+
     case 'finishGeoFeature': {
       const type = state.tool === 'draw-river' ? 'river' : state.tool === 'draw-park' ? 'park' : null
       if (!type || state.draftGeoPoints.length < MIN_GEO_POINTS[type]) {
-        return { ...state, draftGeoPoints: [] }
+        return { ...state, draftGeoPoints: [], draftGeoFeatureId: null, draftGeoReversed: false }
+      }
+      if (state.draftGeoFeatureId) {
+        const feature = state.geoFeatures[state.draftGeoFeatureId]
+        if (!feature) return { ...state, draftGeoPoints: [], draftGeoFeatureId: null, draftGeoReversed: false }
+        const points = state.draftGeoReversed ? [...state.draftGeoPoints].reverse() : state.draftGeoPoints
+        return {
+          ...state,
+          geoFeatures: { ...state.geoFeatures, [state.draftGeoFeatureId]: { ...feature, points } },
+          draftGeoPoints: [],
+          draftGeoFeatureId: null,
+          draftGeoReversed: false,
+        }
       }
       const id = `geo-${state.nextGeoFeatureNumber}`
       const feature: GeoFeature = {
@@ -681,7 +723,7 @@ function reducer(rawState: MapState, action: Action): MapState {
     }
 
     case 'cancelGeoFeature':
-      return { ...state, draftGeoPoints: [] }
+      return { ...state, draftGeoPoints: [], draftGeoFeatureId: null, draftGeoReversed: false }
 
     case 'deleteGeoFeature': {
       const geoFeatures = { ...state.geoFeatures }
@@ -907,6 +949,10 @@ export function useMapState() {
   const finishDraftLine = useCallback(() => dispatch({ type: 'finishDraftLine' }), [])
   const cancelDraftLine = useCallback(() => dispatch({ type: 'cancelDraftLine' }), [])
   const addGeoPoint = useCallback((x: number, y: number) => dispatch({ type: 'addGeoPoint', x, y }), [])
+  const startExtendGeoFeature = useCallback(
+    (geoFeatureId: string, end: 'start' | 'end') => dispatch({ type: 'startExtendGeoFeature', geoFeatureId, end }),
+    [],
+  )
   const finishGeoFeature = useCallback(() => dispatch({ type: 'finishGeoFeature' }), [])
   const cancelGeoFeature = useCallback(() => dispatch({ type: 'cancelGeoFeature' }), [])
   const deleteGeoFeature = useCallback(
@@ -1009,6 +1055,7 @@ export function useMapState() {
     finishDraftLine,
     cancelDraftLine,
     addGeoPoint,
+    startExtendGeoFeature,
     finishGeoFeature,
     cancelGeoFeature,
     deleteGeoFeature,
