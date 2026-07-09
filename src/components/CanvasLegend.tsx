@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 interface CanvasLegendProps {
   mapName: string
@@ -32,14 +32,80 @@ export function CanvasLegend({ mapName, authorityName }: CanvasLegendProps) {
   )
 }
 
+const BASE_FONT_SIZE = 15
+const LINE_HEIGHT = 1.05
+const BASE_GAP = 8
+const MAX_TEXT_WIDTH = 74
+// Scaling targets a bit under the hard cap — canvas-measured text and the
+// browser's actual CSS layout never match to the pixel, so aiming for the
+// exact edge occasionally lets the widest word land a hair over MAX_TEXT_WIDTH
+// and fall back to a mid-word wrap that a small margin would have avoided.
+const SAFE_TARGET_WIDTH = MAX_TEXT_WIDTH * 0.92
+const MIN_SCALE = 0.5
+// A condensed face keeps words narrow, which lets long names sit at full size
+// more often — but the mark's real footprint is its height (word count ×
+// font-size), not width, so staying narrow just means it stays tall too. The
+// regular-width sans trips the width-based scale-down sooner, which shrinks
+// the font (and with it, the height) even for names that would otherwise
+// never trigger it.
+const WORDMARK_FONT = 'var(--font-sans)'
+
+let measureCanvas: HTMLCanvasElement | null = null
+let resolvedWordmarkFont: string | null = null
+
+/** Canvas 2D's `font` property can't resolve a CSS custom property the way an
+ * element's `fontFamily` style can — `var(--font-sans)` would just be ignored
+ * and silently fall back to the canvas default, breaking the measurement.
+ * Resolving it once against the real DOM keeps the two in sync regardless of
+ * what the token's underlying font stack is. */
+function resolveWordmarkFont(): string {
+  if (resolvedWordmarkFont) return resolvedWordmarkFont
+  const value = getComputedStyle(document.documentElement).getPropertyValue('--font-sans').trim()
+  resolvedWordmarkFont = value || 'sans-serif'
+  return resolvedWordmarkFont
+}
+
+/** Widest single word at BASE_FONT_SIZE, using the same font stack the wordmark
+ * renders with — real glyph metrics instead of a guessed average-char-width,
+ * so the scale-to-fit below stays accurate whichever font actually loads.
+ * Canvas measureText doesn't apply letter-spacing, so that's added back in by
+ * hand; matching the CSS width exactly isn't possible (font hinting and
+ * subpixel rounding differ from canvas to layout), so the scale this feeds
+ * into targets a bit under MAX_TEXT_WIDTH rather than the exact edge. */
+function widestWordPx(words: string[]): number {
+  const letterSpacing = BASE_FONT_SIZE * 0.01
+  if (!measureCanvas) measureCanvas = document.createElement('canvas')
+  const context = measureCanvas.getContext('2d')
+  if (!context) return words.reduce((max, w) => Math.max(max, w.length), 0) * BASE_FONT_SIZE * 0.55
+  context.font = `700 ${BASE_FONT_SIZE}px ${resolveWordmarkFont()}`
+  return words.reduce((max, w) => {
+    const upper = w.toUpperCase()
+    const width = context.measureText(upper).width + Math.max(0, upper.length - 1) * letterSpacing
+    return Math.max(max, width)
+  }, 0)
+}
+
 /** Wordmark lockup — a placeholder mark on the left (stands in for a future
  * per-map logo) beside the name stacked word-per-word, left-aligned, like a
- * vertical transit-authority nameplate. Reads as neutral, translucent chrome
- * until hovered, when it takes on the app's brand color like a real logo would. */
+ * vertical transit-authority nameplate. The icon is a 1:1 square sized to
+ * match the text stack's own rendered height, so it's never an arbitrary
+ * fixed shape — and since that height comes from the same font-size and word
+ * count driving the text, the icon shrinks and grows in lockstep with it
+ * automatically, whether the trigger is a long word or just more lines. Reads
+ * as neutral, translucent chrome until hovered, when it takes on the app's
+ * brand color like a real logo would. */
 function AuthorityMark({ name }: { name: string }) {
   const [hovered, setHovered] = useState(false)
   const accent = hovered ? 'var(--interactive-primary)' : 'var(--text-secondary)'
-  const words = `${name} Transit Authority`.split(/\s+/).filter(Boolean)
+  const words = useMemo(() => `${name} Transit Authority`.split(/\s+/).filter(Boolean), [name])
+
+  const scale = useMemo(() => {
+    const widest = widestWordPx(words)
+    return widest <= SAFE_TARGET_WIDTH ? 1 : Math.max(MIN_SCALE, SAFE_TARGET_WIDTH / widest)
+  }, [words])
+
+  const fontSize = BASE_FONT_SIZE * scale
+  const iconSize = words.length * fontSize * LINE_HEIGHT
 
   return (
     <div
@@ -48,32 +114,38 @@ function AuthorityMark({ name }: { name: string }) {
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: '8px',
+        gap: `${BASE_GAP * scale}px`,
         opacity: hovered ? 1 : 0.55,
         cursor: 'default',
         pointerEvents: 'auto',
-        transition: 'opacity 150ms ease',
+        transition: 'opacity 150ms ease, gap 150ms ease',
       }}
     >
-      {/* Placeholder for a future per-map logo mark */}
-      <svg width="30" height="46" viewBox="0 0 30 46" style={{ flexShrink: 0 }}>
-        <rect x="1.5" y="1.5" width="27" height="43" rx="4" fill="none" stroke={accent} strokeWidth="2" style={{ transition: 'stroke 150ms ease' }} />
-        <circle cx="15" cy="23" r="8.5" fill="none" stroke={accent} strokeWidth="2" style={{ transition: 'stroke 150ms ease' }} />
+      {/* Placeholder for a future per-map logo mark — a 1:1 slot matching the text's height */}
+      <svg
+        width={iconSize}
+        height={iconSize}
+        viewBox="0 0 32 32"
+        style={{ flexShrink: 0, transition: 'width 150ms ease, height 150ms ease' }}
+      >
+        <rect x="2" y="2" width="28" height="28" rx="4" fill="none" stroke={accent} strokeWidth="2" style={{ transition: 'stroke 150ms ease' }} />
+        <circle cx="16" cy="16" r="8" fill="none" stroke={accent} strokeWidth="2" style={{ transition: 'stroke 150ms ease' }} />
       </svg>
 
       <div
         style={{
-          fontFamily: "'Barlow Condensed', system-ui, sans-serif",
+          maxWidth: `${MAX_TEXT_WIDTH}px`,
+          fontFamily: WORDMARK_FONT,
           fontWeight: 700,
-          fontSize: '15px',
+          fontSize: `${fontSize}px`,
           letterSpacing: '0.01em',
           textTransform: 'uppercase',
           color: accent,
-          transition: 'color 150ms ease',
+          transition: 'color 150ms ease, font-size 150ms ease',
         }}
       >
         {words.map((word, i) => (
-          <div key={i} style={{ lineHeight: 1.05, textAlign: 'left' }}>
+          <div key={i} style={{ lineHeight: LINE_HEIGHT, textAlign: 'left', overflowWrap: 'anywhere' }}>
             {word}
           </div>
         ))}
