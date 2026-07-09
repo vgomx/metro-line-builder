@@ -2,6 +2,25 @@ import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { Station } from '../types'
 import type { LabelPlacement } from './labelPlacement'
 
+const LABEL_FONT_SIZE = 11
+const LABEL_FONT = `600 ${LABEL_FONT_SIZE}px 'Barlow Condensed', system-ui, sans-serif`
+const CARD_PAD_X = 5
+const CARD_PAD_Y = 2.5
+
+let measureCanvas: HTMLCanvasElement | null = null
+
+/** Pixel width of a label in the exact face it renders with, so the backing card can
+ * be sized to fit. Canvas measureText can't read a CSS var for its font, but this
+ * label uses a literal family string, so it measures directly. A little horizontal
+ * padding on top absorbs the small canvas-vs-layout metric drift. */
+function measureLabelWidth(text: string): number {
+  if (!measureCanvas) measureCanvas = document.createElement('canvas')
+  const ctx = measureCanvas.getContext('2d')
+  if (!ctx) return text.length * (LABEL_FONT_SIZE * 0.55)
+  ctx.font = LABEL_FONT
+  return ctx.measureText(text).width
+}
+
 interface StationNodeProps {
   station: Station
   selected: boolean
@@ -23,6 +42,21 @@ export function StationNode({ station, selected, inDraftLine, interchange, dragg
   const labelDistance = radius + 12
   const labelX = Math.cos(labelPlacement.angle) * labelDistance
   const labelY = Math.sin(labelPlacement.angle) * labelDistance
+
+  // Rounded card sized to the measured label, aligned to the same anchor edge the
+  // text uses (start → extends right, end → extends left, middle → centred), so it
+  // sits squarely behind the name and lifts it off busy lines/fills for legibility.
+  const name = station.name.trim()
+  const textWidth = name ? measureLabelWidth(name) : 0
+  const cardW = textWidth + CARD_PAD_X * 2
+  const cardH = LABEL_FONT_SIZE + CARD_PAD_Y * 2
+  const cardX =
+    labelPlacement.anchor === 'start'
+      ? labelX - CARD_PAD_X
+      : labelPlacement.anchor === 'end'
+        ? labelX - textWidth - CARD_PAD_X
+        : labelX - cardW / 2
+  const cardY = labelY - cardH / 2
 
   return (
     <g
@@ -71,12 +105,26 @@ export function StationNode({ station, selected, inDraftLine, interchange, dragg
             style={{ transition: 'r 150ms ease' }}
           />
         )}
+        {name && (
+          <rect
+            x={cardX}
+            y={cardY}
+            width={cardW}
+            height={cardH}
+            rx={4}
+            fill="var(--bg-surface)"
+            stroke="var(--border-subtle)"
+            strokeWidth={1}
+            opacity={0.92}
+            style={{ pointerEvents: 'none' }}
+          />
+        )}
         <text
           x={labelX}
           y={labelY}
           textAnchor={labelPlacement.anchor}
           dominantBaseline="middle"
-          fontSize={11}
+          fontSize={LABEL_FONT_SIZE}
           fontFamily="'Barlow Condensed', system-ui, sans-serif"
           fontWeight={600}
           fill="var(--text-primary)"

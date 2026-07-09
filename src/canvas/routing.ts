@@ -28,6 +28,19 @@ export function routeOrthogonal(points: Point[], closed = false, cornerRadius = 
   return roundedPath(vertices, cornerRadius, closed)
 }
 
+/**
+ * Rounds an already-built vertex list (one vertex per corner) without re-deriving
+ * elbows through buildVertices. The snap animation springs between two settled
+ * offset-polyline shapes; the in-between blends generally aren't H/V/45°-aligned, so
+ * feeding them back through routeOrthogonal would insert spurious near-zero-length
+ * diagonal elbows beside every real corner and cap each fillet to ~1px — the rough
+ * corners seen mid-animation. Filleting the interpolated vertices straight keeps
+ * exactly the corners the endpoints have, smoothly rounded, at any blend angle.
+ */
+export function roundVertices(vertices: Point[], cornerRadius = DEFAULT_CORNER_RADIUS): string {
+  return roundedPath(vertices, cornerRadius, false)
+}
+
 export function buildVertices(points: Point[], closed: boolean): Point[] {
   const routePoints = closed ? [...points, points[0]] : points
   const vertices: Point[] = [routePoints[0]]

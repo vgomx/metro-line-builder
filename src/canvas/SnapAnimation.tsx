@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Point } from '../types'
-import { routeOrthogonal } from './routing'
+import { roundVertices } from './routing'
 
 interface SnapAnimationProps {
   color: string
@@ -46,7 +46,7 @@ export function SnapAnimation({ color, fromPoints, toPoints, onComplete }: SnapA
         x: p.x + (toPoints[i].x - p.x) * eased,
         y: p.y + (toPoints[i].y - p.y) * eased,
       }))
-      pathRef.current?.setAttribute('d', routeOrthogonal(points))
+      pathRef.current?.setAttribute('d', roundVertices(points))
       if (t < 1) {
         frameId = requestAnimationFrame(tick)
       } else {
@@ -60,7 +60,7 @@ export function SnapAnimation({ color, fromPoints, toPoints, onComplete }: SnapA
   return (
     <path
       ref={pathRef}
-      d={routeOrthogonal(fromPoints)}
+      d={roundVertices(fromPoints)}
       fill="none"
       stroke={color}
       strokeWidth={5}

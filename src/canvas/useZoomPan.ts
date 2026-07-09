@@ -17,6 +17,9 @@ const ZOOM_STEP = 1.2
 export function useZoomPan(svgRef: RefObject<SVGSVGElement | null>, panMode: boolean) {
   const [transform, setTransform] = useState<ZoomTransform>(zoomIdentity)
   const [spaceHeld, setSpaceHeld] = useState(false)
+  // True only while a pointer-drag pan is in flight (not a wheel zoom), so the
+  // caller can swap the open-hand cursor for the closed "grabbing" one mid-drag.
+  const [panning, setPanning] = useState(false)
   const spaceHeldRef = useRef(false)
   const panModeRef = useRef(panMode)
   panModeRef.current = panMode
@@ -61,8 +64,17 @@ export function useZoomPan(svgRef: RefObject<SVGSVGElement | null>, panMode: boo
         }
         return true
       })
+      .on('start', (event: D3ZoomEvent<SVGSVGElement, unknown>) => {
+        // A drag pan carries a mouse/pointer/touch sourceEvent; a wheel zoom carries
+        // a wheel one — only the former should flip the cursor to "grabbing".
+        const src = event.sourceEvent as Event | undefined
+        if (src && src.type !== 'wheel') setPanning(true)
+      })
       .on('zoom', (event: D3ZoomEvent<SVGSVGElement, unknown>) => {
         setTransform(event.transform)
+      })
+      .on('end', () => {
+        setPanning(false)
       })
 
     const selection = select(svg)
@@ -97,5 +109,5 @@ export function useZoomPan(svgRef: RefObject<SVGSVGElement | null>, panMode: boo
   const zoomIn = useCallback(() => zoomBy(ZOOM_STEP), [zoomBy])
   const zoomOut = useCallback(() => zoomBy(1 / ZOOM_STEP), [zoomBy])
 
-  return { transform, zoomIn, zoomOut, spaceHeld }
+  return { transform, zoomIn, zoomOut, spaceHeld, panning }
 }

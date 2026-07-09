@@ -16,7 +16,9 @@ import {
   buildVertexSegmentLineMap,
   closestSegmentIndex,
   computeLaneOffsets,
+  offsetPolyline,
   resolveLineNodes,
+  resolveLineVertices,
   stationIdsOfLine,
 } from './lineNodes'
 import { computeLabelPlacement } from './labelPlacement'
@@ -131,7 +133,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   ref,
 ) {
   const svgRef = useRef<SVGSVGElement>(null)
-  const { transform, zoomIn, zoomOut, spaceHeld } = useZoomPan(svgRef, tool === 'pan')
+  const { transform, zoomIn, zoomOut, spaceHeld, panning } = useZoomPan(svgRef, tool === 'pan')
   const [drag, setDrag] = useState<DragState>({ kind: 'none' })
   const [cursorWorld, setCursorWorld] = useState<{ x: number; y: number } | null>(null)
   const [snapAnimations, setSnapAnimations] = useState<
@@ -366,13 +368,28 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
 
       snapSessionRef.current += 1
       const session = snapSessionRef.current
+
+      // Reconstruct station positions as they were just before this drag, so the
+      // ghost's "from" shape reflects the line's actual pre-drag lane offset (which
+      // segments were shared, and by how much) instead of its raw, unfanned
+      // geometry — a shared line now visibly fans out, so the plain station-to-
+      // station path no longer matches what was really on screen a moment ago.
+      const preDragStations: Record<string, Station> = { ...stations }
+      for (const id of Object.keys(drag.originalPositions)) {
+        const s = stations[id]
+        if (s) preDragStations[id] = { ...s, ...drag.originalPositions[id] }
+      }
+      const preDragSegmentMap = buildVertexSegmentLineMap(lineList, preDragStations)
+
       const affected = lineList
         .filter(line => line.visible && stationIdsOfLine(line).some(id => id in drag.originalPositions))
         .map(line => {
-          const fromPoints = line.nodes
-            .map(n => (n.kind === 'station' ? (drag.originalPositions[n.stationId] ?? stations[n.stationId]) : n))
-            .filter((p): p is Point => Boolean(p))
-          const toPoints = resolveLineNodes(line.nodes, stations)
+          const fromVertices = resolveLineVertices(line.nodes, preDragStations)
+          const fromPoints = offsetPolyline(fromVertices, computeLaneOffsets(fromVertices, line.id, preDragSegmentMap))
+
+          const toVertices = resolveLineVertices(line.nodes, stations)
+          const toPoints = offsetPolyline(toVertices, computeLaneOffsets(toVertices, line.id, lineRenderSegmentMap))
+
           return { key: `${session}-${line.id}`, lineId: line.id, color: line.color, from: fromPoints, to: toPoints }
         })
         .filter(a => a.from.length >= 2 && a.to.length >= 2)
@@ -448,7 +465,14 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   // animation stays on the coarser map since its stop points are real line nodes.
   const lineRenderSegmentMap = buildVertexSegmentLineMap(lineList, stations)
 
-  const cursor = spaceHeld || tool === 'pan' ? 'grab' : DRAW_TOOLS.includes(tool) ? 'crosshair' : 'default'
+  const cursor =
+    spaceHeld || tool === 'pan'
+      ? panning
+        ? 'grabbing'
+        : 'grab'
+      : DRAW_TOOLS.includes(tool)
+        ? 'crosshair'
+        : 'default'
 
   const gridLines = []
   if (showGrid) {

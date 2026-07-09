@@ -165,9 +165,17 @@ export function TrainMarker({ lineId, color, pathPoints, stopFlags, laneOffsets,
         />
       ))}
       <g ref={groupRef} style={{ pointerEvents: 'none' }}>
-        <rect x={-8} y={-3.5} width={16} height={7} rx={3} fill={color} stroke="var(--ink-0)" strokeWidth={1.5} />
-        <rect x={-4} y={-1.8} width={2.8} height={3.6} rx={0.8} fill="var(--ink-0)" opacity={0.85} />
-        <rect x={1.2} y={-1.8} width={2.8} height={3.6} rx={0.8} fill="var(--ink-0)" opacity={0.85} />
+        {/* Body fill matches the canvas surface (not a fixed dark ink token) so the
+            capsule reads as a colored-outline cutout against the map in either theme,
+            instead of a solid black blob once the canvas itself turns light. */}
+        <rect x={-13} y={-3.25} width={26} height={6.5} rx={3.25} fill="var(--bg-page)" stroke={color} strokeWidth={1.4} />
+        <line x1={-10.25} y1={-2.15} x2={10.25} y2={-2.15} stroke={color} strokeWidth={0.6} opacity={0.6} strokeLinecap="round" />
+        <line x1={-10.25} y1={2.15} x2={10.25} y2={2.15} stroke={color} strokeWidth={0.6} opacity={0.6} strokeLinecap="round" />
+        <circle cx={-6} cy={0} r={1.4} fill="none" stroke={color} strokeWidth={0.8} opacity={0.85} />
+        <circle cx={0} cy={0} r={1.4} fill="none" stroke={color} strokeWidth={0.8} opacity={0.85} />
+        <circle cx={6} cy={0} r={1.4} fill="none" stroke={color} strokeWidth={0.8} opacity={0.85} />
+        {/* Headlight accent at the nose end, so the train's facing direction reads at a glance. */}
+        <circle cx={11.4} cy={0} r={0.65} fill={color} opacity={0.9} />
       </g>
     </>
   )
