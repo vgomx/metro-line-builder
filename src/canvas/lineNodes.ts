@@ -1,5 +1,5 @@
 import type { Line, LineNode, Point, Station } from '../types'
-import { buildVertices } from './routing'
+import { buildVerticesTagged, routeOrthogonal } from './routing'
 
 export function resolveNodePoint(node: LineNode, stations: Record<string, Station>): Point | null {
   if (node.kind === 'point') return { x: node.x, y: node.y }
@@ -9,27 +9,6 @@ export function resolveNodePoint(node: LineNode, stations: Record<string, Statio
 
 export function resolveLineNodes(nodes: LineNode[], stations: Record<string, Station>): Point[] {
   return nodes.map(n => resolveNodePoint(n, stations)).filter((p): p is Point => Boolean(p))
-}
-
-/**
- * Like resolveLineNodes, but expands every consecutive pair into the actual routed
- * vertex list (including routeOrthogonal's auto-inserted elbow points). Two lines
- * can share part of a routed path without sharing an exact raw node-to-node segment
- * — e.g. a shared diagonal lead-out from one station before diverging at different
- * elbows — and only this finer resolution catches that for shared-lane detection.
- */
-export function resolveLineVertices(nodes: LineNode[], stations: Record<string, Station>): Point[] {
-  const vertices = buildVertices(resolveLineNodes(nodes, stations), false)
-  // A line can carry a bare waypoint at the exact coordinates of an adjacent
-  // station node (a leftover from drawing through it). The resulting zero-length
-  // segment has no direction, which degenerates the lane-offset intersection math
-  // downstream and pollutes the shared-segment map with useless keys.
-  const out: Point[] = []
-  for (const p of vertices) {
-    const last = out[out.length - 1]
-    if (!last || last.x !== p.x || last.y !== p.y) out.push(p)
-  }
-  return out
 }
 
 export function stationIdsOfLine(line: Line): string[] {
@@ -101,47 +80,150 @@ export function segmentKey(a: Point, b: Point): string {
   return `${p1.x},${p1.y}|${p2.x},${p2.y}`
 }
 
-/**
- * Maps each segment (by its endpoint coordinates) to the ids of every visible line
- * running along it, in a stable order — used to fan parallel colored strokes out
- * across a shared route (Tube-map style, e.g. Circle/District/Hammersmith & City)
- * instead of stacking them invisibly on top of each other.
- */
-export function buildSegmentLineMap(lineList: Line[], stations: Record<string, Station>): Map<string, string[]> {
-  const map = new Map<string, string[]>()
-  for (const line of lineList) {
-    if (!line.visible) continue
-    const points = resolveLineNodes(line.nodes, stations)
-    for (let i = 0; i < points.length - 1; i++) {
-      const key = segmentKey(points[i], points[i + 1])
-      const group = map.get(key)
-      if (group) group.push(line.id)
-      else map.set(key, [line.id])
+/** A line's routed vertices, with each vertex tied back to the line node it came from. */
+export interface LineGeometry {
+  /** Routed vertices, subdivided so every shared corridor is broken at the same points. */
+  vertices: Point[]
+  /** Parallel to vertices — index into `resolved`, or -1 for a router elbow or a split point. */
+  vertexNode: number[]
+  resolved: { node: LineNode; point: Point }[]
+}
+
+export interface NetworkGeometry {
+  /** Keyed by line id; only visible lines with drawable geometry appear. */
+  byLine: Map<string, LineGeometry>
+  /** Each subdivided segment → the ids of every line running along it, in lineList order. */
+  segmentLineMap: Map<string, string[]>
+}
+
+/** Two routed vertices count as the same point only on an exact match; coordinates come
+ * from grid-snapped stations and exact elbow arithmetic, so there's no drift to absorb. */
+function pointKey(p: Point): string {
+  return `${p.x},${p.y}`
+}
+
+/** Routed vertices for one line, with duplicates collapsed and node identity preserved. */
+function routeLine(line: Line, stations: Record<string, Station>): LineGeometry | null {
+  const resolved = line.nodes
+    .map(node => ({ node, point: resolveNodePoint(node, stations) }))
+    .filter((entry): entry is { node: LineNode; point: Point } => entry.point !== null)
+  if (resolved.length < 2) return null
+
+  const tagged = buildVerticesTagged(resolved.map(entry => entry.point))
+
+  // Drop consecutive duplicates (a waypoint dropped onto a station leaves a zero-length
+  // segment), carrying node identity onto the vertex we keep — preferring a station over
+  // a coincident waypoint so a train still dwells there.
+  const vertices: Point[] = []
+  const vertexNode: number[] = []
+  let sourceCount = 0
+  for (let i = 0; i < tagged.vertices.length; i++) {
+    const point = tagged.vertices[i]
+    const nodeIndex = tagged.isSource[i] ? sourceCount++ : -1
+    const last = vertices[vertices.length - 1]
+    if (last && last.x === point.x && last.y === point.y) {
+      const keptIndex = vertexNode[vertexNode.length - 1]
+      const keptIsStation = keptIndex >= 0 && resolved[keptIndex].node.kind === 'station'
+      const incomingIsStation = nodeIndex >= 0 && resolved[nodeIndex].node.kind === 'station'
+      if (nodeIndex >= 0 && (keptIndex < 0 || (incomingIsStation && !keptIsStation))) {
+        vertexNode[vertexNode.length - 1] = nodeIndex
+      }
+      continue
+    }
+    vertices.push(point)
+    vertexNode.push(nodeIndex)
+  }
+  if (vertices.length < 2) return null
+  return { vertices, vertexNode, resolved }
+}
+
+/** Breaks each segment wherever one of `points` lies strictly inside it. */
+function subdivideAt(geometry: LineGeometry, points: Point[]): LineGeometry {
+  const vertices: Point[] = []
+  const vertexNode: number[] = []
+
+  for (let i = 0; i < geometry.vertices.length - 1; i++) {
+    const a = geometry.vertices[i]
+    const b = geometry.vertices[i + 1]
+    vertices.push(a)
+    vertexNode.push(geometry.vertexNode[i])
+
+    const dx = b.x - a.x
+    const dy = b.y - a.y
+    const lengthSq = dx * dx + dy * dy
+    if (lengthSq === 0) continue
+
+    const inner: { t: number; point: Point }[] = []
+    for (const point of points) {
+      const t = ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSq
+      if (t <= 0 || t >= 1) continue
+      // Reject points that merely project onto the segment without lying on it.
+      if (Math.abs(a.x + dx * t - point.x) > 1e-6 || Math.abs(a.y + dy * t - point.y) > 1e-6) continue
+      inner.push({ t, point })
+    }
+    inner.sort((u, v) => u.t - v.t)
+    for (const split of inner) {
+      vertices.push(split.point)
+      vertexNode.push(-1)
     }
   }
-  return map
+
+  const last = geometry.vertices.length - 1
+  vertices.push(geometry.vertices[last])
+  vertexNode.push(geometry.vertexNode[last])
+  return { ...geometry, vertices, vertexNode }
 }
 
 /**
- * Fine-grained counterpart to buildSegmentLineMap, keyed on routed vertices
- * (resolveLineVertices) instead of raw line nodes — lets the line-path renderer fan
- * out lines that only share part of a routed segment instead of drawing them on top
- * of each other. Train animation keeps using the coarser, node-based map since its
- * stop points are tied to real line nodes, not synthetic elbow vertices.
+ * Routes every visible line and works out which of them share each stretch of track, so
+ * the renderer can fan parallel colored strokes across a shared route (Tube-map style,
+ * e.g. Circle/District/Hammersmith & City) instead of stacking them on top of each other.
+ *
+ * Sharing is judged on *routed* vertices rather than raw line nodes — a router elbow can
+ * land on another line's station, so two lines can share track without sharing a single
+ * node-to-node segment. That alone isn't enough though: lines running down the same
+ * corridor often break it at different places (one stops at a station mid-corridor, the
+ * other runs straight through), leaving segments that overlap but share no endpoints. So
+ * every line's segments are first subdivided at every other line's vertices. Without that
+ * step the straight-through line matches nothing, takes a zero offset, and draws right
+ * down the middle of the fan — on top of its neighbours instead of beside them.
  */
-export function buildVertexSegmentLineMap(lineList: Line[], stations: Record<string, Station>): Map<string, string[]> {
-  const map = new Map<string, string[]>()
+export function buildNetworkGeometry(lineList: Line[], stations: Record<string, Station>): NetworkGeometry {
+  const byLine = new Map<string, LineGeometry>()
   for (const line of lineList) {
     if (!line.visible) continue
-    const vertices = resolveLineVertices(line.nodes, stations)
-    for (let i = 0; i < vertices.length - 1; i++) {
-      const key = segmentKey(vertices[i], vertices[i + 1])
-      const group = map.get(key)
-      if (group) group.push(line.id)
-      else map.set(key, [line.id])
+    const geometry = routeLine(line, stations)
+    if (geometry) byLine.set(line.id, geometry)
+  }
+
+  const seen = new Set<string>()
+  const points: Point[] = []
+  for (const geometry of byLine.values()) {
+    for (const point of geometry.vertices) {
+      const key = pointKey(point)
+      if (seen.has(key)) continue
+      seen.add(key)
+      points.push(point)
     }
   }
-  return map
+
+  for (const [id, geometry] of byLine) byLine.set(id, subdivideAt(geometry, points))
+
+  // Walk lineList (not byLine) so a segment's group order is stable across segments —
+  // that ordering is what decides which lane each line takes within the fan.
+  const segmentLineMap = new Map<string, string[]>()
+  for (const line of lineList) {
+    const geometry = byLine.get(line.id)
+    if (!geometry) continue
+    for (let i = 0; i < geometry.vertices.length - 1; i++) {
+      const key = segmentKey(geometry.vertices[i], geometry.vertices[i + 1])
+      const group = segmentLineMap.get(key)
+      if (group) group.push(line.id)
+      else segmentLineMap.set(key, [line.id])
+    }
+  }
+
+  return { byLine, segmentLineMap }
 }
 
 /** Perpendicular spacing between parallel lanes when 2+ lines share the same route. */
@@ -165,66 +247,141 @@ export function computeLaneOffsets(points: Point[], lineId: string, segmentLineM
 }
 
 /**
- * Shifts each segment of a routed vertex list sideways by its own lane offset and
- * places every interior vertex at the intersection of the two adjacent shifted
- * segments — the classic variable-offset polyline construction. This keeps exactly
- * one output vertex per input vertex and preserves each segment's direction
- * exactly, so a fillet pass downstream sees clean corners and can apply its normal
- * radius. (Earlier attempts that averaged or duplicated points at a lane
- * merge/split created clusters of near-coincident vertices, which capped the
- * fillet radius at ~1px there and made those corners look sharp.) Shared by the
- * line-path renderer and the drag-snap animation so both fan out the same way.
+ * Shifts each segment of a routed vertex list sideways by its own lane offset and places
+ * every interior vertex at the intersection of the two adjacent shifted segments — the
+ * classic variable-offset polyline construction. Preserving each segment's direction
+ * exactly lets a fillet pass downstream see clean corners and apply its normal radius.
+ * (Earlier attempts that averaged or duplicated points at a lane merge/split created
+ * clusters of near-coincident vertices, which capped the fillet radius at ~1px there and
+ * made those corners look sharp.)
+ *
+ * Also reports, for each output point, the index of the input vertex it came from. A
+ * vertex normally yields exactly one output point, but a lane change along a straight run
+ * yields two (the ends of the taper), so a caller that has to find a particular vertex
+ * again on the offset track can't just reuse its index.
  */
-export function offsetPolyline(vertices: Point[], offsets: number[]): Point[] {
+export function offsetPolylineIndexed(
+  vertices: Point[],
+  offsets: number[],
+): { points: Point[]; sourceIndex: number[] } {
   const n = vertices.length
-  if (n < 2) return vertices
+  if (n < 2) return { points: vertices, sourceIndex: vertices.map((_, i) => i) }
 
   const dirs: Point[] = []
   const norms: Point[] = []
+  const lengths: number[] = []
   for (let i = 0; i < n - 1; i++) {
     const dx = vertices[i + 1].x - vertices[i].x
     const dy = vertices[i + 1].y - vertices[i].y
     const len = Math.hypot(dx, dy) || 1
+    lengths.push(len)
     dirs.push({ x: dx / len, y: dy / len })
     norms.push({ x: -dy / len, y: dx / len })
   }
 
-  const out: Point[] = [
+  const points: Point[] = [
     { x: vertices[0].x + norms[0].x * offsets[0], y: vertices[0].y + norms[0].y * offsets[0] },
   ]
+  const sourceIndex: number[] = [0]
+
   for (let i = 1; i < n - 1; i++) {
     // Endpoints of the two shifted segments meeting at this vertex.
     const a = { x: vertices[i].x + norms[i - 1].x * offsets[i - 1], y: vertices[i].y + norms[i - 1].y * offsets[i - 1] }
     const b = { x: vertices[i].x + norms[i].x * offsets[i], y: vertices[i].y + norms[i].y * offsets[i] }
     const denom = dirs[i - 1].x * dirs[i].y - dirs[i - 1].y * dirs[i].x
     if (Math.abs(denom) < 1e-9) {
-      // Collinear segments: no intersection. Equal offsets need only one point;
-      // an offset change along a straight run becomes a short perpendicular jog.
-      if (Math.abs(offsets[i - 1] - offsets[i]) < 1e-9) out.push(a)
-      else out.push(a, b)
+      // Collinear segments: no intersection to solve for. Equal offsets need only one
+      // point. A lane change along a straight run — where a line joins or leaves a shared
+      // corridor mid-segment — instead ramps across at 45°, matching the map's own idiom.
+      // Stepping straight sideways in place would put a 90° turn immediately against its
+      // mirror, which caps the fillet radius at half the step and reads as a hard notch.
+      if (Math.abs(offsets[i - 1] - offsets[i]) < 1e-9) {
+        points.push(a)
+        sourceIndex.push(i)
+      } else {
+        const shift = Math.abs(offsets[i] - offsets[i - 1])
+        // Half the run each side of the vertex, so the taper straddles it symmetrically.
+        const reach = Math.min(shift / 2, lengths[i - 1] / 2, lengths[i] / 2)
+        points.push(
+          { x: a.x - dirs[i - 1].x * reach, y: a.y - dirs[i - 1].y * reach },
+          { x: b.x + dirs[i].x * reach, y: b.y + dirs[i].y * reach },
+        )
+        sourceIndex.push(i, i)
+      }
     } else {
       const t = ((b.x - a.x) * dirs[i].y - (b.y - a.y) * dirs[i].x) / denom
-      out.push({ x: a.x + dirs[i - 1].x * t, y: a.y + dirs[i - 1].y * t })
+      points.push({ x: a.x + dirs[i - 1].x * t, y: a.y + dirs[i - 1].y * t })
+      sourceIndex.push(i)
     }
   }
+
   const last = n - 1
-  out.push({
+  points.push({
     x: vertices[last].x + norms[last - 1].x * offsets[last - 1],
     y: vertices[last].y + norms[last - 1].y * offsets[last - 1],
   })
-  return out
+  sourceIndex.push(last)
+  return { points, sourceIndex }
 }
 
-/** Shifts both endpoints of a segment perpendicular to its direction by `amount`. */
-export function offsetSegment(a: Point, b: Point, amount: number): [Point, Point] {
-  if (amount === 0) return [a, b]
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy) || 1
-  const ox = (-dy / len) * amount
-  const oy = (dx / len) * amount
-  return [
-    { x: a.x + ox, y: a.y + oy },
-    { x: b.x + ox, y: b.y + oy },
-  ]
+export interface LineTrack {
+  /** Where the train dwells or turns, in order — points on this line's own lane. */
+  stopPoints: Point[]
+  /** Parallel to stopPoints: true for real stations, false for waypoints it glides through. */
+  stopFlags: boolean[]
+  /** Path `d` between each consecutive pair of stops, lane-offset and filleted. */
+  segmentPaths: string[]
+}
+
+/** The lane-offset polyline a line is drawn along — its own rail within any shared fan. */
+export function buildLaneVertices(
+  geometry: LineGeometry,
+  lineId: string,
+  segmentLineMap: Map<string, string[]>,
+): { points: Point[]; sourceIndex: number[] } {
+  const offsets = computeLaneOffsets(geometry.vertices, lineId, segmentLineMap)
+  return offsetPolylineIndexed(geometry.vertices, offsets)
+}
+
+/** The `d` attribute LinePath renders: the line's own lane, filleted at the corners. */
+export function buildLinePath(
+  geometry: LineGeometry,
+  lineId: string,
+  segmentLineMap: Map<string, string[]>,
+): string {
+  const { points } = buildLaneVertices(geometry, lineId, segmentLineMap)
+  return points.length >= 2 ? routeOrthogonal(points) : ''
+}
+
+/**
+ * The rails a train actually runs on: the very same lane-offset geometry LinePath draws,
+ * with the line's own nodes located along it as stops. Sharing one source of geometry is
+ * what keeps a train on its own rail instead of a neighbour's wherever lines fan out.
+ */
+export function buildLineTrack(
+  geometry: LineGeometry,
+  lineId: string,
+  segmentLineMap: Map<string, string[]>,
+): LineTrack | null {
+  const { points, sourceIndex } = buildLaneVertices(geometry, lineId, segmentLineMap)
+
+  const stopIndices: number[] = []
+  const stopFlags: boolean[] = []
+  for (let vertex = 0; vertex < geometry.vertices.length; vertex++) {
+    const nodeIndex = geometry.vertexNode[vertex]
+    if (nodeIndex < 0) continue
+    const at = sourceIndex.indexOf(vertex)
+    if (at < 0) continue
+    stopIndices.push(at)
+    stopFlags.push(geometry.resolved[nodeIndex].node.kind === 'station')
+  }
+  if (stopIndices.length < 2) return null
+
+  const segmentPaths: string[] = []
+  for (let i = 0; i < stopIndices.length - 1; i++) {
+    const span = points.slice(stopIndices[i], stopIndices[i + 1] + 1)
+    segmentPaths.push(span.length >= 2 ? routeOrthogonal(span) : '')
+  }
+
+  return { stopPoints: stopIndices.map(index => points[index]), stopFlags, segmentPaths }
 }

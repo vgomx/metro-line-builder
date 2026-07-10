@@ -28,22 +28,9 @@ export function routeOrthogonal(points: Point[], closed = false, cornerRadius = 
   return roundedPath(vertices, cornerRadius, closed)
 }
 
-/**
- * Rounds an already-built vertex list (one vertex per corner) without re-deriving
- * elbows through buildVertices. The snap animation springs between two settled
- * offset-polyline shapes; the in-between blends generally aren't H/V/45°-aligned, so
- * feeding them back through routeOrthogonal would insert spurious near-zero-length
- * diagonal elbows beside every real corner and cap each fillet to ~1px — the rough
- * corners seen mid-animation. Filleting the interpolated vertices straight keeps
- * exactly the corners the endpoints have, smoothly rounded, at any blend angle.
- */
-export function roundVertices(vertices: Point[], cornerRadius = DEFAULT_CORNER_RADIUS): string {
-  return roundedPath(vertices, cornerRadius, false)
-}
-
-export function buildVertices(points: Point[], closed: boolean): Point[] {
-  const routePoints = closed ? [...points, points[0]] : points
+function routeVertices(routePoints: Point[]): { vertices: Point[]; isSource: boolean[] } {
   const vertices: Point[] = [routePoints[0]]
+  const isSource: boolean[] = [true]
 
   for (let i = 1; i < routePoints.length; i++) {
     const p1 = routePoints[i - 1]
@@ -55,6 +42,7 @@ export function buildVertices(points: Point[], closed: boolean): Point[] {
 
     if (adx < ALIGNMENT_EPSILON || ady < ALIGNMENT_EPSILON || Math.abs(adx - ady) < ALIGNMENT_EPSILON) {
       vertices.push(p2)
+      isSource.push(true)
       continue
     }
 
@@ -66,10 +54,27 @@ export function buildVertices(points: Point[], closed: boolean): Point[] {
     } else {
       vertices.push({ x: p2.x, y: p1.y + sy * adx })
     }
+    isSource.push(false)
     vertices.push(p2)
+    isSource.push(true)
   }
 
-  return vertices
+  return { vertices, isSource }
+}
+
+export function buildVertices(points: Point[], closed: boolean): Point[] {
+  return routeVertices(closed ? [...points, points[0]] : points).vertices
+}
+
+/**
+ * buildVertices for an open path, additionally flagging which output vertices are
+ * original input points versus elbows the router inserted. Callers that need to
+ * locate the input points again on the routed path — the train layer, which has to
+ * know where its stops sit along the line's lane — can't recover that afterwards,
+ * because an inserted elbow can land exactly on another line's station.
+ */
+export function buildVerticesTagged(points: Point[]): { vertices: Point[]; isSource: boolean[] } {
+  return routeVertices(points)
 }
 
 function dist(a: Point, b: Point): number {

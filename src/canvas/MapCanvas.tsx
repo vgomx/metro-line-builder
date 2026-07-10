@@ -12,13 +12,10 @@ import { SnapAnimation } from './SnapAnimation'
 import { routeOrthogonal } from './routing'
 import { GRID_SIZE, snapToGrid } from '../grid'
 import {
-  buildSegmentLineMap,
-  buildVertexSegmentLineMap,
+  buildLineTrack,
+  buildNetworkGeometry,
   closestSegmentIndex,
-  computeLaneOffsets,
-  offsetPolyline,
   resolveLineNodes,
-  resolveLineVertices,
   stationIdsOfLine,
 } from './lineNodes'
 import { computeLabelPlacement } from './labelPlacement'
@@ -136,9 +133,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const { transform, zoomIn, zoomOut, spaceHeld, panning } = useZoomPan(svgRef, tool === 'pan')
   const [drag, setDrag] = useState<DragState>({ kind: 'none' })
   const [cursorWorld, setCursorWorld] = useState<{ x: number; y: number } | null>(null)
-  const [snapAnimations, setSnapAnimations] = useState<
-    { key: string; lineId: string; color: string; from: Point[]; to: Point[] }[]
-  >([])
+  // One session per completed drag; the ghost re-derives each affected line's shape
+  // per frame from the interpolated station positions, so it needs only the origins.
+  const [snapSession, setSnapSession] = useState<{ key: string; originalPositions: Record<string, Point> } | null>(null)
   const snapSessionRef = useRef(0)
 
   useImperativeHandle(ref, () => ({ zoomIn, zoomOut }), [zoomIn, zoomOut])
@@ -367,33 +364,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       }
 
       snapSessionRef.current += 1
-      const session = snapSessionRef.current
-
-      // Reconstruct station positions as they were just before this drag, so the
-      // ghost's "from" shape reflects the line's actual pre-drag lane offset (which
-      // segments were shared, and by how much) instead of its raw, unfanned
-      // geometry — a shared line now visibly fans out, so the plain station-to-
-      // station path no longer matches what was really on screen a moment ago.
-      const preDragStations: Record<string, Station> = { ...stations }
-      for (const id of Object.keys(drag.originalPositions)) {
-        const s = stations[id]
-        if (s) preDragStations[id] = { ...s, ...drag.originalPositions[id] }
-      }
-      const preDragSegmentMap = buildVertexSegmentLineMap(lineList, preDragStations)
-
-      const affected = lineList
-        .filter(line => line.visible && stationIdsOfLine(line).some(id => id in drag.originalPositions))
-        .map(line => {
-          const fromVertices = resolveLineVertices(line.nodes, preDragStations)
-          const fromPoints = offsetPolyline(fromVertices, computeLaneOffsets(fromVertices, line.id, preDragSegmentMap))
-
-          const toVertices = resolveLineVertices(line.nodes, stations)
-          const toPoints = offsetPolyline(toVertices, computeLaneOffsets(toVertices, line.id, lineRenderSegmentMap))
-
-          return { key: `${session}-${line.id}`, lineId: line.id, color: line.color, from: fromPoints, to: toPoints }
-        })
-        .filter(a => a.from.length >= 2 && a.to.length >= 2)
-      if (affected.length > 0) setSnapAnimations(affected)
+      setSnapSession({ key: String(snapSessionRef.current), originalPositions: drag.originalPositions })
     }
     setDrag({ kind: 'none' })
   }
@@ -427,6 +398,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const draftGeoPreviewPoints = cursorWorld ? [...draftGeoPoints, cursorWorld] : draftGeoPoints
   const draftGeoPath = draftGeoPreviewPoints.length > 1 ? routeOrthogonal(draftGeoPreviewPoints) : ''
 
+  const snapLines = snapSession
+    ? lineList.filter(
+        line => line.visible && stationIdsOfLine(line).some(id => id in snapSession.originalPositions),
+      )
+    : []
+
   const ghostLines =
     drag.kind === 'stations' && drag.moved
       ? lineList
@@ -458,12 +435,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
 
   const draggingStationIdSet = new Set(drag.kind === 'stations' ? drag.ids : [])
 
-  const segmentLineMap = buildSegmentLineMap(lineList, stations)
-  // Finer-grained than segmentLineMap (keyed on routed vertices, not raw line nodes)
-  // so lines that only share part of a routed path fan out correctly instead of
-  // drawing on top of each other. Only the line-path renderer needs this — train
-  // animation stays on the coarser map since its stop points are real line nodes.
-  const lineRenderSegmentMap = buildVertexSegmentLineMap(lineList, stations)
+  // One routing pass for the whole network: it subdivides every line's segments against
+  // the others so shared corridors fan out, and both the line renderer and the train
+  // layer read their lane geometry from it rather than each deriving their own.
+  const network = buildNetworkGeometry(lineList, stations)
 
   const cursor =
     spaceHeld || tool === 'pan'
@@ -544,28 +519,33 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           />
         ))}
 
-        {snapAnimations.map(a => (
+        {snapSession && snapLines.length > 0 && (
           <SnapAnimation
-            key={a.key}
-            color={a.color}
-            fromPoints={a.from}
-            toPoints={a.to}
-            onComplete={() => setSnapAnimations(prev => prev.filter(p => p.key !== a.key))}
+            key={snapSession.key}
+            affectedLines={snapLines}
+            lineList={lineList}
+            stations={stations}
+            originalPositions={snapSession.originalPositions}
+            onComplete={() => setSnapSession(prev => (prev?.key === snapSession.key ? null : prev))}
           />
-        ))}
+        )}
 
         {lineList
           .filter(line => line.visible)
-          .map(line => (
-            <LinePath
-              key={line.id}
-              line={line}
-              stations={stations}
-              selected={selectedLineIds.includes(line.id)}
-              segmentLineMap={lineRenderSegmentMap}
-              onClick={handleLineClick}
-            />
-          ))}
+          .map(line => {
+            const geometry = network.byLine.get(line.id)
+            if (!geometry) return null
+            return (
+              <LinePath
+                key={line.id}
+                line={line}
+                geometry={geometry}
+                selected={selectedLineIds.includes(line.id)}
+                segmentLineMap={network.segmentLineMap}
+                onClick={handleLineClick}
+              />
+            )
+          })}
 
         {/* Bare waypoints on a selected line get a small marker so a stray or
             unwanted route-shaping point can be selected and deleted — stations
@@ -639,15 +619,18 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           lineList
             .filter(line => line.visible && stationIdsOfLine(line).length >= 2)
             .map(line => {
-              const trainPoints = resolveLineNodes(line.nodes, stations)
+              // Same lane geometry LinePath draws, so the train rides its own rails.
+              const geometry = network.byLine.get(line.id)
+              const track = geometry ? buildLineTrack(geometry, line.id, network.segmentLineMap) : null
+              if (!track) return null
               return (
                 <TrainMarker
                   key={line.id}
                   lineId={line.id}
                   color={line.color}
-                  pathPoints={trainPoints}
-                  stopFlags={line.nodes.map(n => n.kind === 'station')}
-                  laneOffsets={computeLaneOffsets(trainPoints, line.id, segmentLineMap)}
+                  stopPoints={track.stopPoints}
+                  stopFlags={track.stopFlags}
+                  segmentPaths={track.segmentPaths}
                 />
               )
             })}
