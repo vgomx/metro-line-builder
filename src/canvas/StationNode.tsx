@@ -29,13 +29,17 @@ interface StationNodeProps {
   interchange: boolean
   /** True while this station is being actively repositioned by a drag. */
   dragging: boolean
+  /** True for one animation cycle right after the station first appears — pops the marker in. */
+  entering?: boolean
   /** Compass direction (away from every line touching this station) to place the name in. */
   labelPlacement: LabelPlacement
   onPointerDown: (e: ReactPointerEvent<SVGGElement>, station: Station) => void
   onClick: (station: Station) => void
 }
 
-export function StationNode({ station, selected, inDraftLine, interchange, dragging, labelPlacement, onPointerDown, onClick }: StationNodeProps) {
+const POP_MS = 300
+
+export function StationNode({ station, selected, inDraftLine, interchange, dragging, entering, labelPlacement, onPointerDown, onClick }: StationNodeProps) {
   const isInterchange = interchange || station.transfer
   const baseRadius = isInterchange ? 10 : 6.5
   const radius = dragging ? baseRadius + 2 : baseRadius
@@ -79,32 +83,42 @@ export function StationNode({ station, selected, inDraftLine, interchange, dragg
             style={{ transition: 'r 150ms ease' }}
           />
         )}
-        {isInterchange ? (
-          <>
+        {/* Marker circles pop in on first appearance. The group's bounding box is symmetric
+            about the origin, so fill-box + centre origin scales it around the station. */}
+        <g
+          style={
+            entering
+              ? { transformBox: 'fill-box', transformOrigin: 'center', animation: `mlb-station-pop ${POP_MS}ms cubic-bezier(0.34, 1.56, 0.64, 1) both` }
+              : undefined
+          }
+        >
+          {isInterchange ? (
+            <>
+              <circle
+                r={radius}
+                fill={inDraftLine ? 'var(--brand-500)' : 'var(--bg-page)'}
+                stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
+                strokeWidth={3.5}
+                style={{ transition: 'r 150ms ease' }}
+              />
+              <circle
+                r={radius - 4.5}
+                fill="none"
+                stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
+                strokeWidth={1.25}
+                style={{ transition: 'r 150ms ease' }}
+              />
+            </>
+          ) : (
             <circle
               r={radius}
               fill={inDraftLine ? 'var(--brand-500)' : 'var(--bg-page)'}
               stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
-              strokeWidth={3.5}
+              strokeWidth={2.5}
               style={{ transition: 'r 150ms ease' }}
             />
-            <circle
-              r={radius - 4.5}
-              fill="none"
-              stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
-              strokeWidth={1.25}
-              style={{ transition: 'r 150ms ease' }}
-            />
-          </>
-        ) : (
-          <circle
-            r={radius}
-            fill={inDraftLine ? 'var(--brand-500)' : 'var(--bg-page)'}
-            stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
-            strokeWidth={2.5}
-            style={{ transition: 'r 150ms ease' }}
-          />
-        )}
+          )}
+        </g>
         {name && (
           <rect
             x={cardX}

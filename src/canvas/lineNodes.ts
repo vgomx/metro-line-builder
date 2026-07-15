@@ -385,3 +385,125 @@ export function buildLineTrack(
 
   return { stopPoints: stopIndices.map(index => points[index]), stopFlags, segmentPaths }
 }
+
+export interface RefanLine {
+  lineId: string
+  color: string
+  /** Shared centreline basis (stations unchanged), subdivided against both states. */
+  vertices: Point[]
+  /** Per-segment lane offset under the previous sharing (length vertices - 1). */
+  fromOffsets: number[]
+  /** Per-segment lane offset under the new sharing. */
+  toOffsets: number[]
+}
+
+/** Segment→line map with each line's centreline subdivided at a common point set, so a
+ * shared corridor yields identical segment keys no matter how each line breaks it up. */
+function subdividedSegmentMap(
+  lines: Line[],
+  geoms: Map<string, LineGeometry>,
+  unionPoints: Point[],
+): { map: Map<string, string[]>; subByLine: Map<string, LineGeometry> } {
+  const map = new Map<string, string[]>()
+  const subByLine = new Map<string, LineGeometry>()
+  for (const line of lines) {
+    const geometry = geoms.get(line.id)
+    if (!geometry) continue
+    const sub = subdivideAt(geometry, unionPoints)
+    subByLine.set(line.id, sub)
+    for (let i = 0; i < sub.vertices.length - 1; i++) {
+      const key = segmentKey(sub.vertices[i], sub.vertices[i + 1])
+      const group = map.get(key)
+      if (group) group.push(line.id)
+      else map.set(key, [line.id])
+    }
+  }
+  return { map, subByLine }
+}
+
+/**
+ * For every line whose *lane* changed between two line-list states while its own
+ * centreline stayed put (a line was added, removed, hidden, or rerouted elsewhere in the
+ * network), the offsets it should slide between as the fan re-forms. Empty when nothing
+ * re-lanes, so the caller can skip the animation entirely.
+ *
+ * Both states are subdivided at the union of all their vertices, so a corridor shared in
+ * one state but not the other still lines up segment-for-segment — the two offset arrays
+ * share a basis and interpolate cleanly. Only lines present in both states with an
+ * unchanged centreline slide; a line that itself moved is left to snap, and a brand-new
+ * or just-removed line simply appears or vanishes.
+ */
+export function buildRefanFrames(
+  prevLines: Line[],
+  nextLines: Line[],
+  stations: Record<string, Station>,
+): RefanLine[] {
+  const prevGeoms = new Map<string, LineGeometry>()
+  for (const line of prevLines) {
+    if (!line.visible) continue
+    const geometry = routeLine(line, stations)
+    if (geometry) prevGeoms.set(line.id, geometry)
+  }
+  const nextGeoms = new Map<string, LineGeometry>()
+  for (const line of nextLines) {
+    if (!line.visible) continue
+    const geometry = routeLine(line, stations)
+    if (geometry) nextGeoms.set(line.id, geometry)
+  }
+  if (prevGeoms.size === 0 || nextGeoms.size === 0) return []
+
+  const seen = new Set<string>()
+  const unionPoints: Point[] = []
+  for (const geometry of prevGeoms.values()) {
+    for (const point of geometry.vertices) {
+      const key = pointKey(point)
+      if (!seen.has(key)) {
+        seen.add(key)
+        unionPoints.push(point)
+      }
+    }
+  }
+  for (const geometry of nextGeoms.values()) {
+    for (const point of geometry.vertices) {
+      const key = pointKey(point)
+      if (!seen.has(key)) {
+        seen.add(key)
+        unionPoints.push(point)
+      }
+    }
+  }
+
+  const prev = subdividedSegmentMap(prevLines, prevGeoms, unionPoints)
+  const next = subdividedSegmentMap(nextLines, nextGeoms, unionPoints)
+
+  const frames: RefanLine[] = []
+  for (const line of nextLines) {
+    const nextSub = next.subByLine.get(line.id)
+    const prevSub = prev.subByLine.get(line.id)
+    // Present in both, with an identical centreline (same base route subdivided at the
+    // same points ⇒ same vertices). Anything else appears, vanishes, or snaps.
+    if (!nextSub || !prevSub || nextSub.vertices.length !== prevSub.vertices.length) continue
+    let sameCentreline = true
+    for (let i = 0; i < nextSub.vertices.length; i++) {
+      if (nextSub.vertices[i].x !== prevSub.vertices[i].x || nextSub.vertices[i].y !== prevSub.vertices[i].y) {
+        sameCentreline = false
+        break
+      }
+    }
+    if (!sameCentreline) continue
+
+    const fromOffsets = computeLaneOffsets(nextSub.vertices, line.id, prev.map)
+    const toOffsets = computeLaneOffsets(nextSub.vertices, line.id, next.map)
+    let changed = false
+    for (let i = 0; i < fromOffsets.length; i++) {
+      if (Math.abs(fromOffsets[i] - toOffsets[i]) > 1e-6) {
+        changed = true
+        break
+      }
+    }
+    if (!changed) continue
+
+    frames.push({ lineId: line.id, color: line.color, vertices: nextSub.vertices, fromOffsets, toOffsets })
+  }
+  return frames
+}

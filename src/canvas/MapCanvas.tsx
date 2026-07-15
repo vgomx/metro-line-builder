@@ -9,20 +9,28 @@ import { LinePath } from './LinePath'
 import { GeoFeaturePath } from './GeoFeaturePath'
 import { TrainMarker } from './TrainMarker'
 import { SnapAnimation } from './SnapAnimation'
+import { RefanAnimation } from './RefanAnimation'
 import { routeOrthogonal } from './routing'
 import { GRID_SIZE, snapToGrid } from '../grid'
 import {
   buildLineTrack,
   buildNetworkGeometry,
+  buildRefanFrames,
   closestSegmentIndex,
   resolveLineNodes,
   stationIdsOfLine,
 } from './lineNodes'
+import type { RefanLine } from './lineNodes'
 import { computeLabelPlacement } from './labelPlacement'
+import { useAppearance } from './useAppearance'
+import { useExit } from './useExit'
+import { buildLinePath } from './lineNodes'
 
 export interface MapCanvasHandle {
   zoomIn: () => void
   zoomOut: () => void
+  /** Eases the viewport to frame a line — used when a line is picked from the list. */
+  frameLine: (lineId: string) => void
 }
 
 interface MapCanvasProps {
@@ -130,7 +138,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   ref,
 ) {
   const svgRef = useRef<SVGSVGElement>(null)
-  const { transform, zoomIn, zoomOut, spaceHeld, panning } = useZoomPan(svgRef, tool === 'pan')
+  const { transform, zoomIn, zoomOut, spaceHeld, panning, frameBounds } = useZoomPan(svgRef, tool === 'pan')
   const [drag, setDrag] = useState<DragState>({ kind: 'none' })
   const [cursorWorld, setCursorWorld] = useState<{ x: number; y: number } | null>(null)
   // One session per completed drag; the ghost re-derives each affected line's shape
@@ -138,7 +146,47 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const [snapSession, setSnapSession] = useState<{ key: string; originalPositions: Record<string, Point> } | null>(null)
   const snapSessionRef = useRef(0)
 
-  useImperativeHandle(ref, () => ({ zoomIn, zoomOut }), [zoomIn, zoomOut])
+  // When the shared-corridor layout changes (a line added, removed, hidden, or rerouted),
+  // the other lines slide into their new lanes instead of teleporting. Detected by diffing
+  // the previous line list against the current one while stations sit still.
+  const [refanSession, setRefanSession] = useState<{ key: number; lines: RefanLine[] } | null>(null)
+  const refanSessionRef = useRef(0)
+  const prevLineListRef = useRef<Line[] | null>(null)
+
+  useEffect(() => {
+    const prevLines = prevLineListRef.current
+    prevLineListRef.current = lineList
+    // First render, or an unrelated re-render that didn't touch the line list — a station
+    // drag keeps lineList's identity, so those fall through to the snap animation instead.
+    if (!prevLines || prevLines === lineList) return
+    const frames = buildRefanFrames(prevLines, lineList, stations)
+    if (frames.length === 0) return
+    refanSessionRef.current += 1
+    setRefanSession({ key: refanSessionRef.current, lines: frames })
+  }, [lineList, stations])
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      zoomIn,
+      zoomOut,
+      frameLine: (lineId: string) => {
+        // The line's rendered stroke already lives in world space (the pan/zoom transform
+        // is on an ancestor group), so its own bbox is the world box to frame.
+        const el = document.getElementById(lineId) as unknown as SVGGraphicsElement | null
+        if (!el || typeof el.getBBox !== 'function') return
+        let box: DOMRect
+        try {
+          box = el.getBBox()
+        } catch {
+          return
+        }
+        if (box.width === 0 && box.height === 0) return
+        frameBounds({ x: box.x, y: box.y, width: box.width, height: box.height })
+      },
+    }),
+    [zoomIn, zoomOut, frameBounds],
+  )
 
   useEffect(() => {
     onTransformChange?.(transform)
@@ -404,6 +452,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       )
     : []
 
+  // Lines currently sliding to new lanes are drawn by the re-fan overlay instead of their
+  // own static path, so the two don't both paint a few pixels apart during the transition.
+  const refanningIds = refanSession ? new Set(refanSession.lines.map(l => l.lineId)) : null
+
   const ghostLines =
     drag.kind === 'stations' && drag.moved
       ? lineList
@@ -429,16 +481,53 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     labelPlacementByStation[station.id] = computeLabelPlacement(station.id, lineList, stations)
   }
 
+  // One routing pass for the whole network: it subdivides every line's segments against
+  // the others so shared corridors fan out, and both the line renderer and the train
+  // layer read their lane geometry from it rather than each deriving their own.
+  const network = buildNetworkGeometry(lineList, stations)
+
+  // Enter animations: a line sketches itself on when it first appears (drawn, or every
+  // line on load); a station pops in when added (but not the ones already there on load).
+  const revealingLineIds = useAppearance(
+    lineList.filter(line => line.visible).map(line => line.id),
+    640,
+    true,
+  )
+  const poppingStationIds = useAppearance(
+    stationList.map(station => station.id),
+    340,
+    false,
+  )
+
+  // Exit animations: a removed station shrinks and fades from its last position; a removed
+  // (or hidden) line fades from its last shape. Ghosts carry that final geometry so the
+  // deletion animates instead of blinking out.
+  const exitingStations = useExit(
+    new Map(
+      stationList.map(station => [
+        station.id,
+        { x: station.x, y: station.y, interchange: (lineCountByStation[station.id] ?? 0) >= 2 || station.transfer },
+      ]),
+    ),
+    260,
+  )
+  const exitingLines = useExit(
+    new Map(
+      lineList
+        .filter(line => line.visible)
+        .map(line => {
+          const geometry = network.byLine.get(line.id)
+          return [line.id, { color: line.color, d: geometry ? buildLinePath(geometry, line.id, network.segmentLineMap) : '' }]
+        }),
+    ),
+    260,
+  )
+
   const draftLineStationIdSet = new Set(
     draftLineNodes.filter((n): n is Extract<LineNode, { kind: 'station' }> => n.kind === 'station').map(n => n.stationId),
   )
 
   const draggingStationIdSet = new Set(drag.kind === 'stations' ? drag.ids : [])
-
-  // One routing pass for the whole network: it subdivides every line's segments against
-  // the others so shared corridors fan out, and both the line renderer and the train
-  // layer read their lane geometry from it rather than each deriving their own.
-  const network = buildNetworkGeometry(lineList, stations)
 
   const cursor =
     spaceHeld || tool === 'pan'
@@ -535,17 +624,45 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           .map(line => {
             const geometry = network.byLine.get(line.id)
             if (!geometry) return null
+            if (refanningIds?.has(line.id)) return null // drawn by the re-fan overlay meanwhile
             return (
               <LinePath
                 key={line.id}
                 line={line}
                 geometry={geometry}
                 selected={selectedLineIds.includes(line.id)}
+                revealing={revealingLineIds.has(line.id)}
                 segmentLineMap={network.segmentLineMap}
                 onClick={handleLineClick}
               />
             )
           })}
+
+        {refanSession && (
+          <RefanAnimation
+            key={refanSession.key}
+            lines={refanSession.lines}
+            onComplete={() => setRefanSession(prev => (prev?.key === refanSession.key ? null : prev))}
+          />
+        )}
+
+        {/* Deleted / hidden lines fade out from their last shape. */}
+        {exitingLines.map(
+          ghost =>
+            ghost.data.d && (
+              <path
+                key={ghost.key}
+                d={ghost.data.d}
+                fill="none"
+                stroke={ghost.data.color}
+                strokeWidth={5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity={0.9}
+                style={{ pointerEvents: 'none', animation: 'mlb-line-exit 240ms ease forwards' }}
+              />
+            ),
+        )}
 
         {/* Bare waypoints on a selected line get a small marker so a stray or
             unwanted route-shaping point can be selected and deleted — stations
@@ -643,10 +760,27 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             inDraftLine={draftLineStationIdSet.has(station.id)}
             interchange={(lineCountByStation[station.id] ?? 0) >= 2}
             dragging={draggingStationIdSet.has(station.id)}
+            entering={poppingStationIds.has(station.id)}
             labelPlacement={labelPlacementByStation[station.id]}
             onPointerDown={handleStationPointerDown}
             onClick={handleStationClick}
           />
+        ))}
+
+        {/* Deleted stations shrink and fade from where they were. */}
+        {exitingStations.map(ghost => (
+          <g key={ghost.key} transform={`translate(${ghost.data.x}, ${ghost.data.y})`} style={{ pointerEvents: 'none' }}>
+            <g style={{ transformBox: 'fill-box', transformOrigin: 'center', animation: 'mlb-station-exit 240ms ease forwards' }}>
+              {ghost.data.interchange ? (
+                <>
+                  <circle r={10} fill="var(--bg-page)" stroke="var(--text-primary)" strokeWidth={3.5} />
+                  <circle r={5.5} fill="none" stroke="var(--text-primary)" strokeWidth={1.25} />
+                </>
+              ) : (
+                <circle r={6.5} fill="var(--bg-page)" stroke="var(--text-primary)" strokeWidth={2.5} />
+              )}
+            </g>
+          </g>
         ))}
 
         {drag.kind === 'marquee' && (

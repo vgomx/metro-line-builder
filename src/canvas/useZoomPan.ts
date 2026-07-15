@@ -109,5 +109,25 @@ export function useZoomPan(svgRef: RefObject<SVGSVGElement | null>, panMode: boo
   const zoomIn = useCallback(() => zoomBy(ZOOM_STEP), [zoomBy])
   const zoomOut = useCallback(() => zoomBy(1 / ZOOM_STEP), [zoomBy])
 
-  return { transform, zoomIn, zoomOut, spaceHeld, panning }
+  /** Eases the viewport to frame a world-space box, centred with a little breathing room.
+   * Used to fly to a line when it's picked from the list, so navigation feels deliberate. */
+  const frameBounds = useCallback(
+    (bounds: { x: number; y: number; width: number; height: number }, paddingPx = 90) => {
+      const svg = svgRef.current
+      const behavior = behaviorRef.current
+      const selection = selectionRef.current
+      if (!svg || !behavior || !selection || bounds.width <= 0 || bounds.height <= 0) return
+      const rect = svg.getBoundingClientRect()
+      const fit = Math.min((rect.width - 2 * paddingPx) / bounds.width, (rect.height - 2 * paddingPx) / bounds.height)
+      // Never zoom in past 2× on a short line (it'd fill the screen and lose context), and
+      // stay within the behaviour's own scaleExtent so d3 doesn't clamp mid-transition.
+      const scale = Math.max(0.25, Math.min(2, fit))
+      const tx = rect.width / 2 - scale * (bounds.x + bounds.width / 2)
+      const ty = rect.height / 2 - scale * (bounds.y + bounds.height / 2)
+      behavior.transform(selection.transition().duration(480), zoomIdentity.translate(tx, ty).scale(scale))
+    },
+    [svgRef],
+  )
+
+  return { transform, zoomIn, zoomOut, spaceHeld, panning, frameBounds }
 }

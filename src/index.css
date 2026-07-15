@@ -14,3 +14,53 @@ body {
 #root {
   min-height: 100svh;
 }
+
+/* A line sketches itself on when created or when a map loads. The path carries
+   pathLength="1" so this works regardless of the line's real length. */
+@keyframes mlb-line-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* A newly added station pops in with a small overshoot. transform-box:fill-box
+   keeps the scale centred on the marker (its bounding box is symmetric about 0,0). */
+@keyframes mlb-station-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* A faint highlight streams along the selected line, so the active route reads as
+   "live" without shouting. Slow and sparse on purpose. */
+@keyframes mlb-line-flow {
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+
+/* Removed stations shrink and fade rather than blink out; removed lines just fade. */
+@keyframes mlb-station-exit {
+  to {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+}
+
+@keyframes mlb-line-exit {
+  to {
+    opacity: 0;
+  }
+}

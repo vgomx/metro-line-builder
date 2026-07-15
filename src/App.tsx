@@ -271,7 +271,12 @@ function App() {
           selectedStation={selectedStation}
           selectedGeoFeature={selectedGeoFeature}
           selectedCompany={selectedCompany}
-          onSelectLine={id => handleSetSelection([], [id], [])}
+          onSelectLine={id => {
+            handleSetSelection([], [id], [])
+            // Fly to the line only when picked from the list; a click on the canvas
+            // leaves the viewport alone (the line is already where the user is looking).
+            mapCanvasRef.current?.frameLine(id)
+          }}
           onSelectStation={id => handleSetSelection([id], [], [])}
           onSelectGeoFeature={id => handleSetSelection([], [], [id])}
           onSelectCompany={handleSelectCompany}

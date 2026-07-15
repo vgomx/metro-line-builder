@@ -124,7 +124,22 @@ export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths
             const forward = to > from
             const segLength = segmentLengths[segIndex] ?? 0
             const frac = duration > 0 ? remaining / duration : 0
-            const distance = forward ? frac * segLength : (1 - frac) * segLength
+            // Accelerate away from a station and decelerate into one, but glide through
+            // waypoints at speed. easeIn ends and easeOut begins at the same rate, so a
+            // waypoint between two segments is crossed with continuous speed, no lurch.
+            const departingStation = stopFlags[from]
+            const arrivingStation = stopFlags[to]
+            const travelled =
+              departingStation && arrivingStation
+                ? frac < 0.5
+                  ? 2 * frac * frac
+                  : 1 - (-2 * frac + 2) ** 2 / 2
+                : departingStation
+                  ? frac * frac
+                  : arrivingStation
+                    ? frac * (2 - frac)
+                    : frac
+            const distance = forward ? travelled * segLength : (1 - travelled) * segLength
             const segPath = segmentRefs.current[segIndex]
             if (segPath && segLength > 0) {
               const point = segPath.getPointAtLength(distance)
