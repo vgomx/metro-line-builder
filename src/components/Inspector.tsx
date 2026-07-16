@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { Badge, Button, Divider, Input, Select, Tag, Toggle } from 'metro-ds'
-import { BuildingIcon, ParkIcon, PenIcon, RiverIcon, TrashIcon } from '../icons'
+import { ParkIcon, PenIcon, RiverIcon, TrashIcon } from '../icons'
 import { LINE_COLORS } from '../lineColors'
 import { isUsableLineNumber, MAX_LINE_NUMBER } from '../lineNumber'
 import type { Company, GeoFeature, Line, Station } from '../types'
+import { COMPANY_SYMBOLS } from '../types'
+import { CompanySymbolIcon } from '../companySymbols'
 import { connectedLineCount, isTransferStation, lineHasStation, stationIdsOfLine } from '../canvas/lineNodes'
 
 /** Why `draft` can't be committed, or undefined if it can. One rule drives both the message
@@ -70,12 +72,14 @@ interface InspectorProps {
   onDeleteLine: (lineId: string) => void
   onRenameStation: (stationId: string, name: string) => void
   onToggleTransfer: (stationId: string) => void
+  onToggleMain: (stationId: string) => void
   onDeleteStation: (stationId: string) => void
   onRenameGeoFeature: (geoFeatureId: string, name: string) => void
   onExtendGeoFeature: (geoFeatureId: string, end: 'start' | 'end') => void
   onDeleteGeoFeature: (geoFeatureId: string) => void
   onRenameCompany: (companyId: string, name: string) => void
   onSetCompanyType: (companyId: string, type: Company['type']) => void
+  onSetCompanySymbol: (companyId: string, symbol: Company['symbol']) => void
   onDeleteCompany: (companyId: string) => void
 }
 
@@ -96,12 +100,14 @@ export function Inspector({
   onDeleteLine,
   onRenameStation,
   onToggleTransfer,
+  onToggleMain,
   onDeleteStation,
   onRenameGeoFeature,
   onExtendGeoFeature,
   onDeleteGeoFeature,
   onRenameCompany,
   onSetCompanyType,
+  onSetCompanySymbol,
   onDeleteCompany,
 }: InspectorProps) {
   if (!selectedLine && !selectedStation && !selectedGeoFeature && !selectedCompany) {
@@ -119,8 +125,8 @@ export function Inspector({
     return (
       <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)' }}>
-          <span style={{ color: 'var(--text-muted)' }}>
-            <BuildingIcon />
+          <span style={{ color: 'var(--text-muted)', display: 'flex' }}>
+            <CompanySymbolIcon symbol={company.symbol} />
           </span>
           <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-primary)' }}>Company properties</span>
         </div>
@@ -134,6 +140,44 @@ export function Inspector({
           label={company.type === 'private' ? 'Private company' : 'Public company'}
           size="sm"
         />
+
+        {/* Same picker idiom as a line's colour swatches, but the tiles stay monochrome —
+            the mark is drawn in the current ink wherever it appears, so the picker shows it
+            the way the panel will actually wear it. Tiles run five to a row at 44px: these
+            are logos being chosen, not swatches, so they get room to read as one. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+          <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--text-secondary)' }}>Symbol</label>
+          <div style={{ display: 'flex', gap: 'var(--gap-tight)', flexWrap: 'wrap' }}>
+            {COMPANY_SYMBOLS.map(symbol => {
+              const active = company.symbol === symbol
+              return (
+                <button
+                  key={symbol}
+                  type="button"
+                  aria-label={`Set company symbol ${symbol}`}
+                  onClick={() => onSetCompanySymbol(company.id, symbol)}
+                  style={{
+                    width: '44px',
+                    height: '44px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: 'var(--radius-md)',
+                    border: `1px solid ${active ? 'var(--interactive-primary)' : 'var(--border-default)'}`,
+                    background: active ? 'var(--color-info-bg)' : 'var(--bg-surface)',
+                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    outline: active ? '1px solid var(--interactive-primary)' : 'none',
+                    outlineOffset: '-2px',
+                    transition: 'border-color 100ms ease, background 100ms ease',
+                  }}
+                >
+                  <CompanySymbolIcon symbol={symbol} size={26} />
+                </button>
+              )
+            })}
+          </div>
+        </div>
 
         <Divider label="Lines" />
         <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
@@ -380,6 +424,16 @@ export function Inspector({
           onChange={() => onToggleTransfer(station.id)}
           label="Transfer station"
           hint={autoTransfer ? `Automatic — connected to ${lineCount} lines` : undefined}
+          size="sm"
+        />
+
+        {/* No automatic counterpart, unlike transfer above: serving many lines doesn't make a
+            station principal, so this one is never derived and never disabled. */}
+        <Toggle
+          checked={station.main}
+          onChange={() => onToggleMain(station.id)}
+          label="Main station"
+          hint="One of the network's principal stations"
           size="sm"
         />
 

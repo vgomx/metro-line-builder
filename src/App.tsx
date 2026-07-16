@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { Button, Toast } from 'metro-ds'
 import { useMapState } from './state/useMapState'
 import { MapCanvas } from './canvas/MapCanvas'
@@ -12,6 +12,10 @@ import { LineAnnouncer } from './components/LineAnnouncer'
 import { exportMapAsJson, pickMapFile } from './export'
 import { stationIdsOfLine } from './canvas/lineNodes'
 import { useTheme } from './useTheme'
+import { useSound } from './useSound'
+import { playSound } from './sound'
+import type { SoundName } from './sound'
+import type { Tool } from './types'
 
 // The canvas runs edge to edge underneath the floating toolbar and panel, so the parts of
 // it they cover aren't usable space. These insets keep the two things that care in sync:
@@ -42,6 +46,7 @@ function App() {
     addCompany,
     renameCompany,
     setCompanyType,
+    setCompanySymbol,
     deleteCompany,
     setLineCompany,
     addStation,
@@ -49,6 +54,7 @@ function App() {
     mergeStations,
     renameStation,
     toggleStationTransfer,
+    toggleStationMain,
     appendDraftLineNode,
     insertDraftLineStation,
     insertLineStation,
@@ -81,6 +87,7 @@ function App() {
 
   const mapCanvasRef = useRef<MapCanvasHandle>(null)
   const { theme, toggleTheme } = useTheme()
+  const { soundEnabled, toggleSound } = useSound()
   const [zoom, setZoom] = useState(1)
   const [showGrid, setShowGrid] = useState(true)
   const [showTrains, setShowTrains] = useState(false)
@@ -108,6 +115,7 @@ function App() {
     'A whole new city. The commuters are already grumbling.',
   ]
   const handleSurprise = () => {
+    playSound('generate')
     generateMap()
     setToast({ message: SURPRISE_LINES[Math.floor(Math.random() * SURPRISE_LINES.length)], variant: 'success' })
     // Frame the new city once React has committed the fresh line paths (two frames is
@@ -127,9 +135,30 @@ function App() {
     clearSelection()
   }
   const handleSelectCompany = (companyId: string) => {
+    playSound('tool')
     clearSelection()
     setSelectedCompanyId(companyId)
   }
+
+  // Sound is a presentation concern, so it's attached to the callbacks here at the
+  // interaction layer rather than fired from the reducer — the state layer stays unaware
+  // the app makes any noise, and every path that reaches an action (canvas click, list
+  // click, keyboard shortcut) already funnels through these props.
+  const withSound = <Args extends unknown[]>(name: SoundName, run: (...args: Args) => void) => {
+    return (...args: Args) => {
+      playSound(name)
+      run(...args)
+    }
+  }
+  // Stable identity: LeftToolbar keys its keyboard-shortcut listener off this, and a fresh
+  // function each render would have it re-subscribing on every one.
+  const handleSetTool = useCallback(
+    (tool: Tool) => {
+      playSound('tool')
+      setTool(tool)
+    },
+    [setTool],
+  )
 
   const selectedLine =
     state.selectedLineIds.length === 1 && state.selectedStationIds.length === 0 && state.selectedGeoFeatureIds.length === 0
@@ -167,11 +196,13 @@ function App() {
         onZoomIn={() => mapCanvasRef.current?.zoomIn()}
         onZoomOut={() => mapCanvasRef.current?.zoomOut()}
         showGrid={showGrid}
-        onToggleGrid={() => setShowGrid(g => !g)}
+        onToggleGrid={withSound('toggle', () => setShowGrid(g => !g))}
         showTrains={showTrains}
-        onToggleTrains={() => setShowTrains(t => !t)}
+        onToggleTrains={withSound('toggle', () => setShowTrains(t => !t))}
+        soundEnabled={soundEnabled}
+        onToggleSound={toggleSound}
         theme={theme}
-        onToggleTheme={toggleTheme}
+        onToggleTheme={withSound('toggle', toggleTheme)}
         onOpen={handleOpen}
         onExport={() => exportMapAsJson(snapshot)}
         onSurprise={handleSurprise}
@@ -199,22 +230,22 @@ function App() {
             showGrid={showGrid}
             showTrains={showTrains}
             viewportInsets={CANVAS_INSETS}
-            onAddStation={addStation}
+            onAddStation={withSound('station', addStation)}
             onMoveStations={moveStations}
-            onMergeStations={mergeStations}
-            onAppendDraftLineNode={appendDraftLineNode}
-            onInsertDraftLineStation={insertDraftLineStation}
-            onInsertLineStation={insertLineStation}
-            onFinishDraftLine={finishDraftLine}
+            onMergeStations={withSound('lineDone', mergeStations)}
+            onAppendDraftLineNode={withSound('node', appendDraftLineNode)}
+            onInsertDraftLineStation={withSound('station', insertDraftLineStation)}
+            onInsertLineStation={withSound('station', insertLineStation)}
+            onFinishDraftLine={withSound('lineDone', finishDraftLine)}
             onCancelDraftLine={cancelDraftLine}
-            onAddGeoPoint={addGeoPoint}
-            onFinishGeoFeature={finishGeoFeature}
+            onAddGeoPoint={withSound('node', addGeoPoint)}
+            onFinishGeoFeature={withSound('lineDone', finishGeoFeature)}
             onCancelGeoFeature={cancelGeoFeature}
             onSetSelection={handleSetSelection}
             onClearSelection={handleClearSelection}
             onSelectWaypoint={selectWaypoint}
-            onDeleteWaypoint={deleteWaypoint}
-            onDeleteSelected={deleteSelected}
+            onDeleteWaypoint={withSound('remove', deleteWaypoint)}
+            onDeleteSelected={withSound('remove', deleteSelected)}
             onCheckpoint={checkpoint}
             onUndo={undo}
             onRedo={redo}
@@ -317,7 +348,7 @@ function App() {
           </div>
         </main>
 
-        <LeftToolbar tool={state.tool} onSetTool={setTool} theme={theme} />
+        <LeftToolbar tool={state.tool} onSetTool={handleSetTool} theme={theme} />
 
         {/* Right-hand column: the panel flexes to fill it, leaving the authority mark
             seated beneath. Click-through so the gap between them, and the canvas showing
@@ -351,35 +382,38 @@ function App() {
             selectedGeoFeature={selectedGeoFeature}
             selectedCompany={selectedCompany}
             onSelectLine={id => {
+              playSound('tool')
               handleSetSelection([], [id], [])
               // Fly to the line only when picked from the list; a click on the canvas
               // leaves the viewport alone (the line is already where the user is looking).
               mapCanvasRef.current?.frameLine(id)
             }}
-            onSelectStation={id => handleSetSelection([id], [], [])}
-            onSelectGeoFeature={id => handleSetSelection([], [], [id])}
+            onSelectStation={withSound('tool', (id: string) => handleSetSelection([id], [], []))}
+            onSelectGeoFeature={withSound('tool', (id: string) => handleSetSelection([], [], [id]))}
             onSelectCompany={handleSelectCompany}
-            onToggleLineVisibility={toggleLineVisibility}
-            onAddLine={() => setTool('draw-line')}
-            onAddRiver={() => setTool('draw-river')}
-            onAddPark={() => setTool('draw-park')}
-            onAddCompany={addCompany}
+            onToggleLineVisibility={withSound('toggle', toggleLineVisibility)}
+            onAddLine={() => handleSetTool('draw-line')}
+            onAddRiver={() => handleSetTool('draw-river')}
+            onAddPark={() => handleSetTool('draw-park')}
+            onAddCompany={withSound('station', addCompany)}
             onSetAuthorityName={setAuthorityName}
             onRenameLine={renameLine}
             onSetLineNumber={setLineNumber}
             onRecolorLine={recolorLine}
             onSetLineCompany={setLineCompany}
             onExtendLine={startExtendLine}
-            onDeleteLine={deleteLine}
+            onDeleteLine={withSound('remove', deleteLine)}
             onRenameStation={renameStation}
-            onToggleTransfer={toggleStationTransfer}
-            onDeleteStation={deleteStation}
+            onToggleTransfer={withSound('toggle', toggleStationTransfer)}
+            onToggleMain={withSound('toggle', toggleStationMain)}
+            onDeleteStation={withSound('remove', deleteStation)}
             onRenameGeoFeature={renameGeoFeature}
             onExtendGeoFeature={startExtendGeoFeature}
-            onDeleteGeoFeature={deleteGeoFeature}
+            onDeleteGeoFeature={withSound('remove', deleteGeoFeature)}
             onRenameCompany={renameCompany}
             onSetCompanyType={setCompanyType}
-            onDeleteCompany={deleteCompany}
+            onSetCompanySymbol={withSound('toggle', setCompanySymbol)}
+            onDeleteCompany={withSound('remove', deleteCompany)}
           />
 
           <CanvasLegend mapName={state.mapName} authorityName={state.authorityName} />

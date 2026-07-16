@@ -3,7 +3,7 @@ import type { ChangeEvent } from 'react'
 import { Button, IconButton } from 'metro-ds'
 import logoLightUrl from 'metro-ds/assets/logo.svg'
 import logoDarkUrl from 'metro-ds/assets/logo-horizontal-white.svg'
-import { DownloadIcon, FolderOpenIcon, GridIcon, MoonIcon, RedoIcon, SparkleIcon, SunIcon, TrainIcon, UndoIcon, ZoomInIcon, ZoomOutIcon } from '../icons'
+import { DownloadIcon, FolderOpenIcon, GridIcon, MoonIcon, RedoIcon, SoundOffIcon, SoundOnIcon, SparkleIcon, SunIcon, TrainIcon, UndoIcon, ZoomInIcon, ZoomOutIcon } from '../icons'
 import type { Theme } from '../useTheme'
 
 interface TopBarProps {
@@ -16,6 +16,8 @@ interface TopBarProps {
   onToggleGrid: () => void
   showTrains: boolean
   onToggleTrains: () => void
+  soundEnabled: boolean
+  onToggleSound: () => void
   theme: Theme
   onToggleTheme: () => void
   onOpen: () => void
@@ -37,6 +39,8 @@ export function TopBar({
   onToggleGrid,
   showTrains,
   onToggleTrains,
+  soundEnabled,
+  onToggleSound,
   theme,
   onToggleTheme,
   onOpen,
@@ -125,6 +129,13 @@ export function TopBar({
 
       <IconButton icon={<GridIcon />} label="Toggle grid" size="sm" active={showGrid} onClick={onToggleGrid} />
       <IconButton icon={<TrainIcon />} label="Toggle trains" size="sm" active={showTrains} onClick={onToggleTrains} />
+      <IconButton
+        icon={soundEnabled ? <SoundOnIcon /> : <SoundOffIcon />}
+        label={soundEnabled ? 'Mute interface sounds' : 'Unmute interface sounds'}
+        size="sm"
+        active={soundEnabled}
+        onClick={onToggleSound}
+      />
       <IconButton
         icon={theme === 'dark' ? <SunIcon /> : <MoonIcon />}
         label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}

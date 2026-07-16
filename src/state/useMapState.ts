@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer } from 'react'
-import type { Company, CompanyType, GeoFeature, GeoFeatureType, Line, LineNode, Point, Station, Tool } from '../types'
+import type { Company, CompanySymbol, CompanyType, GeoFeature, GeoFeatureType, Line, LineNode, Point, Station, Tool } from '../types'
+import { COMPANY_SYMBOLS } from '../types'
+import { DEFAULT_COMPANY_SYMBOL } from '../companySymbols'
 import { nextLineColor } from '../lineColors'
 import { isUsableLineNumber, nextFreeLineNumber } from '../lineNumber'
 import { snapToGrid } from '../grid'
@@ -56,6 +58,7 @@ type Action =
   | { type: 'addCompany' }
   | { type: 'renameCompany'; companyId: string; name: string }
   | { type: 'setCompanyType'; companyId: string; companyType: CompanyType }
+  | { type: 'setCompanySymbol'; companyId: string; symbol: CompanySymbol }
   | { type: 'deleteCompany'; companyId: string }
   | { type: 'setLineCompany'; lineId: string; companyId: string | null }
   | { type: 'addStation'; x: number; y: number }
@@ -63,6 +66,7 @@ type Action =
   | { type: 'mergeStations'; survivorId: string; mergedId: string }
   | { type: 'renameStation'; stationId: string; name: string }
   | { type: 'toggleStationTransfer'; stationId: string }
+  | { type: 'toggleStationMain'; stationId: string }
   | { type: 'appendDraftLineNode'; node: LineNode }
   | { type: 'insertDraftLineStation'; x: number; y: number; index: number }
   | { type: 'insertLineStation'; lineId: string; x: number; y: number; index: number }
@@ -116,6 +120,7 @@ const RECORDABLE_ACTIONS = new Set<Action['type']>([
   'addCompany',
   'renameCompany',
   'setCompanyType',
+  'setCompanySymbol',
   'deleteCompany',
   'setLineCompany',
   'addStation',
@@ -123,6 +128,7 @@ const RECORDABLE_ACTIONS = new Set<Action['type']>([
   'insertLineStation',
   'renameStation',
   'toggleStationTransfer',
+  'toggleStationMain',
   'finishDraftLine',
   'finishGeoFeature',
   'deleteGeoFeature',
@@ -275,6 +281,12 @@ function normalizeSnapshot(parsed: DataSnapshot): DataSnapshot {
   parsed.geoFeatureOrder = parsed.geoFeatureOrder.filter(id => id in parsed.geoFeatures)
   parsed.companyOrder = parsed.companyOrder.filter(id => id in parsed.companies)
 
+  // Symbols postdate the first saves, and an imported file can carry anything at all in the
+  // field — the renderer indexes a record by it, so only a known mark is allowed through.
+  for (const company of Object.values(parsed.companies)) {
+    if (!COMPANY_SYMBOLS.includes(company.symbol)) company.symbol = DEFAULT_COMPANY_SYMBOL
+  }
+
   if (!parsed.nextStationNumber) parsed.nextStationNumber = deriveNextNumber(parsed.stationOrder, 'station')
   if (!parsed.nextLineNumber) parsed.nextLineNumber = deriveNextNumber(parsed.lineOrder, 'line')
   if (!parsed.nextGeoFeatureNumber) parsed.nextGeoFeatureNumber = deriveNextNumber(parsed.geoFeatureOrder, 'geo')
@@ -287,6 +299,10 @@ function normalizeSnapshot(parsed: DataSnapshot): DataSnapshot {
   for (const station of Object.values(parsed.stations)) {
     station.x = snapToGrid(station.x)
     station.y = snapToGrid(station.y)
+    // Main stations postdate the first saves; nothing in an older map implies one, so the
+    // only honest backfill is "not principal until someone says so".
+    if (typeof station.main !== 'boolean') station.main = false
+    if (typeof station.transfer !== 'boolean') station.transfer = false
   }
   for (const feature of Object.values(parsed.geoFeatures)) {
     feature.points = feature.points.map(p => ({ x: snapToGrid(p.x), y: snapToGrid(p.y) }))
@@ -361,7 +377,13 @@ function mergeStationsInState(state: MapState, survivorId: string, mergedId: str
 
   const stations = { ...state.stations }
   delete stations[mergedId]
-  stations[survivorId] = { ...survivor, transfer: survivor.transfer || merged.transfer }
+  // Both flags union: folding a station away shouldn't quietly demote whichever of the two
+  // the map-maker had marked, and the survivor is the same place on the map either way.
+  stations[survivorId] = {
+    ...survivor,
+    transfer: survivor.transfer || merged.transfer,
+    main: survivor.main || merged.main,
+  }
 
   return {
     ...state,
@@ -471,7 +493,7 @@ function reducer(rawState: MapState, action: Action): MapState {
 
     case 'addCompany': {
       const id = `company-${state.nextCompanyNumber}`
-      const company: Company = { id, name: `Company ${state.nextCompanyNumber}`, type: 'public' }
+      const company: Company = { id, name: `Company ${state.nextCompanyNumber}`, type: 'public', symbol: DEFAULT_COMPANY_SYMBOL }
       return {
         ...state,
         companies: { ...state.companies, [id]: company },
@@ -492,6 +514,15 @@ function reducer(rawState: MapState, action: Action): MapState {
       return {
         ...state,
         companies: { ...state.companies, [action.companyId]: { ...company, type: action.companyType } },
+      }
+    }
+
+    case 'setCompanySymbol': {
+      const company = state.companies[action.companyId]
+      if (!company) return state
+      return {
+        ...state,
+        companies: { ...state.companies, [action.companyId]: { ...company, symbol: action.symbol } },
       }
     }
 
@@ -527,6 +558,7 @@ function reducer(rawState: MapState, action: Action): MapState {
         x: action.x,
         y: action.y,
         transfer: false,
+        main: false,
       }
       return {
         ...state,
@@ -590,6 +622,14 @@ function reducer(rawState: MapState, action: Action): MapState {
       return { ...state, lines, stations: { ...state.stations, [action.stationId]: { ...station, transfer: true } } }
     }
 
+    case 'toggleStationMain': {
+      const station = state.stations[action.stationId]
+      if (!station) return state
+      // Nothing to reconcile the way transfer has to — being principal says nothing about
+      // the geometry, so it can't imply a merge or pull other lines through the station.
+      return { ...state, stations: { ...state.stations, [action.stationId]: { ...station, main: !station.main } } }
+    }
+
     case 'appendDraftLineNode': {
       const last = state.draftLineNodes[state.draftLineNodes.length - 1]
       if (last && sameNode(last, action.node)) return state
@@ -612,6 +652,7 @@ function reducer(rawState: MapState, action: Action): MapState {
         x: action.x,
         y: action.y,
         transfer: false,
+        main: false,
       }
       nodes.splice(action.index, 0, { kind: 'station', stationId: id })
       return {
@@ -641,6 +682,7 @@ function reducer(rawState: MapState, action: Action): MapState {
         x: action.x,
         y: action.y,
         transfer: false,
+        main: false,
       }
       nodes.splice(action.index, 0, { kind: 'station', stationId: id })
       return {
@@ -998,6 +1040,10 @@ export function useMapState() {
     (companyId: string, companyType: CompanyType) => dispatch({ type: 'setCompanyType', companyId, companyType }),
     [],
   )
+  const setCompanySymbol = useCallback(
+    (companyId: string, symbol: CompanySymbol) => dispatch({ type: 'setCompanySymbol', companyId, symbol }),
+    [],
+  )
   const deleteCompany = useCallback((companyId: string) => dispatch({ type: 'deleteCompany', companyId }), [])
   const setLineCompany = useCallback(
     (lineId: string, companyId: string | null) => dispatch({ type: 'setLineCompany', lineId, companyId }),
@@ -1020,6 +1066,7 @@ export function useMapState() {
     (stationId: string) => dispatch({ type: 'toggleStationTransfer', stationId }),
     [],
   )
+  const toggleStationMain = useCallback((stationId: string) => dispatch({ type: 'toggleStationMain', stationId }), [])
   const appendDraftLineNode = useCallback(
     (node: LineNode) => dispatch({ type: 'appendDraftLineNode', node }),
     [],
@@ -1151,6 +1198,7 @@ export function useMapState() {
     addCompany,
     renameCompany,
     setCompanyType,
+    setCompanySymbol,
     deleteCompany,
     setLineCompany,
     addStation,
@@ -1158,6 +1206,7 @@ export function useMapState() {
     mergeStations,
     renameStation,
     toggleStationTransfer,
+    toggleStationMain,
     appendDraftLineNode,
     insertDraftLineStation,
     insertLineStation,

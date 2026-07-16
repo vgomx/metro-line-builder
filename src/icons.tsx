@@ -206,6 +206,26 @@ export const SunIcon = () => (
   </svg>
 )
 
+export const BackIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <path d="M12 7H3M3 7l3.7-3.7M3 7l3.7 3.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
+export const SoundOnIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <path d="M3.5 5.2h-2v3.6h2L6.5 11V3L3.5 5.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+    <path d="M9 5.2a2.5 2.5 0 0 1 0 3.6M11 3.3a5 5 0 0 1 0 7.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+  </svg>
+)
+
+export const SoundOffIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <path d="M3.5 5.2h-2v3.6h2L6.5 11V3L3.5 5.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+    <path d="M9.2 5.4l3.4 3.4M12.6 5.4L9.2 8.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+  </svg>
+)
+
 export const MoonIcon = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
     <path

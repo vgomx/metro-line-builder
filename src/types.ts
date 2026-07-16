@@ -4,6 +4,11 @@ export interface Station {
   x: number
   y: number
   transfer: boolean
+  /** Flagged by hand as one of the network's principal stations — a Luz or a Sé. Unlike
+   * `transfer`, nothing about the geometry implies it: a station can serve every line on the
+   * map without being one of the handful the city is organised around, so this is only ever
+   * the map-maker's call. */
+  main: boolean
 }
 
 export interface Point {
@@ -16,10 +21,32 @@ export type LineNode = { kind: 'station'; stationId: string } | { kind: 'point';
 
 export type CompanyType = 'public' | 'private'
 
+/** The marks a company can wear, in the order the picker offers them — a vocabulary of
+ * track, direction, and arrows, the way real operators badge themselves. The union derives
+ * from this list so the picker, the renderer, and the validation in normalizeSnapshot can't
+ * drift apart — adding a mark here is the whole registration. */
+export const COMPANY_SYMBOLS = [
+  'arrow',
+  'chevrons',
+  'converge',
+  'diverge',
+  'compass',
+  'loop',
+  'junction',
+  'switch',
+  'crossing',
+  'rails',
+] as const
+
+export type CompanySymbol = (typeof COMPANY_SYMBOLS)[number]
+
 export interface Company {
   id: string
   name: string
   type: CompanyType
+  /** The company's monochromatic logo mark — purely cosmetic, always drawn in the ink of
+   * wherever it appears rather than carrying a colour of its own. */
+  symbol: CompanySymbol
 }
 
 export interface Line {

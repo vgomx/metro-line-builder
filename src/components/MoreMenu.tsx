@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Dialog, Divider, IconButton } from 'metro-ds'
 import logoLightUrl from 'metro-ds/assets/logo-mark.svg'
 import logoDarkUrl from 'metro-ds/assets/logo-mark-white.svg'
@@ -69,103 +70,113 @@ export function MoreMenu({ theme }: MoreMenuProps) {
         </div>
       )}
 
-      <Dialog open={activeDialog === 'legal'} onClose={() => setActiveDialog(null)} title="Legal" width="560px">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
-            Metro Line Builder is built with the following open-source software. Only packages actually shipped
-            in the app are listed below — build-only tooling isn't included since it never reaches end users.
-          </p>
-          {LEGAL_NOTICES.map(notice => (
-            <div key={notice.name}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--gap-sm)', marginBottom: '6px' }}>
-                <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{notice.name}</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-muted)' }}>
-                  {notice.license} — {notice.packages}
-                </span>
+      {/* Both dialogs are portalled to the body rather than rendered where they sit in the
+          tree. Dialog covers the viewport with position:fixed, but the toolbar around this
+          menu is frosted, and an element with a backdrop-filter becomes the containing block
+          for its fixed descendants — leaving the dialog laid out against a 52px rail instead
+          of the window. The portal is what puts it back on the viewport. */}
+      {createPortal(
+        <>
+        <Dialog open={activeDialog === 'legal'} onClose={() => setActiveDialog(null)} title="Legal" width="560px">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
+              Metro Line Builder is built with the following open-source software. Only packages actually shipped
+              in the app are listed below — build-only tooling isn't included since it never reaches end users.
+            </p>
+            {LEGAL_NOTICES.map(notice => (
+              <div key={notice.name}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--gap-sm)', marginBottom: '6px' }}>
+                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{notice.name}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-muted)' }}>
+                    {notice.license} — {notice.packages}
+                  </span>
+                </div>
+                <pre
+                  style={{
+                    margin: 0,
+                    padding: 'var(--space-3)',
+                    background: 'var(--bg-page)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-md)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '10px',
+                    lineHeight: 1.5,
+                    color: 'var(--text-secondary)',
+                    whiteSpace: 'pre-wrap',
+                    maxHeight: '160px',
+                    overflowY: 'auto',
+                  }}
+                >
+                  {notice.text}
+                </pre>
               </div>
-              <pre
-                style={{
-                  margin: 0,
-                  padding: 'var(--space-3)',
-                  background: 'var(--bg-page)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-md)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '10px',
-                  lineHeight: 1.5,
-                  color: 'var(--text-secondary)',
-                  whiteSpace: 'pre-wrap',
-                  maxHeight: '160px',
-                  overflowY: 'auto',
-                }}
-              >
-                {notice.text}
-              </pre>
-            </div>
-          ))}
-        </div>
-      </Dialog>
-
-      <Dialog open={activeDialog === 'about'} onClose={() => setActiveDialog(null)} title="" width="360px">
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--gap-md)', textAlign: 'center' }}>
-          <img src={theme === 'dark' ? logoDarkUrl : logoLightUrl} alt="" width={56} height={56} />
-          <div>
-            <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)' }}>Metro Line Builder</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-              Version {APP_VERSION}
-            </div>
+            ))}
           </div>
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
-            An interactive editor for designing schematic metro and transit maps.
-          </p>
-          <Divider />
-          <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: 0 }}>
-            Created by{' '}
+        </Dialog>
+
+        <Dialog open={activeDialog === 'about'} onClose={() => setActiveDialog(null)} title="" width="360px">
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--gap-md)', textAlign: 'center' }}>
+            <img src={theme === 'dark' ? logoDarkUrl : logoLightUrl} alt="" width={56} height={56} />
+            <div>
+              <div style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)' }}>Metro Line Builder</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                Version {APP_VERSION}
+              </div>
+            </div>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
+              An interactive editor for designing schematic metro and transit maps.
+            </p>
+            <Divider />
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: 0 }}>
+              Created by{' '}
+              <a
+                href="https://vitorgomes.design"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--text-link)', textDecoration: 'underline' }}
+              >
+                Vitor Gomes
+              </a>
+              .
+              <br />
+              <a href="mailto:vgmxx@proton.me" style={{ color: 'var(--text-link)', textDecoration: 'underline' }}>
+                vgmxx@proton.me
+              </a>
+            </p>
+
+            <Divider />
+
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: 0 }}>
+              © 2026 Vitor Gomes. Licensed under the MIT License.
+            </p>
+            <button
+              type="button"
+              onClick={() => openDialog('legal')}
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                fontSize: 'var(--text-xs)',
+                color: 'var(--text-link)',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+              }}
+            >
+              View open-source acknowledgements
+            </button>
             <a
-              href="https://vitorgomes.design"
+              href="https://github.com/vgomx/metro-line-builder"
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: 'var(--text-link)', textDecoration: 'underline' }}
+              style={{ fontSize: 'var(--text-xs)', color: 'var(--text-link)', textDecoration: 'underline' }}
             >
-              Vitor Gomes
+              View source on GitHub
             </a>
-            .
-            <br />
-            <a href="mailto:vgmxx@proton.me" style={{ color: 'var(--text-link)', textDecoration: 'underline' }}>
-              vgmxx@proton.me
-            </a>
-          </p>
-
-          <Divider />
-
-          <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: 0 }}>
-            © 2026 Vitor Gomes. Licensed under the MIT License.
-          </p>
-          <button
-            type="button"
-            onClick={() => openDialog('legal')}
-            style={{
-              background: 'none',
-              border: 'none',
-              padding: 0,
-              fontSize: 'var(--text-xs)',
-              color: 'var(--text-link)',
-              cursor: 'pointer',
-              textDecoration: 'underline',
-            }}
-          >
-            View open-source acknowledgements
-          </button>
-          <a
-            href="https://github.com/vgomx/metro-line-builder"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ fontSize: 'var(--text-xs)', color: 'var(--text-link)', textDecoration: 'underline' }}
-          >
-            View source on GitHub
-          </a>
-        </div>
-      </Dialog>
+          </div>
+        </Dialog>
+        </>,
+        document.body,
+      )}
     </div>
   )
 }

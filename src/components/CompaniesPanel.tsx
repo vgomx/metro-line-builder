@@ -1,5 +1,6 @@
 import { Badge, Button, Divider, Input } from 'metro-ds'
-import { BuildingIcon, PlusIcon } from '../icons'
+import { PlusIcon } from '../icons'
+import { CompanySymbolIcon } from '../companySymbols'
 import type { Company } from '../types'
 
 interface CompaniesPanelProps {
@@ -82,7 +83,7 @@ export function CompaniesPanel({
             }}
           >
             <span style={{ color: 'var(--text-muted)', flexShrink: 0, display: 'flex' }}>
-              <BuildingIcon />
+              <CompanySymbolIcon symbol={company.symbol} />
             </span>
             <span
               style={{

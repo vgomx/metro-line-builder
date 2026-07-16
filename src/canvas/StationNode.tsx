@@ -6,6 +6,9 @@ const LABEL_FONT_SIZE = 11
 const LABEL_FONT = `600 ${LABEL_FONT_SIZE}px 'Barlow Condensed', system-ui, sans-serif`
 const CARD_PAD_X = 5
 const CARD_PAD_Y = 2.5
+/** A main station's plate is fully rounded, so its ends curve away where the text would
+ * otherwise sit; it needs more room than a square-ish card to keep the name off the arc. */
+const MAIN_PAD_X = 10
 
 let measureCanvas: HTMLCanvasElement | null = null
 
@@ -50,15 +53,26 @@ export function StationNode({ station, selected, inDraftLine, interchange, dragg
   // Rounded card sized to the measured label, aligned to the same anchor edge the
   // text uses (start → extends right, end → extends left, middle → centred), so it
   // sits squarely behind the name and lifts it off busy lines/fills for legibility.
+  //
+  // A main station wears the same card as a nameplate instead: fully rounded, the pill shape
+  // LineIndicator gives a named line, in neutral ink. text-primary/text-inverse rather than
+  // the fixed ink-900/ink-0 the transient chips use — those are always dark because they only
+  // ever flash over the map, but a plate that lives on it has to invert with the theme or it
+  // sinks into a dark canvas and leaves the name floating with no plate at all.
+  //
+  // Nothing about the marker changes: a principal station is one the eye should find by name,
+  // and the map already spends its marker vocabulary on what the lines are doing.
+  const isMain = station.main
+  const padX = isMain ? MAIN_PAD_X : CARD_PAD_X
   const name = station.name.trim()
   const textWidth = name ? measureLabelWidth(name) : 0
-  const cardW = textWidth + CARD_PAD_X * 2
+  const cardW = textWidth + padX * 2
   const cardH = LABEL_FONT_SIZE + CARD_PAD_Y * 2
   const cardX =
     labelPlacement.anchor === 'start'
-      ? labelX - CARD_PAD_X
+      ? labelX - padX
       : labelPlacement.anchor === 'end'
-        ? labelX - textWidth - CARD_PAD_X
+        ? labelX - textWidth - padX
         : labelX - cardW / 2
   const cardY = labelY - cardH / 2
 
@@ -125,11 +139,11 @@ export function StationNode({ station, selected, inDraftLine, interchange, dragg
             y={cardY}
             width={cardW}
             height={cardH}
-            rx={4}
-            fill="var(--bg-surface)"
-            stroke="var(--border-subtle)"
+            rx={isMain ? cardH / 2 : 4}
+            fill={isMain ? 'var(--text-primary)' : 'var(--bg-surface)'}
+            stroke={isMain ? 'none' : 'var(--border-subtle)'}
             strokeWidth={1}
-            opacity={0.92}
+            opacity={isMain ? 1 : 0.92}
             style={{ pointerEvents: 'none' }}
           />
         )}
@@ -140,8 +154,8 @@ export function StationNode({ station, selected, inDraftLine, interchange, dragg
           dominantBaseline="middle"
           fontSize={LABEL_FONT_SIZE}
           fontFamily="'Barlow Condensed', system-ui, sans-serif"
-          fontWeight={600}
-          fill="var(--text-primary)"
+          fontWeight={isMain ? 700 : 600}
+          fill={isMain ? 'var(--text-inverse)' : 'var(--text-primary)'}
           style={{ userSelect: 'none', pointerEvents: 'none' }}
         >
           {station.name}
