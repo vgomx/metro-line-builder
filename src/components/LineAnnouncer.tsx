@@ -22,13 +22,6 @@ const MORPH_MS = 420
 const LED_WIDTH = VIEWPORT_COLS * DOT_PITCH
 const LED_HEIGHT = CHAR_HEIGHT * DOT_PITCH
 
-function shortLineLabel(name: string): string {
-  const trimmed = name.trim()
-  const trailingNumber = trimmed.match(/(\d+)\s*$/)
-  if (trailingNumber) return trailingNumber[1]
-  return trimmed.charAt(0).toUpperCase() || '•'
-}
-
 /**
  * Two visually-split pieces sharing one lifecycle: a static line chip pinned at
  * bottom-center, and the LED destination sign living in the canvas's bottom-right
@@ -160,10 +153,11 @@ export function LineAnnouncer({ line, scrollText }: LineAnnouncerProps) {
           background: 'var(--ink-900)',
           borderRadius: 999,
           boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
+          pointerEvents: 'auto',
         }}
       >
         <span style={{ paddingLeft: '6px', paddingTop: '2px', paddingBottom: '2px', flexShrink: 0, display: 'flex' }}>
-          <LineIndicator id={shortLineLabel(line.name)} color={line.color} size="xs" />
+          <LineIndicator id={String(line.number)} color={line.color} size="xs" />
         </span>
         <span style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--ink-0)', paddingRight: '12px' }}>
           {line.name}

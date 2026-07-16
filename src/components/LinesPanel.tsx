@@ -1,4 +1,4 @@
-import { Button } from 'metro-ds'
+import { Button, LineIndicator } from 'metro-ds'
 import { EyeIcon, EyeOffIcon, PlusIcon } from '../icons'
 import type { Line } from '../types'
 
@@ -36,7 +36,11 @@ export function LinesPanel({ lines, selectedLineId, onSelect, onToggleVisibility
               transition: 'background 100ms ease',
             }}
           >
-            <div style={{ width: '14px', height: '14px', borderRadius: 'var(--radius-full)', background: line.color, flexShrink: 0 }} />
+            {/* Carries the line's number rather than a bare swatch, so the list identifies a
+                line the same way the canvas does. Sized up from the old 14px dot to seat the
+                number legibly — LineIndicator picks its own text colour against the fill,
+                which the pale end of the palette (the yellow) needs. */}
+            <LineIndicator id={String(line.number)} color={line.color} size="sm" />
             <span
               style={{
                 flex: 1,

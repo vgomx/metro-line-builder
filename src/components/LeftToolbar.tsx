@@ -11,6 +11,8 @@ interface LeftToolbarProps {
   theme: Theme
 }
 
+export const LEFT_TOOLBAR_WIDTH = 52
+
 const TOOLS: { tool: Tool; label: string; icon: JSX.Element; key: string }[] = [
   { tool: 'select', label: 'Select (V)', icon: <CursorIcon />, key: 'v' },
   { tool: 'draw-line', label: 'Draw line (P)', icon: <PenIcon />, key: 'p' },
@@ -40,14 +42,21 @@ export function LeftToolbar({ tool, onSetTool, theme }: LeftToolbarProps) {
   return (
     <aside
       style={{
-        width: '52px',
+        position: 'absolute',
+        top: 'var(--space-3)',
+        left: 'var(--space-3)',
+        width: `${LEFT_TOOLBAR_WIDTH}px`,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        padding: 'var(--space-3) var(--gap-sm)',
-        background: 'var(--bg-surface)',
-        borderRight: '1px solid var(--border-subtle)',
-        flexShrink: 0,
+        padding: 'var(--gap-sm) var(--gap-sm)',
+        background: 'var(--panel-glass)',
+        backdropFilter: 'var(--panel-blur)',
+        WebkitBackdropFilter: 'var(--panel-blur)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: 'var(--radius-xl)',
+        boxShadow: 'var(--shadow-lg)',
+        zIndex: 10,
       }}
     >
       <Toolbar orientation="vertical" style={{ background: 'transparent', border: 'none', boxShadow: 'none', padding: 0 }}>
@@ -58,9 +67,8 @@ export function LeftToolbar({ tool, onSetTool, theme }: LeftToolbarProps) {
         {GEO_TOOLS.map(({ tool: t, label, icon }) => (
           <IconButton key={t} icon={icon} label={label} active={tool === t} onClick={() => onSetTool(t)} />
         ))}
+        <ToolbarSeparator orientation="horizontal" />
       </Toolbar>
-
-      <div style={{ flex: 1 }} />
 
       <MoreMenu theme={theme} />
     </aside>

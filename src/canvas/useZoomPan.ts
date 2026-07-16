@@ -8,13 +8,28 @@ import 'd3-transition'
 
 const ZOOM_STEP = 1.2
 
+/** Edges of the svg hidden behind floating chrome. The svg runs the full width of the
+ * window, so its geometric centre isn't the centre of what the user can actually see. */
+export interface ViewportInsets {
+  left: number
+  right: number
+  top: number
+  bottom: number
+}
+
+const NO_INSETS: ViewportInsets = { left: 0, right: 0, top: 0, bottom: 0 }
+
 /**
  * Wheel always zooms (d3-zoom default). Drag-to-pan is restricted to the middle
  * mouse button, space-held-left-drag, or (when panMode is true, i.e. the Hand
  * tool is active) plain left-drag — otherwise left-drag stays free for
  * marquee-select / station-dragging in the caller.
  */
-export function useZoomPan(svgRef: RefObject<SVGSVGElement | null>, panMode: boolean) {
+export function useZoomPan(
+  svgRef: RefObject<SVGSVGElement | null>,
+  panMode: boolean,
+  insets: ViewportInsets = NO_INSETS,
+) {
   const [transform, setTransform] = useState<ZoomTransform>(zoomIdentity)
   const [spaceHeld, setSpaceHeld] = useState(false)
   // True only while a pointer-drag pan is in flight (not a wheel zoom), so the
@@ -23,6 +38,10 @@ export function useZoomPan(svgRef: RefObject<SVGSVGElement | null>, panMode: boo
   const spaceHeldRef = useRef(false)
   const panModeRef = useRef(panMode)
   panModeRef.current = panMode
+  // Read through a ref so a fresh insets object each render doesn't re-create frameBounds
+  // (and with it the callers' fitContent/frameLine handles) on every render.
+  const insetsRef = useRef(insets)
+  insetsRef.current = insets
 
   const behaviorRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null)
   const selectionRef = useRef<Selection<SVGSVGElement, unknown, null, undefined> | null>(null)
@@ -127,7 +146,9 @@ export function useZoomPan(svgRef: RefObject<SVGSVGElement | null>, panMode: boo
   const zoomOut = useCallback(() => zoomBy(1 / ZOOM_STEP), [zoomBy])
 
   /** Eases the viewport to frame a world-space box, centred with a little breathing room.
-   * Used to fly to a line when it's picked from the list, so navigation feels deliberate. */
+   * Used to fly to a line when it's picked from the list, so navigation feels deliberate.
+   * Fits and centres within the *uncovered* part of the svg, so nothing lands behind the
+   * floating toolbar or panel. */
   const frameBounds = useCallback(
     (bounds: { x: number; y: number; width: number; height: number }, paddingPx = 90) => {
       const svg = svgRef.current
@@ -135,12 +156,20 @@ export function useZoomPan(svgRef: RefObject<SVGSVGElement | null>, panMode: boo
       const selection = selectionRef.current
       if (!svg || !behavior || !selection || bounds.width <= 0 || bounds.height <= 0) return
       const rect = svg.getBoundingClientRect()
-      const fit = Math.min((rect.width - 2 * paddingPx) / bounds.width, (rect.height - 2 * paddingPx) / bounds.height)
+      const { left, right, top, bottom } = insetsRef.current
+      // A narrow window can leave less room than the chrome takes up; keep the visible box
+      // positive so the fit below can't come out negative and flip the map inside out.
+      const visibleWidth = Math.max(1, rect.width - left - right)
+      const visibleHeight = Math.max(1, rect.height - top - bottom)
+      // Same guard for the padding: on a small visible box, shrink the breathing room
+      // rather than let it eat the whole thing.
+      const padding = Math.min(paddingPx, visibleWidth / 4, visibleHeight / 4)
+      const fit = Math.min((visibleWidth - 2 * padding) / bounds.width, (visibleHeight - 2 * padding) / bounds.height)
       // Never zoom in past 2× on a short line (it'd fill the screen and lose context), and
       // stay within the behaviour's own scaleExtent so d3 doesn't clamp mid-transition.
       const scale = Math.max(0.25, Math.min(2, fit))
-      const tx = rect.width / 2 - scale * (bounds.x + bounds.width / 2)
-      const ty = rect.height / 2 - scale * (bounds.y + bounds.height / 2)
+      const tx = left + visibleWidth / 2 - scale * (bounds.x + bounds.width / 2)
+      const ty = top + visibleHeight / 2 - scale * (bounds.y + bounds.height / 2)
       behavior.transform(selection.transition().duration(480), zoomIdentity.translate(tx, ty).scale(scale))
     },
     [svgRef],
