@@ -15,7 +15,7 @@ export function LinesPanel({ lines, selectedLineId, onSelect, onToggleVisibility
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       {lines.length === 0 && (
         <p style={{ padding: 'var(--space-4)', color: 'var(--text-muted)', fontSize: 'var(--text-sm)', textAlign: 'center' }}>
-          No lines yet. Draw one on the canvas.
+          No lines yet — draw one on the canvas, or hit Surprise me for a whole city.
         </p>
       )}
 

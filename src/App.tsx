@@ -25,6 +25,7 @@ function App() {
     setMapName,
     setAuthorityName,
     loadMap,
+    generateMap,
     addCompany,
     renameCompany,
     setCompanyType,
@@ -79,11 +80,25 @@ function App() {
         setToast(
           ok
             ? { message: 'Map opened. Press Ctrl+Z to undo.', variant: 'success' }
-            : { message: "That file doesn't look like a metro map.", variant: 'error' },
+            : { message: "Hmm, that doesn't look like a metro map I recognise.", variant: 'error' },
         )
       },
       message => setToast({ message, variant: 'error' }),
     )
+  }
+
+  const SURPRISE_LINES = [
+    'A brand-new city, fresh off the drawing board. Ctrl+Z to change your mind.',
+    'One metropolis, conjured from thin air. Undo if it displeases you.',
+    'Behold — a transit network nobody asked for. Ctrl+Z to un-behold it.',
+    'A whole new city. The commuters are already grumbling.',
+  ]
+  const handleSurprise = () => {
+    generateMap()
+    setToast({ message: SURPRISE_LINES[Math.floor(Math.random() * SURPRISE_LINES.length)], variant: 'success' })
+    // Frame the new city once React has committed the fresh line paths (two frames is
+    // enough for the commit + the browser's layout of the new SVG geometry).
+    requestAnimationFrame(() => requestAnimationFrame(() => mapCanvasRef.current?.fitContent()))
   }
 
   // Company selection lives outside the reducer's station/line/geo selection (companies
@@ -145,6 +160,7 @@ function App() {
         onToggleTheme={toggleTheme}
         onOpen={handleOpen}
         onExport={() => exportMapAsJson(snapshot)}
+        onSurprise={handleSurprise}
         onUndo={undo}
         onRedo={redo}
         canUndo={canUndo}

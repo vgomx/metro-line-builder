@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { select } from 'd3-selection'
 import type { Selection } from 'd3-selection'
-import { zoom, zoomIdentity } from 'd3-zoom'
+import { zoom, zoomIdentity, zoomTransform } from 'd3-zoom'
 import type { D3ZoomEvent, ZoomBehavior, ZoomTransform } from 'd3-zoom'
 import 'd3-transition'
 
@@ -58,7 +58,10 @@ export function useZoomPan(svgRef: RefObject<SVGSVGElement | null>, panMode: boo
     const zoomBehavior = zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.25, 4])
       .filter((event: Event) => {
-        if (event.type === 'wheel') return true
+        // A plain wheel is a two-finger trackpad scroll (or mouse wheel) — that pans, via
+        // the separate handler below. Only a pinch, which the trackpad reports as
+        // ctrl+wheel, is left to d3 to turn into a zoom.
+        if (event.type === 'wheel') return (event as WheelEvent).ctrlKey
         if (event instanceof MouseEvent) {
           return event.button === 1 || spaceHeldRef.current || panModeRef.current
         }
@@ -91,9 +94,23 @@ export function useZoomPan(svgRef: RefObject<SVGSVGElement | null>, panMode: boo
     }
     svg.addEventListener('wheel', blockPageZoom, { passive: false })
 
+    // Two-finger trackpad scroll (a plain wheel) pans the canvas, matching how design
+    // tools behave. A pinch arrives as ctrl+wheel and is left to d3 to zoom (above).
+    // translateBy moves in the pre-scale coordinate space, so divide screen delta by k;
+    // line/page delta modes are normalised to pixels first.
+    const panOnWheel = (e: WheelEvent) => {
+      if (e.ctrlKey) return
+      e.preventDefault()
+      const k = zoomTransform(svg).k || 1
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? svg.clientHeight : 1
+      zoomBehavior.translateBy(selection, (-e.deltaX * unit) / k, (-e.deltaY * unit) / k)
+    }
+    svg.addEventListener('wheel', panOnWheel, { passive: false })
+
     return () => {
       selection.on('.zoom', null)
       svg.removeEventListener('wheel', blockPageZoom)
+      svg.removeEventListener('wheel', panOnWheel)
       behaviorRef.current = null
       selectionRef.current = null
     }

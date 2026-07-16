@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useReducer } from 'react'
 import type { Company, CompanyType, GeoFeature, GeoFeatureType, Line, LineNode, Point, Station, Tool } from '../types'
 import { nextLineColor } from '../lineColors'
 import { snapToGrid } from '../grid'
+import { pickLineName, pickMapName, pickStationName } from '../names'
+import { buildRandomMap } from '../generate'
 import { exactSegmentIndex, lineHasStation, resolveLineNodes, sameNode } from '../canvas/lineNodes'
 
 export interface DataSnapshot {
@@ -86,6 +88,7 @@ type Action =
   | { type: 'undo' }
   | { type: 'redo' }
   | { type: 'loadMap'; snapshot: DataSnapshot }
+  | { type: 'generateMap'; snapshot: DataSnapshot }
 
 const MAX_HISTORY = 50
 
@@ -105,6 +108,7 @@ const MIN_GEO_POINTS: Record<GeoFeatureType, number> = {
 // dispatches an explicit 'checkpoint' once at drag-start instead) are excluded.
 const RECORDABLE_ACTIONS = new Set<Action['type']>([
   'loadMap',
+  'generateMap',
   'setMapName',
   'setAuthorityName',
   'addCompany',
@@ -158,7 +162,7 @@ function pushHistory(state: MapState): MapState {
 }
 
 const emptyState: MapState = {
-  mapName: 'Untitled Map',
+  mapName: pickMapName(),
   authorityName: '',
   stations: {},
   stationOrder: [],
@@ -416,6 +420,7 @@ function reducer(rawState: MapState, action: Action): MapState {
     }
 
     case 'loadMap':
+    case 'generateMap':
       return {
         ...state,
         ...action.snapshot,
@@ -507,7 +512,7 @@ function reducer(rawState: MapState, action: Action): MapState {
       const id = `station-${state.nextStationNumber}`
       const station: Station = {
         id,
-        name: `Station ${state.nextStationNumber}`,
+        name: pickStationName(new Set(Object.values(state.stations).map(s => s.name))),
         x: action.x,
         y: action.y,
         transfer: false,
@@ -592,7 +597,7 @@ function reducer(rawState: MapState, action: Action): MapState {
       const id = `station-${state.nextStationNumber}`
       const station: Station = {
         id,
-        name: `Station ${state.nextStationNumber}`,
+        name: pickStationName(new Set(Object.values(state.stations).map(s => s.name))),
         x: action.x,
         y: action.y,
         transfer: false,
@@ -621,7 +626,7 @@ function reducer(rawState: MapState, action: Action): MapState {
       const id = `station-${state.nextStationNumber}`
       const station: Station = {
         id,
-        name: `Station ${state.nextStationNumber}`,
+        name: pickStationName(new Set(Object.values(state.stations).map(s => s.name))),
         x: action.x,
         y: action.y,
         transfer: false,
@@ -675,7 +680,7 @@ function reducer(rawState: MapState, action: Action): MapState {
       const id = `line-${state.nextLineNumber}`
       const line: Line = {
         id,
-        name: `Line ${state.nextLineNumber}`,
+        name: pickLineName(new Set(Object.values(state.lines).map(l => l.name))),
         color: nextLineColor(state.lineOrder.length),
         nodes: state.draftLineNodes,
         visible: true,
@@ -960,6 +965,7 @@ export function useMapState() {
     dispatch({ type: 'loadMap', snapshot: normalizeSnapshot(raw) })
     return true
   }, [])
+  const generateMap = useCallback(() => dispatch({ type: 'generateMap', snapshot: buildRandomMap() }), [])
   const addCompany = useCallback(() => dispatch({ type: 'addCompany' }), [])
   const renameCompany = useCallback(
     (companyId: string, name: string) => dispatch({ type: 'renameCompany', companyId, name }),
@@ -1117,6 +1123,7 @@ export function useMapState() {
     setMapName,
     setAuthorityName,
     loadMap,
+    generateMap,
     addCompany,
     renameCompany,
     setCompanyType,

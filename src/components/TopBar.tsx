@@ -3,7 +3,7 @@ import type { ChangeEvent } from 'react'
 import { Button, IconButton } from 'metro-ds'
 import logoLightUrl from 'metro-ds/assets/logo.svg'
 import logoDarkUrl from 'metro-ds/assets/logo-horizontal-white.svg'
-import { DownloadIcon, FolderOpenIcon, GridIcon, MoonIcon, RedoIcon, SunIcon, TrainIcon, UndoIcon, ZoomInIcon, ZoomOutIcon } from '../icons'
+import { DownloadIcon, FolderOpenIcon, GridIcon, MoonIcon, RedoIcon, SparkleIcon, SunIcon, TrainIcon, UndoIcon, ZoomInIcon, ZoomOutIcon } from '../icons'
 import type { Theme } from '../useTheme'
 
 interface TopBarProps {
@@ -20,6 +20,7 @@ interface TopBarProps {
   onToggleTheme: () => void
   onOpen: () => void
   onExport: () => void
+  onSurprise: () => void
   onUndo: () => void
   onRedo: () => void
   canUndo: boolean
@@ -40,6 +41,7 @@ export function TopBar({
   onToggleTheme,
   onOpen,
   onExport,
+  onSurprise,
   onUndo,
   onRedo,
   canUndo,
@@ -130,6 +132,10 @@ export function TopBar({
         onClick={onToggleTheme}
       />
       <div style={{ width: 'var(--space-2)' }} />
+      <Button size="sm" variant="ghost" icon={<SparkleIcon />} onClick={onSurprise}>
+        Surprise me
+      </Button>
+      <div style={{ width: 'var(--gap-tight)' }} />
       <Button size="sm" variant="ghost" icon={<FolderOpenIcon />} onClick={onOpen}>
         Open
       </Button>

@@ -153,6 +153,16 @@ export const PlusIcon = () => (
   </svg>
 )
 
+export const SparkleIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <path
+      d="M7 1.2c.5 2.6 1.2 3.3 3.8 3.8-2.6.5-3.3 1.2-3.8 3.8-.5-2.6-1.2-3.3-3.8-3.8C5.8 4.5 6.5 3.8 7 1.2Z"
+      fill="currentColor"
+    />
+    <path d="M11 8.6c.25 1.3.6 1.65 1.9 1.9-1.3.25-1.65.6-1.9 1.9-.25-1.3-.6-1.65-1.9-1.9 1.3-.25 1.65-.6 1.9-1.9Z" fill="currentColor" />
+  </svg>
+)
+
 export const TrashIcon = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
     <path

@@ -31,6 +31,8 @@ export interface MapCanvasHandle {
   zoomOut: () => void
   /** Eases the viewport to frame a line — used when a line is picked from the list. */
   frameLine: (lineId: string) => void
+  /** Eases the viewport to frame every line — used after generating a fresh map. */
+  fitContent: () => void
 }
 
 interface MapCanvasProps {
@@ -183,6 +185,24 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         }
         if (box.width === 0 && box.height === 0) return
         frameBounds({ x: box.x, y: box.y, width: box.width, height: box.height })
+      },
+      fitContent: () => {
+        const paths = svgRef.current?.querySelectorAll<SVGGraphicsElement>('path[id^="line-"]')
+        if (!paths || paths.length === 0) return
+        let minX = Infinity
+        let minY = Infinity
+        let maxX = -Infinity
+        let maxY = -Infinity
+        for (const path of paths) {
+          const b = path.getBBox()
+          if (b.width === 0 && b.height === 0) continue
+          minX = Math.min(minX, b.x)
+          minY = Math.min(minY, b.y)
+          maxX = Math.max(maxX, b.x + b.width)
+          maxY = Math.max(maxY, b.y + b.height)
+        }
+        if (minX === Infinity) return
+        frameBounds({ x: minX, y: minY, width: maxX - minX, height: maxY - minY })
       },
     }),
     [zoomIn, zoomOut, frameBounds],
