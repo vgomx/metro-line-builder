@@ -46,6 +46,7 @@ function App() {
     addCompany,
     renameCompany,
     setCompanyType,
+    setCompanySymbol,
     deleteCompany,
     setLineCompany,
     addStation,
@@ -53,6 +54,7 @@ function App() {
     mergeStations,
     renameStation,
     toggleStationTransfer,
+    toggleStationMain,
     appendDraftLineNode,
     insertDraftLineStation,
     insertLineStation,
@@ -403,12 +405,14 @@ function App() {
             onDeleteLine={withSound('remove', deleteLine)}
             onRenameStation={renameStation}
             onToggleTransfer={withSound('toggle', toggleStationTransfer)}
+            onToggleMain={withSound('toggle', toggleStationMain)}
             onDeleteStation={withSound('remove', deleteStation)}
             onRenameGeoFeature={renameGeoFeature}
             onExtendGeoFeature={startExtendGeoFeature}
             onDeleteGeoFeature={withSound('remove', deleteGeoFeature)}
             onRenameCompany={renameCompany}
             onSetCompanyType={setCompanyType}
+            onSetCompanySymbol={withSound('toggle', setCompanySymbol)}
             onDeleteCompany={withSound('remove', deleteCompany)}
           />
 

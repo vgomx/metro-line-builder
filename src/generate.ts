@@ -68,7 +68,7 @@ export function buildRandomMap(): DataSnapshot {
     const existing = byCoord.get(key)
     if (existing) return existing
     const id = `station-${nextStation++}`
-    const station: Station = { id, name: '', x, y, transfer: false }
+    const station: Station = { id, name: '', x, y, transfer: false, main: false }
     byCoord.set(key, station)
     stationOrder.push(id)
     return station
