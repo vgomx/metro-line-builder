@@ -148,7 +148,8 @@ export function buildRandomMap(): DataSnapshot {
     for (let attempt = 0; attempt < 6 && !nodes; attempt++) nodes = buildLineNodes(hubs[hubIndex], hubIndex)
     if (!nodes) continue
     const id = `line-${lineOrder.length + 1}`
-    lines[id] = { id, name: '', color: nextLineColor(lineOrder.length), companyId: null, visible: true, nodes }
+    // Built from nothing, so the lines number straight through 1..N — no gaps to fill.
+    lines[id] = { id, number: lineOrder.length + 1, name: '', color: nextLineColor(lineOrder.length), companyId: null, visible: true, nodes }
     lineOrder.push(id)
   }
 

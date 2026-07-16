@@ -3,6 +3,7 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent }
 import type { ZoomTransform } from 'd3-zoom'
 import type { GeoFeature, Line, LineNode, Point, Station, Tool } from '../types'
 import { useZoomPan } from './useZoomPan'
+import type { ViewportInsets } from './useZoomPan'
 import { StationNode } from './StationNode'
 import { WaypointNode } from './WaypointNode'
 import { LinePath } from './LinePath'
@@ -49,6 +50,8 @@ interface MapCanvasProps {
   draftGeoPoints: Point[]
   showGrid: boolean
   showTrains: boolean
+  /** Edges covered by the floating toolbar and panel, so framing centres on what's visible. */
+  viewportInsets: ViewportInsets
   onAddStation: (x: number, y: number) => void
   onMoveStations: (ids: string[], dx: number, dy: number) => void
   onMergeStations: (survivorId: string, mergedId: string) => void
@@ -116,6 +119,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     draftGeoPoints,
     showGrid,
     showTrains,
+    viewportInsets,
     onAddStation,
     onMoveStations,
     onMergeStations,
@@ -140,7 +144,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   ref,
 ) {
   const svgRef = useRef<SVGSVGElement>(null)
-  const { transform, zoomIn, zoomOut, spaceHeld, panning, frameBounds } = useZoomPan(svgRef, tool === 'pan')
+  const { transform, zoomIn, zoomOut, spaceHeld, panning, frameBounds } = useZoomPan(
+    svgRef,
+    tool === 'pan',
+    viewportInsets,
+  )
   const [drag, setDrag] = useState<DragState>({ kind: 'none' })
   const [cursorWorld, setCursorWorld] = useState<{ x: number; y: number } | null>(null)
   // One session per completed drag; the ghost re-derives each affected line's shape

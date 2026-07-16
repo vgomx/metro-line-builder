@@ -24,6 +24,10 @@ export interface Company {
 
 export interface Line {
   id: string
+  /** The line's public number, as riders know it — São Paulo's 1, 2, 3. Distinct from `id`,
+   * which is an internal handle that never changes; a number is the line's identity on the
+   * map and in every badge. */
+  number: number
   name: string
   color: string
   nodes: LineNode[]

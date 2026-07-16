@@ -1,8 +1,57 @@
+import { useState } from 'react'
 import { Badge, Button, Divider, Input, Select, Tag, Toggle } from 'metro-ds'
 import { BuildingIcon, ParkIcon, PenIcon, RiverIcon, TrashIcon } from '../icons'
 import { LINE_COLORS } from '../lineColors'
+import { isUsableLineNumber, MAX_LINE_NUMBER } from '../lineNumber'
 import type { Company, GeoFeature, Line, Station } from '../types'
 import { connectedLineCount, isTransferStation, lineHasStation, stationIdsOfLine } from '../canvas/lineNodes'
+
+/** Why `draft` can't be committed, or undefined if it can. One rule drives both the message
+ * and whether the edit lands, so the field can never show an error while having applied the
+ * value anyway — or vice versa. */
+function lineNumberError(draft: string, line: Line, lines: Record<string, Line>): string | undefined {
+  const trimmed = draft.trim()
+  if (trimmed === '') return 'Enter a number'
+  const parsed = Number(trimmed)
+  if (!isUsableLineNumber(parsed)) return `Use a whole number from 1 to ${MAX_LINE_NUMBER}`
+  const clash = Object.values(lines).find(other => other.id !== line.id && other.number === parsed)
+  if (!clash) return undefined
+  return `Already used by ${clash.name.trim() || `line ${clash.number}`}`
+}
+
+/**
+ * The line's number, held as a local draft rather than driven straight from `line.number`.
+ * Typing "12" passes through "1" on the way, which may well be another line's number — so a
+ * controlled field would either reject the keystroke or briefly commit the wrong number. The
+ * draft lets an in-progress or clashing entry sit in the field and explain itself, and only
+ * a valid one is dispatched. Caller keys this by line id, so selecting another line remounts
+ * it with that line's number.
+ */
+function LineNumberField({
+  line,
+  lines,
+  onSetLineNumber,
+}: {
+  line: Line
+  lines: Record<string, Line>
+  onSetLineNumber: (lineId: string, number: number) => void
+}) {
+  const [draft, setDraft] = useState(String(line.number))
+
+  return (
+    <Input
+      label="Line number"
+      type="number"
+      value={draft}
+      error={lineNumberError(draft, line, lines)}
+      onChange={e => {
+        const next = e.target.value
+        setDraft(next)
+        if (!lineNumberError(next, line, lines)) onSetLineNumber(line.id, Number(next.trim()))
+      }}
+    />
+  )
+}
 
 interface InspectorProps {
   selectedLine: Line | null
@@ -14,6 +63,7 @@ interface InspectorProps {
   companyList: Company[]
   authorityDisplayName: string
   onRenameLine: (lineId: string, name: string) => void
+  onSetLineNumber: (lineId: string, number: number) => void
   onRecolorLine: (lineId: string, color: string) => void
   onSetLineCompany: (lineId: string, companyId: string | null) => void
   onExtendLine: (lineId: string, end: 'start' | 'end') => void
@@ -39,6 +89,7 @@ export function Inspector({
   companyList,
   authorityDisplayName,
   onRenameLine,
+  onSetLineNumber,
   onRecolorLine,
   onSetLineCompany,
   onExtendLine,
@@ -170,6 +221,8 @@ export function Inspector({
           <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-primary)' }}>Line properties</span>
         </div>
         <Divider />
+
+        <LineNumberField key={line.id} line={line} lines={lines} onSetLineNumber={onSetLineNumber} />
 
         <Input label="Line name" value={line.name} onChange={e => onRenameLine(line.id, e.target.value)} />
 

@@ -6,10 +6,12 @@ interface CanvasLegendProps {
 }
 
 /**
- * Floating key anchored to the canvas's bottom-right corner. Will eventually grow a
- * symbol key and a line key above the authority mark below — kept monochrome and
+ * Map key, sitting at the foot of the right-hand column beneath the panel. Will eventually
+ * grow a symbol key and a line key above the authority mark below — kept monochrome and
  * translucent by default so it doesn't compete with the map itself, picking up color
  * only on hover so it reads as a deliberate branding detail rather than another UI panel.
+ * Laid out by the column that owns it rather than pinning itself to a corner, so it stays
+ * put as the panel above it flexes.
  */
 export function CanvasLegend({ mapName, authorityName }: CanvasLegendProps) {
   const primaryName = authorityName.trim() || mapName.trim() || 'Untitled Map'
@@ -17,13 +19,11 @@ export function CanvasLegend({ mapName, authorityName }: CanvasLegendProps) {
   return (
     <div
       style={{
-        position: 'absolute',
-        bottom: 'var(--space-3)',
-        right: 'var(--space-3)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'flex-end',
         gap: 'var(--gap-sm)',
+        flexShrink: 0,
         pointerEvents: 'none',
       }}
     >

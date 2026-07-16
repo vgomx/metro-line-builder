@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer } from 'react'
 import type { Company, CompanyType, GeoFeature, GeoFeatureType, Line, LineNode, Point, Station, Tool } from '../types'
 import { nextLineColor } from '../lineColors'
+import { isUsableLineNumber, nextFreeLineNumber } from '../lineNumber'
 import { snapToGrid } from '../grid'
 import { pickLineName, pickMapName, pickStationName } from '../names'
 import { buildRandomMap } from '../generate'
@@ -82,6 +83,7 @@ type Action =
   | { type: 'deleteLine'; lineId: string }
   | { type: 'deleteStation'; stationId: string }
   | { type: 'renameLine'; lineId: string; name: string }
+  | { type: 'setLineNumber'; lineId: string; number: number }
   | { type: 'recolorLine'; lineId: string; color: string }
   | { type: 'toggleLineVisibility'; lineId: string }
   | { type: 'checkpoint' }
@@ -126,6 +128,7 @@ const RECORDABLE_ACTIONS = new Set<Action['type']>([
   'deleteGeoFeature',
   'renameGeoFeature',
   'renameLine',
+  'setLineNumber',
   'recolorLine',
   'toggleLineVisibility',
   'deleteLine',
@@ -240,6 +243,14 @@ function normalizeSnapshot(parsed: DataSnapshot): DataSnapshot {
   if (!parsed.geoFeatureOrder) parsed.geoFeatureOrder = Object.keys(parsed.geoFeatures)
   if (!parsed.companies) parsed.companies = {}
   if (!parsed.companyOrder) parsed.companyOrder = Object.keys(parsed.companies)
+
+  // Line numbers postdate the first saves, so backfill whichever are missing. Walks
+  // lineOrder first so they number the way the map reads, then sweeps the record itself,
+  // since a line the order array forgot still has to satisfy the type. Re-deriving the
+  // taken set per line is what keeps a partially-numbered save from colliding.
+  for (const line of [...parsed.lineOrder.map(id => parsed.lines[id]), ...Object.values(parsed.lines)]) {
+    if (line && typeof line.number !== 'number') line.number = nextFreeLineNumber(Object.values(parsed.lines))
+  }
 
   for (const line of Object.values(parsed.lines)) {
     if (line.visible === undefined) line.visible = true
@@ -680,6 +691,7 @@ function reducer(rawState: MapState, action: Action): MapState {
       const id = `line-${state.nextLineNumber}`
       const line: Line = {
         id,
+        number: nextFreeLineNumber(Object.values(state.lines)),
         name: pickLineName(new Set(Object.values(state.lines).map(l => l.name))),
         color: nextLineColor(state.lineOrder.length),
         nodes: state.draftLineNodes,
@@ -824,6 +836,17 @@ function reducer(rawState: MapState, action: Action): MapState {
       const line = state.lines[action.lineId]
       if (!line) return state
       return { ...state, lines: { ...state.lines, [action.lineId]: { ...line, name: action.name } } }
+    }
+
+    case 'setLineNumber': {
+      const line = state.lines[action.lineId]
+      if (!line) return state
+      // Two lines sharing a number would make every badge on the map ambiguous, so the
+      // invariant is enforced here rather than trusted to the caller — the UI blocks a
+      // clash before it gets this far, but a bad number must not be able to land at all.
+      if (!isUsableLineNumber(action.number)) return state
+      if (Object.values(state.lines).some(other => other.id !== line.id && other.number === action.number)) return state
+      return { ...state, lines: { ...state.lines, [action.lineId]: { ...line, number: action.number } } }
     }
 
     case 'recolorLine': {
@@ -1048,6 +1071,7 @@ export function useMapState() {
   const deleteLine = useCallback((lineId: string) => dispatch({ type: 'deleteLine', lineId }), [])
   const deleteStation = useCallback((stationId: string) => dispatch({ type: 'deleteStation', stationId }), [])
   const renameLine = useCallback((lineId: string, name: string) => dispatch({ type: 'renameLine', lineId, name }), [])
+  const setLineNumber = useCallback((lineId: string, number: number) => dispatch({ type: 'setLineNumber', lineId, number }), [])
   const recolorLine = useCallback((lineId: string, color: string) => dispatch({ type: 'recolorLine', lineId, color }), [])
   const toggleLineVisibility = useCallback(
     (lineId: string) => dispatch({ type: 'toggleLineVisibility', lineId }),
@@ -1154,6 +1178,7 @@ export function useMapState() {
     deleteLine,
     deleteStation,
     renameLine,
+    setLineNumber,
     recolorLine,
     toggleLineVisibility,
     checkpoint,

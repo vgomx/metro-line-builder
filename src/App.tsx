@@ -4,14 +4,27 @@ import { useMapState } from './state/useMapState'
 import { MapCanvas } from './canvas/MapCanvas'
 import type { MapCanvasHandle } from './canvas/MapCanvas'
 import { TopBar } from './components/TopBar'
-import { LeftToolbar } from './components/LeftToolbar'
-import { RightPanel } from './components/RightPanel'
-import { CanvasOverlay } from './components/CanvasOverlay'
+import { LeftToolbar, LEFT_TOOLBAR_WIDTH } from './components/LeftToolbar'
+import { RightPanel, RIGHT_PANEL_WIDTH } from './components/RightPanel'
+import { CanvasStats, SelectionLabel } from './components/CanvasOverlay'
 import { CanvasLegend } from './components/CanvasLegend'
 import { LineAnnouncer } from './components/LineAnnouncer'
 import { exportMapAsJson, pickMapFile } from './export'
 import { stationIdsOfLine } from './canvas/lineNodes'
 import { useTheme } from './useTheme'
+
+// The canvas runs edge to edge underneath the floating toolbar and panel, so the parts of
+// it they cover aren't usable space. These insets keep the two things that care in sync:
+// the layer the centred canvas chrome (draft buttons, LED sign, toast) is anchored to, and
+// the framing maths, which centres on what's actually visible rather than on the svg.
+// FLOAT_GAP mirrors --space-3, the margin the panels float by; framing needs it as a number.
+const FLOAT_GAP = 12
+const CANVAS_INSETS = {
+  left: FLOAT_GAP * 2 + LEFT_TOOLBAR_WIDTH,
+  right: FLOAT_GAP * 2 + RIGHT_PANEL_WIDTH,
+  top: FLOAT_GAP,
+  bottom: FLOAT_GAP,
+}
 
 function App() {
   const {
@@ -56,6 +69,7 @@ function App() {
     deleteLine,
     deleteStation,
     renameLine,
+    setLineNumber,
     recolorLine,
     toggleLineVisibility,
     checkpoint,
@@ -167,10 +181,8 @@ function App() {
         canRedo={canRedo}
       />
 
-      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <LeftToolbar tool={state.tool} onSetTool={setTool} theme={theme} />
-
-        <main style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+      <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <main style={{ position: 'absolute', inset: 0 }}>
           <MapCanvas
             ref={mapCanvasRef}
             tool={state.tool}
@@ -186,6 +198,7 @@ function App() {
             draftGeoPoints={state.draftGeoPoints}
             showGrid={showGrid}
             showTrains={showTrains}
+            viewportInsets={CANVAS_INSETS}
             onAddStation={addStation}
             onMoveStations={moveStations}
             onMergeStations={mergeStations}
@@ -208,115 +221,169 @@ function App() {
             onTransformChange={t => setZoom(t.k)}
           />
 
-          <CanvasOverlay
-            lineCount={lineList.length}
-            stationCount={stationList.length}
-            zoom={zoom}
-            selectionLabel={selectionLabel}
+          <CanvasStats lineCount={lineList.length} stationCount={stationList.length} zoom={zoom} />
+
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: CANVAS_INSETS.left,
+              right: CANVAS_INSETS.right,
+              // Click-through so the canvas underneath still gets the pointer; each child
+              // that needs a pointer (buttons, the toast, the line chip) opts back in.
+              pointerEvents: 'none',
+            }}
+          >
+            {selectionLabel && <SelectionLabel label={selectionLabel} />}
+
+            {selectedLine && (
+              <LineAnnouncer
+                key={selectedLine.id}
+                line={selectedLine}
+                scrollText={(() => {
+                  const ids = stationIdsOfLine(selectedLine)
+                  const terminus = ids.length > 0 ? state.stations[ids[ids.length - 1]]?.name : null
+                  return terminus ? `${selectedLine.name}  •  TO ${terminus}` : selectedLine.name
+                })()}
+              />
+            )}
+
+            {state.tool === 'draw-line' && state.draftLineNodes.length === 0 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'var(--space-3)',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  background: 'var(--ink-900)',
+                  color: 'var(--ink-0)',
+                  borderRadius: 'var(--radius-lg)',
+                  padding: '5px 12px',
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 500,
+                }}
+              >
+                Click a station or the canvas to start drawing a line
+              </div>
+            )}
+
+            {state.draftLineNodes.length >= 2 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'var(--space-3)',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  pointerEvents: 'auto',
+                }}
+              >
+                <Button variant="primary" onClick={finishDraftLine}>
+                  {state.draftLineId
+                    ? `Update line (${state.draftLineNodes.length} points)`
+                    : `Finish line (${state.draftLineNodes.length} points)`}
+                </Button>
+              </div>
+            )}
+
+            {geoDraftLabel && state.draftGeoPoints.length >= geoMinPoints && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'var(--space-3)',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  pointerEvents: 'auto',
+                }}
+              >
+                <Button variant="primary" onClick={finishGeoFeature}>
+                  Finish {geoDraftLabel} ({state.draftGeoPoints.length} points)
+                </Button>
+              </div>
+            )}
+
+            {toast && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 'var(--space-3)',
+                  right: 'var(--space-3)',
+                  pointerEvents: 'auto',
+                }}
+              >
+                <Toast message={toast.message} variant={toast.variant} onDismiss={() => setToast(null)} />
+              </div>
+            )}
+          </div>
+        </main>
+
+        <LeftToolbar tool={state.tool} onSetTool={setTool} theme={theme} />
+
+        {/* Right-hand column: the panel flexes to fill it, leaving the authority mark
+            seated beneath. Click-through so the gap between them, and the canvas showing
+            through beside the mark, still belong to the map. */}
+        <div
+          style={{
+            position: 'absolute',
+            top: FLOAT_GAP,
+            right: FLOAT_GAP,
+            bottom: FLOAT_GAP,
+            width: RIGHT_PANEL_WIDTH,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: FLOAT_GAP,
+            pointerEvents: 'none',
+            zIndex: 10,
+            }}
+        >
+          <RightPanel
+            mapName={state.mapName}
+            authorityName={state.authorityName}
+            authorityDisplayName={authorityDisplayName}
+            lineList={lineList}
+            stationList={stationList}
+            geoFeatureList={geoFeatureList}
+            companyList={companyList}
+            lines={state.lines}
+            stations={state.stations}
+            selectedLine={selectedLine}
+            selectedStation={selectedStation}
+            selectedGeoFeature={selectedGeoFeature}
+            selectedCompany={selectedCompany}
+            onSelectLine={id => {
+              handleSetSelection([], [id], [])
+              // Fly to the line only when picked from the list; a click on the canvas
+              // leaves the viewport alone (the line is already where the user is looking).
+              mapCanvasRef.current?.frameLine(id)
+            }}
+            onSelectStation={id => handleSetSelection([id], [], [])}
+            onSelectGeoFeature={id => handleSetSelection([], [], [id])}
+            onSelectCompany={handleSelectCompany}
+            onToggleLineVisibility={toggleLineVisibility}
+            onAddLine={() => setTool('draw-line')}
+            onAddRiver={() => setTool('draw-river')}
+            onAddPark={() => setTool('draw-park')}
+            onAddCompany={addCompany}
+            onSetAuthorityName={setAuthorityName}
+            onRenameLine={renameLine}
+            onSetLineNumber={setLineNumber}
+            onRecolorLine={recolorLine}
+            onSetLineCompany={setLineCompany}
+            onExtendLine={startExtendLine}
+            onDeleteLine={deleteLine}
+            onRenameStation={renameStation}
+            onToggleTransfer={toggleStationTransfer}
+            onDeleteStation={deleteStation}
+            onRenameGeoFeature={renameGeoFeature}
+            onExtendGeoFeature={startExtendGeoFeature}
+            onDeleteGeoFeature={deleteGeoFeature}
+            onRenameCompany={renameCompany}
+            onSetCompanyType={setCompanyType}
+            onDeleteCompany={deleteCompany}
           />
 
           <CanvasLegend mapName={state.mapName} authorityName={state.authorityName} />
-
-          {selectedLine && (
-            <LineAnnouncer
-              key={selectedLine.id}
-              line={selectedLine}
-              scrollText={(() => {
-                const ids = stationIdsOfLine(selectedLine)
-                const terminus = ids.length > 0 ? state.stations[ids[ids.length - 1]]?.name : null
-                return terminus ? `${selectedLine.name}  •  TO ${terminus}` : selectedLine.name
-              })()}
-            />
-          )}
-
-          {state.tool === 'draw-line' && state.draftLineNodes.length === 0 && (
-            <div
-              style={{
-                position: 'absolute',
-                top: 'var(--space-3)',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                background: 'var(--ink-900)',
-                color: 'var(--ink-0)',
-                borderRadius: 'var(--radius-lg)',
-                padding: '5px 12px',
-                fontSize: 'var(--text-xs)',
-                fontWeight: 500,
-              }}
-            >
-              Click a station or the canvas to start drawing a line
-            </div>
-          )}
-
-          {state.draftLineNodes.length >= 2 && (
-            <div style={{ position: 'absolute', top: 'var(--space-3)', left: '50%', transform: 'translateX(-50%)' }}>
-              <Button variant="primary" onClick={finishDraftLine}>
-                {state.draftLineId
-                  ? `Update line (${state.draftLineNodes.length} points)`
-                  : `Finish line (${state.draftLineNodes.length} points)`}
-              </Button>
-            </div>
-          )}
-
-          {geoDraftLabel && state.draftGeoPoints.length >= geoMinPoints && (
-            <div style={{ position: 'absolute', top: 'var(--space-3)', left: '50%', transform: 'translateX(-50%)' }}>
-              <Button variant="primary" onClick={finishGeoFeature}>
-                Finish {geoDraftLabel} ({state.draftGeoPoints.length} points)
-              </Button>
-            </div>
-          )}
-
-          {toast && (
-            <div style={{ position: 'absolute', bottom: 'var(--space-3)', right: 'var(--space-3)' }}>
-              <Toast message={toast.message} variant={toast.variant} onDismiss={() => setToast(null)} />
-            </div>
-          )}
-        </main>
-
-        <RightPanel
-          mapName={state.mapName}
-          authorityName={state.authorityName}
-          authorityDisplayName={authorityDisplayName}
-          lineList={lineList}
-          stationList={stationList}
-          geoFeatureList={geoFeatureList}
-          companyList={companyList}
-          lines={state.lines}
-          stations={state.stations}
-          selectedLine={selectedLine}
-          selectedStation={selectedStation}
-          selectedGeoFeature={selectedGeoFeature}
-          selectedCompany={selectedCompany}
-          onSelectLine={id => {
-            handleSetSelection([], [id], [])
-            // Fly to the line only when picked from the list; a click on the canvas
-            // leaves the viewport alone (the line is already where the user is looking).
-            mapCanvasRef.current?.frameLine(id)
-          }}
-          onSelectStation={id => handleSetSelection([id], [], [])}
-          onSelectGeoFeature={id => handleSetSelection([], [], [id])}
-          onSelectCompany={handleSelectCompany}
-          onToggleLineVisibility={toggleLineVisibility}
-          onAddLine={() => setTool('draw-line')}
-          onAddRiver={() => setTool('draw-river')}
-          onAddPark={() => setTool('draw-park')}
-          onAddCompany={addCompany}
-          onSetAuthorityName={setAuthorityName}
-          onRenameLine={renameLine}
-          onRecolorLine={recolorLine}
-          onSetLineCompany={setLineCompany}
-          onExtendLine={startExtendLine}
-          onDeleteLine={deleteLine}
-          onRenameStation={renameStation}
-          onToggleTransfer={toggleStationTransfer}
-          onDeleteStation={deleteStation}
-          onRenameGeoFeature={renameGeoFeature}
-          onExtendGeoFeature={startExtendGeoFeature}
-          onDeleteGeoFeature={deleteGeoFeature}
-          onRenameCompany={renameCompany}
-          onSetCompanyType={setCompanyType}
-          onDeleteCompany={deleteCompany}
-        />
+        </div>
       </div>
     </div>
   )

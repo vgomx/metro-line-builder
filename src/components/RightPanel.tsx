@@ -32,6 +32,7 @@ interface RightPanelProps {
   onAddCompany: () => void
   onSetAuthorityName: (name: string) => void
   onRenameLine: (lineId: string, name: string) => void
+  onSetLineNumber: (lineId: string, number: number) => void
   onRecolorLine: (lineId: string, color: string) => void
   onSetLineCompany: (lineId: string, companyId: string | null) => void
   onExtendLine: (lineId: string, end: 'start' | 'end') => void
@@ -48,6 +49,8 @@ interface RightPanelProps {
 }
 
 const TABS = ['Lines', 'Stations', 'Geography', 'Companies', 'Properties']
+
+export const RIGHT_PANEL_WIDTH = 272
 
 export function RightPanel({
   mapName,
@@ -74,6 +77,7 @@ export function RightPanel({
   onAddCompany,
   onSetAuthorityName,
   onRenameLine,
+  onSetLineNumber,
   onRecolorLine,
   onSetLineCompany,
   onExtendLine,
@@ -97,13 +101,20 @@ export function RightPanel({
   return (
     <div
       style={{
-        width: '272px',
-        background: 'var(--bg-surface)',
-        borderLeft: '1px solid var(--border-subtle)',
+        // Height comes from the surrounding column, which reserves the space below for the
+        // authority mark; minHeight lets the tab lists scroll instead of pushing it off.
+        flex: 1,
+        minHeight: 0,
+        background: 'var(--panel-glass)',
+        backdropFilter: 'var(--panel-blur)',
+        WebkitBackdropFilter: 'var(--panel-blur)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: 'var(--radius-xl)',
+        boxShadow: 'var(--shadow-lg)',
         display: 'flex',
         flexDirection: 'column',
-        flexShrink: 0,
         overflow: 'hidden',
+        pointerEvents: 'auto',
       }}
     >
       <div style={{ borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
@@ -158,6 +169,7 @@ export function RightPanel({
             companyList={companyList}
             authorityDisplayName={authorityDisplayName}
             onRenameLine={onRenameLine}
+            onSetLineNumber={onSetLineNumber}
             onRecolorLine={onRecolorLine}
             onSetLineCompany={onSetLineCompany}
             onExtendLine={onExtendLine}
