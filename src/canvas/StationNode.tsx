@@ -1,28 +1,8 @@
+import { useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { Station } from '../types'
 import type { LabelPlacement } from './labelPlacement'
-
-const LABEL_FONT_SIZE = 11
-const LABEL_FONT = `600 ${LABEL_FONT_SIZE}px 'Barlow Condensed', system-ui, sans-serif`
-const CARD_PAD_X = 5
-const CARD_PAD_Y = 2.5
-/** A main station's plate is fully rounded, so its ends curve away where the text would
- * otherwise sit; it needs more room than a square-ish card to keep the name off the arc. */
-const MAIN_PAD_X = 10
-
-let measureCanvas: HTMLCanvasElement | null = null
-
-/** Pixel width of a label in the exact face it renders with, so the backing card can
- * be sized to fit. Canvas measureText can't read a CSS var for its font, but this
- * label uses a literal family string, so it measures directly. A little horizontal
- * padding on top absorbs the small canvas-vs-layout metric drift. */
-function measureLabelWidth(text: string): number {
-  if (!measureCanvas) measureCanvas = document.createElement('canvas')
-  const ctx = measureCanvas.getContext('2d')
-  if (!ctx) return text.length * (LABEL_FONT_SIZE * 0.55)
-  ctx.font = LABEL_FONT
-  return ctx.measureText(text).width
-}
+import { labelGeometry, LABEL_FONT_SIZE } from './labelPlacement'
 
 interface StationNodeProps {
   station: Station
@@ -42,45 +22,43 @@ interface StationNodeProps {
 
 const POP_MS = 300
 
+/** How much a marker swells while it's picked up, and while it's merely under the pointer —
+ * the latter matching the line's own hover growth, so a station and the line through it
+ * answer the cursor by the same amount. */
+const DRAG_GROWTH = 2
+const HOVER_GROWTH = 1.5
+
 export function StationNode({ station, selected, inDraftLine, interchange, dragging, entering, labelPlacement, onPointerDown, onClick }: StationNodeProps) {
+  const [hovered, setHovered] = useState(false)
   const isInterchange = interchange || station.transfer
   const baseRadius = isInterchange ? 10 : 6.5
-  const radius = dragging ? baseRadius + 2 : baseRadius
-  const labelDistance = radius + 12
-  const labelX = Math.cos(labelPlacement.angle) * labelDistance
-  const labelY = Math.sin(labelPlacement.angle) * labelDistance
+  const radius = dragging ? baseRadius + DRAG_GROWTH : baseRadius
+  // The two don't stack: a drag is a hover too, and adding both would have the marker jump
+  // again at the moment it's grabbed. Picking it up is the stronger state, so it wins.
+  const drawnRadius = dragging ? radius : radius + (hovered ? HOVER_GROWTH : 0)
 
-  // Rounded card sized to the measured label, aligned to the same anchor edge the
-  // text uses (start → extends right, end → extends left, middle → centred), so it
-  // sits squarely behind the name and lifts it off busy lines/fills for legibility.
+  // Read from the same helper the placement search uses, so the card drawn here is the exact
+  // box that search resolved the overlaps against.
   //
-  // A main station wears the same card as a nameplate instead: fully rounded, the pill shape
-  // LineIndicator gives a named line, in neutral ink. text-primary/text-inverse rather than
-  // the fixed ink-900/ink-0 the transient chips use — those are always dark because they only
-  // ever flash over the map, but a plate that lives on it has to invert with the theme or it
-  // sinks into a dark canvas and leaves the name floating with no plate at all.
+  // A main station wears its card as a nameplate: fully rounded, the pill shape LineIndicator
+  // gives a named line, in neutral ink. text-primary/text-inverse rather than the fixed
+  // ink-900/ink-0 the transient chips use — those are always dark because they only ever flash
+  // over the map, but a plate that lives on it has to invert with the theme or it sinks into a
+  // dark canvas and leaves the name floating with no plate at all.
   //
   // Nothing about the marker changes: a principal station is one the eye should find by name,
   // and the map already spends its marker vocabulary on what the lines are doing.
   const isMain = station.main
-  const padX = isMain ? MAIN_PAD_X : CARD_PAD_X
   const name = station.name.trim()
-  const textWidth = name ? measureLabelWidth(name) : 0
-  const cardW = textWidth + padX * 2
-  const cardH = LABEL_FONT_SIZE + CARD_PAD_Y * 2
-  const cardX =
-    labelPlacement.anchor === 'start'
-      ? labelX - padX
-      : labelPlacement.anchor === 'end'
-        ? labelX - textWidth - padX
-        : labelX - cardW / 2
-  const cardY = labelY - cardH / 2
+  const { labelX, labelY, cardX, cardY, cardW, cardH } = labelGeometry(station, labelPlacement, isInterchange)
 
   return (
     <g
       transform={`translate(${station.x}, ${station.y})`}
       onPointerDown={e => onPointerDown(e, station)}
       onClick={() => onClick(station)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{ cursor: 'pointer' }}
     >
       {/* Safari doesn't reliably render CSS drop-shadow() filters on SVG content, so
@@ -89,7 +67,7 @@ export function StationNode({ station, selected, inDraftLine, interchange, dragg
       <g filter={dragging ? 'url(#station-drag-shadow)' : undefined}>
         {selected && (
           <circle
-            r={radius + 5}
+            r={drawnRadius + 5}
             fill="none"
             stroke="var(--brand-500)"
             strokeWidth={2}
@@ -109,14 +87,14 @@ export function StationNode({ station, selected, inDraftLine, interchange, dragg
           {isInterchange ? (
             <>
               <circle
-                r={radius}
+                r={drawnRadius}
                 fill={inDraftLine ? 'var(--brand-500)' : 'var(--bg-page)'}
                 stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
                 strokeWidth={3.5}
                 style={{ transition: 'r 150ms ease' }}
               />
               <circle
-                r={radius - 4.5}
+                r={drawnRadius - 4.5}
                 fill="none"
                 stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
                 strokeWidth={1.25}
@@ -125,7 +103,7 @@ export function StationNode({ station, selected, inDraftLine, interchange, dragg
             </>
           ) : (
             <circle
-              r={radius}
+              r={drawnRadius}
               fill={inDraftLine ? 'var(--brand-500)' : 'var(--bg-page)'}
               stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
               strokeWidth={2.5}

@@ -22,7 +22,7 @@ import {
   stationIdsOfLine,
 } from './lineNodes'
 import type { RefanLine } from './lineNodes'
-import { computeLabelPlacement } from './labelPlacement'
+import { computeLabelPlacements } from './labelPlacement'
 import { useAppearance } from './useAppearance'
 import { useExit } from './useExit'
 import { buildLinePath } from './lineNodes'
@@ -504,10 +504,14 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     }
   }
 
-  const labelPlacementByStation: Record<string, ReturnType<typeof computeLabelPlacement>> = {}
-  for (const station of stationList) {
-    labelPlacementByStation[station.id] = computeLabelPlacement(station.id, lineList, stations)
-  }
+  // One pass for the whole map rather than a decision per station: a label has to know where
+  // its neighbours landed to keep off them.
+  const labelPlacementByStation = computeLabelPlacements(
+    stationList,
+    lineList,
+    stations,
+    new Set(stationList.filter(s => (lineCountByStation[s.id] ?? 0) >= 2).map(s => s.id)),
+  )
 
   // One routing pass for the whole network: it subdivides every line's segments against
   // the others so shared corridors fan out, and both the line renderer and the train

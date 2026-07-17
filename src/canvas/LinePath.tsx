@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { MouseEvent } from 'react'
 import type { Line } from '../types'
 import type { LineGeometry } from './lineNodes'
@@ -16,6 +17,16 @@ interface LinePathProps {
 }
 
 const REVEAL_MS = 620
+const HOVER_MS = 160
+
+const STROKE_WIDTH = 5
+const STROKE_WIDTH_SELECTED = 7
+/**
+ * How much a line thickens under the pointer. Kept to 1.5 by the fan as much as by taste: a
+ * shared corridor spaces its lanes LANE_WIDTH (7) apart, so a 5px line has only 2px of air
+ * either side, and swelling much past this would have a hovered line touch the one beside it.
+ */
+const HOVER_GROWTH = 1.5
 
 /**
  * Renders as a real <path id={line.id}> with its natural pathLength intact, so the train
@@ -23,8 +34,13 @@ const REVEAL_MS = 620
  * just shape the route without stopping there.
  */
 export function LinePath({ line, geometry, selected, revealing, segmentLineMap, onClick }: LinePathProps) {
+  const [hovered, setHovered] = useState(false)
   const d = buildLinePath(geometry, line.id, segmentLineMap)
   if (!d) return null
+
+  // Held back while the line sketches itself on, so the swell doesn't fight the draw-on for
+  // the same stroke.
+  const lifted = hovered && !revealing
 
   const handleClick = (e: MouseEvent<SVGPathElement>) => {
     e.stopPropagation()
@@ -40,21 +56,39 @@ export function LinePath({ line, geometry, selected, revealing, segmentLineMap, 
         strokeDasharray: '1 1',
         style: { pointerEvents: 'none' as const, animation: `mlb-line-draw ${REVEAL_MS}ms ease forwards` },
       } as const)
-    : ({ style: { pointerEvents: 'none' as const } } as const)
+    : ({
+        // stroke-width is a presentation attribute SVG lets CSS animate, so the swell eases
+        // rather than snapping. Left off during the reveal, where the animation owns the stroke.
+        style: { pointerEvents: 'none' as const, transition: `stroke-width ${HOVER_MS}ms ease, opacity ${HOVER_MS}ms ease` },
+      } as const)
 
   return (
     <>
-      {/* Wider transparent hit target makes it easy to click the line precisely (e.g. to insert a station). */}
-      <path d={d} fill="none" stroke="transparent" strokeWidth={16} onClick={handleClick} style={{ cursor: 'pointer' }} />
+      {/* Wider transparent hit target makes it easy to click the line precisely (e.g. to insert
+          a station), and is the only part of the line that takes a pointer — so it's what the
+          swell below listens to as well. Its own width never changes, so the line can't twitch
+          out from under the cursor at the edge of the target. */}
+      <path
+        d={d}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={16}
+        onClick={handleClick}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{ cursor: 'pointer' }}
+      />
+      {/* Hovering thickens the line and brings it to full strength — the line itself answering
+          the pointer, rather than a decoration around it. */}
       <path
         id={line.id}
         d={d}
         fill="none"
         stroke={line.color}
-        strokeWidth={selected ? 7 : 5}
+        strokeWidth={(selected ? STROKE_WIDTH_SELECTED : STROKE_WIDTH) + (lifted ? HOVER_GROWTH : 0)}
         strokeLinecap="round"
         strokeLinejoin="round"
-        opacity={selected ? 1 : 0.9}
+        opacity={selected || lifted ? 1 : 0.9}
         {...revealProps}
       />
       {/* Selected line reads as "live": a faint highlight streams along it. Skipped
