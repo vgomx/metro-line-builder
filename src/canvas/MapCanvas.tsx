@@ -561,14 +561,20 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
 
   const draggingStationIdSet = new Set(drag.kind === 'stations' ? drag.ids : [])
 
+  // A station in hand comes first: it's the most specific thing in flight, and the closed
+  // hand has to hold for the whole drag. Set on the svg as well as the marker because a
+  // quick drag outruns its own station — the pointer ends up over bare canvas, and without
+  // this the cursor would flick back to an arrow while the station is still being carried.
   const cursor =
-    spaceHeld || tool === 'pan'
-      ? panning
-        ? 'grabbing'
-        : 'grab'
-      : DRAW_TOOLS.includes(tool)
-        ? 'crosshair'
-        : 'default'
+    drag.kind === 'stations'
+      ? 'grabbing'
+      : spaceHeld || tool === 'pan'
+        ? panning
+          ? 'grabbing'
+          : 'grab'
+        : DRAW_TOOLS.includes(tool)
+          ? 'crosshair'
+          : 'default'
 
   const gridLines = []
   if (showGrid) {
@@ -772,16 +778,19 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
               const geometry = network.byLine.get(line.id)
               const track = geometry ? buildLineTrack(geometry, line.id, network.segmentLineMap) : null
               if (!track) return null
-              return (
+              // Two services per line, half a cycle apart: one running each way, meeting and
+              // passing in the middle.
+              return [0, 0.5].map(phase => (
                 <TrainMarker
-                  key={line.id}
+                  key={`${line.id}-${phase}`}
                   lineId={line.id}
                   color={line.color}
                   stopPoints={track.stopPoints}
                   stopFlags={track.stopFlags}
                   segmentPaths={track.segmentPaths}
+                  phase={phase}
                 />
-              )
+              ))
             })}
 
         {stationList.map(station => (

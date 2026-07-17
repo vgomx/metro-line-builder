@@ -600,10 +600,19 @@ function reducer(rawState: MapState, action: Action): MapState {
       // Enabling transfer on a station that sits exactly on another one — e.g. two
       // lines drawn independently that happen to coincide — merges them into one
       // shared station instead of leaving a hidden duplicate stacked underneath.
+      // The merge only unions the two stations' existing flags, so it has to be told this
+      // was a request to *turn transfer on*: without that, folding away a coincident duplicate
+      // that doesn't itself carry the flag (a stray station, or one on the same line) leaves
+      // the survivor un-flagged and the toggle looks like it did nothing.
       const otherStations = { ...state.stations }
       delete otherStations[station.id]
       const coincident = findStationAt(otherStations, station.x, station.y)
-      if (coincident) return mergeStationsInState(state, station.id, coincident.id)
+      if (coincident) {
+        const merged = mergeStationsInState(state, station.id, coincident.id)
+        const survivor = merged.stations[station.id]
+        if (!survivor) return merged
+        return { ...merged, stations: { ...merged.stations, [station.id]: { ...survivor, transfer: true } } }
+      }
 
       // Otherwise, splice this station into any other line whose path happens to
       // cross exactly through this point without already stopping here.

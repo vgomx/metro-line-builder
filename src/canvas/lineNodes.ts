@@ -229,9 +229,28 @@ export function buildNetworkGeometry(lineList: Line[], stations: Record<string, 
 /** Perpendicular spacing between parallel lanes when 2+ lines share the same route. */
 export const LANE_WIDTH = 7
 
+/** How far a lane-offset corner's miter may reach from its vertex before it's beveled
+ * instead. Sharp turns only carry an offset at shared stations, which are interchanges and
+ * so wear the larger (r=10) marker — keeping the cap just inside that means a beveled corner
+ * stays hidden under the marker rather than trading one visible artifact for another. */
+const MITER_LIMIT = 9
+
+/** True when a→b runs in segmentKey's canonical order (the smaller endpoint first). Used to
+ * keep a lane's side of the corridor fixed in the world, not relative to travel. */
+function isForwardSegment(a: Point, b: Point): boolean {
+  return a.x < b.x || (a.x === b.x && a.y <= b.y)
+}
+
 /** Perpendicular lane offset for each segment of `points` (length = points.length - 1),
  * based on how many lines share that segment and where this line falls in that group —
- * shared by the line-path renderer and the train animation so both fan out the same way. */
+ * shared by the line-path renderer and the train animation so both fan out the same way.
+ *
+ * The offset is negated for a segment this line traverses against the canonical order. The
+ * shift is applied downstream along each line's own direction-normal, which flips with travel
+ * direction; two lines sharing a corridor in opposite directions would otherwise have both
+ * their offset sign and their normal flip, cancelling out and stacking them on the same lane
+ * instead of fanning. Tying the sign to the segment's fixed orientation keeps a lane on the
+ * same physical side no matter which way a line runs it. */
 export function computeLaneOffsets(points: Point[], lineId: string, segmentLineMap: Map<string, string[]>): number[] {
   const offsets: number[] = []
   for (let i = 0; i < points.length - 1; i++) {
@@ -241,7 +260,8 @@ export function computeLaneOffsets(points: Point[], lineId: string, segmentLineM
       continue
     }
     const index = Math.max(0, group.indexOf(lineId))
-    offsets.push((index - (group.length - 1) / 2) * LANE_WIDTH)
+    const lane = (index - (group.length - 1) / 2) * LANE_WIDTH
+    offsets.push(isForwardSegment(points[i], points[i + 1]) ? lane : -lane)
   }
   return offsets
 }
@@ -310,8 +330,22 @@ export function offsetPolylineIndexed(
       }
     } else {
       const t = ((b.x - a.x) * dirs[i].y - (b.y - a.y) * dirs[i].x) / denom
-      points.push({ x: a.x + dirs[i - 1].x * t, y: a.y + dirs[i - 1].y * t })
-      sourceIndex.push(i)
+      const miterX = a.x + dirs[i - 1].x * t
+      const miterY = a.y + dirs[i - 1].y * t
+      // The miter is where the two lane-shifted segments cross, and at a sharp turn that
+      // crossing runs off to infinity — the classic unbounded-miter spike, the same thing
+      // SVG's stroke-miterlimit exists to cap. Left alone, a lane-offset line making a tight
+      // turn at a shared station throws a spike out past the station marker and onto whatever
+      // line runs alongside it. Past the limit, cut the corner with a bevel instead: a and b
+      // both sit at the lane offset from the vertex (<= a lane-width or so out), so the join
+      // can no longer reach a neighbour.
+      if (Math.hypot(miterX - vertices[i].x, miterY - vertices[i].y) > MITER_LIMIT) {
+        points.push(a, b)
+        sourceIndex.push(i, i)
+      } else {
+        points.push({ x: miterX, y: miterY })
+        sourceIndex.push(i)
+      }
     }
   }
 
