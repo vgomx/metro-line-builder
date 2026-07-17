@@ -229,6 +229,12 @@ export function buildNetworkGeometry(lineList: Line[], stations: Record<string, 
 /** Perpendicular spacing between parallel lanes when 2+ lines share the same route. */
 export const LANE_WIDTH = 7
 
+/** How far a lane-offset corner's miter may reach from its vertex before it's beveled
+ * instead. Sharp turns only carry an offset at shared stations, which are interchanges and
+ * so wear the larger (r=10) marker — keeping the cap just inside that means a beveled corner
+ * stays hidden under the marker rather than trading one visible artifact for another. */
+const MITER_LIMIT = 9
+
 /** Perpendicular lane offset for each segment of `points` (length = points.length - 1),
  * based on how many lines share that segment and where this line falls in that group —
  * shared by the line-path renderer and the train animation so both fan out the same way. */
@@ -310,8 +316,22 @@ export function offsetPolylineIndexed(
       }
     } else {
       const t = ((b.x - a.x) * dirs[i].y - (b.y - a.y) * dirs[i].x) / denom
-      points.push({ x: a.x + dirs[i - 1].x * t, y: a.y + dirs[i - 1].y * t })
-      sourceIndex.push(i)
+      const miterX = a.x + dirs[i - 1].x * t
+      const miterY = a.y + dirs[i - 1].y * t
+      // The miter is where the two lane-shifted segments cross, and at a sharp turn that
+      // crossing runs off to infinity — the classic unbounded-miter spike, the same thing
+      // SVG's stroke-miterlimit exists to cap. Left alone, a lane-offset line making a tight
+      // turn at a shared station throws a spike out past the station marker and onto whatever
+      // line runs alongside it. Past the limit, cut the corner with a bevel instead: a and b
+      // both sit at the lane offset from the vertex (<= a lane-width or so out), so the join
+      // can no longer reach a neighbour.
+      if (Math.hypot(miterX - vertices[i].x, miterY - vertices[i].y) > MITER_LIMIT) {
+        points.push(a, b)
+        sourceIndex.push(i, i)
+      } else {
+        points.push({ x: miterX, y: miterY })
+        sourceIndex.push(i)
+      }
     }
   }
 

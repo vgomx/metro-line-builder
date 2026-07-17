@@ -59,7 +59,10 @@ export function StationNode({ station, selected, inDraftLine, interchange, dragg
       onClick={() => onClick(station)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{ cursor: 'pointer' }}
+      // The marker's own cursor wins over the svg's wherever the pointer is actually on it,
+      // so the closed hand has to be repeated here or grabbing a station would keep showing
+      // the arrow for as long as the pointer stayed on the marker it was dragging.
+      style={{ cursor: dragging ? 'grabbing' : 'pointer' }}
     >
       {/* Safari doesn't reliably render CSS drop-shadow() filters on SVG content, so
           the drag shadow is a real SVG <filter> (defined once in MapCanvas) applied

@@ -18,6 +18,19 @@
   --panel-blur: blur(16px) saturate(180%);
 }
 
+/* How much of its line's colour a train's body carries, the rest being the canvas it rides
+   over. Two values rather than one because the mix isn't symmetric: the same 14% that reads
+   as a soft tint against a near-white page all but vanishes into a near-black one, so the
+   dark theme leans harder on the colour to arrive at the same idea — a car tinted by its
+   service, sitting on the map rather than glowing above it. */
+:root {
+  --train-tint: 14%;
+}
+
+[data-theme='dark'] {
+  --train-tint: 34%;
+}
+
 /* Without a backdrop-filter the transparency has nothing to soften the map behind it, and
    the panels' text would sit straight on top of the lines. Go opaque instead of unreadable. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {

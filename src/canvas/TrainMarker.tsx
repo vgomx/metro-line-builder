@@ -14,7 +14,19 @@ interface TrainMarkerProps {
   dwellMs?: number
   /** Travel speed in px/ms. */
   speed?: number
+  /** Fraction of the full back-and-forth cycle to shift this car by. The two services on a
+   * line run at phase 0 and 0.5 — half a cycle apart is a mirror in time, so one is heading
+   * out wherever the other is heading back: a train from each direction, passing at the middle. */
+  phase?: number
 }
+
+/**
+ * The car's footprint — small enough that two can share a line. Down from 20x5: at that size
+ * a single car filled the 5px stroke and read as a lozenge laid over the track; a 3.4px car
+ * rides within it as rolling stock.
+ */
+const CAR_LENGTH = 15
+const CAR_HEIGHT = 3.4
 
 /**
  * Shuttles a train-shaped marker back and forth along a line, stopping briefly
@@ -27,7 +39,7 @@ interface TrainMarkerProps {
  * LinePath draws, so a train always sits on its own line's lane rather than on a
  * neighbour's rails wherever lines fan out along a shared stretch.
  */
-export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths, dwellMs = 1400, speed = 0.12 }: TrainMarkerProps) {
+export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths, dwellMs = 1400, speed = 0.12, phase = 0 }: TrainMarkerProps) {
   const groupRef = useRef<SVGGElement>(null)
   const segmentRefs = useRef<(SVGPathElement | null)[]>([])
   const lastAngleRef = useRef(0)
@@ -101,7 +113,9 @@ export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths
         return
       }
 
-      let remaining = (now - startTime) % cycleDuration
+      // phase shifts where in the shared cycle this car sits; the two services on a line run
+      // half a cycle apart so they cross going opposite ways.
+      let remaining = (now - startTime + phase * cycleDuration) % cycleDuration
       let x = stopPoints[stopSequence[0]].x
       let y = stopPoints[stopSequence[0]].y
 
@@ -159,6 +173,8 @@ export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths
         }
       }
 
+      // Both services ride the centreline; the two just pass through each other where they
+      // cross, which reads fine at this size.
       group.setAttribute('transform', `translate(${x}, ${y}) rotate(${lastAngleRef.current})`)
       frameId = requestAnimationFrame(tick)
     }
@@ -167,7 +183,7 @@ export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths
     return () => cancelAnimationFrame(frameId)
     // Intentionally excludes the geometry props: those are read live via refs
     // above so the loop's startTime survives re-renders instead of restarting.
-  }, [lineId, dwellMs, speed])
+  }, [lineId, dwellMs, speed, phase])
 
   if (stopPoints.length < 2) return null
 
@@ -187,17 +203,30 @@ export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths
       ))}
       <g ref={groupRef} style={{ pointerEvents: 'none' }}>
         {/* Capsule body with a colored outline (line color), echoing a real train-car
-            silhouette — trim lines and portholes instead of a solid-fill blob. Filled
-            with the canvas background, like the station markers, so the car reads as a
-            vehicle sitting on the track in either theme rather than a black lozenge. */}
-        <rect x={-13} y={-3.25} width={26} height={6.5} rx={3.25} fill="var(--bg-page)" stroke={color} strokeWidth={1.4} />
-        <line x1={-10.25} y1={-2.15} x2={10.25} y2={-2.15} stroke={color} strokeWidth={0.6} opacity={0.6} strokeLinecap="round" />
-        <line x1={-10.25} y1={2.15} x2={10.25} y2={2.15} stroke={color} strokeWidth={0.6} opacity={0.6} strokeLinecap="round" />
-        <circle cx={-6} cy={0} r={1.4} fill="none" stroke={color} strokeWidth={0.8} opacity={0.85} />
-        <circle cx={0} cy={0} r={1.4} fill="none" stroke={color} strokeWidth={0.8} opacity={0.85} />
-        <circle cx={6} cy={0} r={1.4} fill="none" stroke={color} strokeWidth={0.8} opacity={0.85} />
+            silhouette — trim lines and portholes instead of a solid-fill blob.
+
+            Body carries a wash of its own line's colour over the canvas rather than the bare
+            page, so a car is legible as belonging to a service even where it's crossing a
+            junction away from its own track. The mix resolves against whichever page it's on,
+            so neither theme needs its own train. */}
+        <rect
+          x={-CAR_LENGTH / 2}
+          y={-CAR_HEIGHT / 2}
+          width={CAR_LENGTH}
+          height={CAR_HEIGHT}
+          rx={CAR_HEIGHT / 2}
+          fill={`color-mix(in srgb, ${color} var(--train-tint), var(--bg-page))`}
+          stroke={color}
+          strokeWidth={1}
+        />
+        {/* Windows, filled rather than outlined — a ring this small closes into a smudge where
+            a dot stays a window. Positions scale with the body so shrinking the car doesn't
+            crowd them. */}
+        <circle cx={-CAR_LENGTH * 0.23} cy={0} r={0.6} fill={color} opacity={0.75} />
+        <circle cx={0} cy={0} r={0.6} fill={color} opacity={0.75} />
+        <circle cx={CAR_LENGTH * 0.23} cy={0} r={0.6} fill={color} opacity={0.75} />
         {/* Headlight accent at the nose end, so the train's facing direction reads at a glance. */}
-        <circle cx={11.4} cy={0} r={0.65} fill={color} opacity={0.9} />
+        <circle cx={CAR_LENGTH / 2 - 1} cy={0} r={0.5} fill={color} opacity={0.9} />
       </g>
     </>
   )
