@@ -23,6 +23,103 @@ const LABEL_DIRECTIONS: LabelPlacement[] = [
   { angle: (-3 * Math.PI) / 4, anchor: 'end' }, // NW
 ]
 
+/** Drives the measuring font, the card height, and the rendered text alike, so this is the
+ * one number that decides how much room every name takes. Kept deliberately small: a name is
+ * a box the placement search has to find space for, and a smaller box is one that fits in
+ * more of the eight directions before it starts landing on a neighbour. */
+export const LABEL_FONT_SIZE = 10
+const LABEL_FONT = `600 ${LABEL_FONT_SIZE}px 'Barlow Condensed', system-ui, sans-serif`
+const CARD_PAD_X = 5
+export const CARD_PAD_Y = 2.5
+/** A main station's plate is fully rounded, so its ends curve away where the text would
+ * otherwise sit; it needs more room than a square-ish card to keep the name off the arc. */
+const MAIN_PAD_X = 10
+/** Clear air kept between two labels, so avoiding a collision doesn't just make them touch. */
+const LABEL_GAP = 3
+
+const PLAIN_RADIUS = 6.5
+const INTERCHANGE_RADIUS = 10
+const LABEL_OFFSET = 12
+
+let measureCanvas: HTMLCanvasElement | null = null
+
+/** Pixel width of a label in the exact face it renders with, so the backing card can
+ * be sized to fit. Canvas measureText can't read a CSS var for its font, but this
+ * label uses a literal family string, so it measures directly. A little horizontal
+ * padding on top absorbs the small canvas-vs-layout metric drift. */
+export function measureLabelWidth(text: string): number {
+  if (!measureCanvas) measureCanvas = document.createElement('canvas')
+  const ctx = measureCanvas.getContext('2d')
+  if (!ctx) return text.length * (LABEL_FONT_SIZE * 0.55)
+  ctx.font = LABEL_FONT
+  return ctx.measureText(text).width
+}
+
+export interface LabelGeometry {
+  /** Text anchor point, relative to the station. */
+  labelX: number
+  labelY: number
+  /** Backing card, relative to the station. */
+  cardX: number
+  cardY: number
+  cardW: number
+  cardH: number
+  textWidth: number
+}
+
+/**
+ * Where a station's name and its backing card sit, in station-local coordinates.
+ *
+ * The single source of this: StationNode draws from it, and the placement search below tests
+ * collisions with it. Two copies of this arithmetic would mean resolving overlaps between
+ * boxes that aren't the ones on screen.
+ *
+ * Measured from the marker's resting radius, ignoring the swell it takes on while hovered or
+ * dragged — a name that slid outward whenever the cursor grazed its marker would jitter, and
+ * a label that moved mid-drag would invalidate every collision this module just resolved.
+ */
+export function labelGeometry(station: Station, placement: LabelPlacement, isInterchange: boolean): LabelGeometry {
+  const radius = isInterchange ? INTERCHANGE_RADIUS : PLAIN_RADIUS
+  const distance = radius + LABEL_OFFSET
+  const labelX = Math.cos(placement.angle) * distance
+  const labelY = Math.sin(placement.angle) * distance
+
+  const padX = station.main ? MAIN_PAD_X : CARD_PAD_X
+  const name = station.name.trim()
+  const textWidth = name ? measureLabelWidth(name) : 0
+  const cardW = textWidth + padX * 2
+  const cardH = LABEL_FONT_SIZE + CARD_PAD_Y * 2
+  const cardX =
+    placement.anchor === 'start'
+      ? labelX - padX
+      : placement.anchor === 'end'
+        ? labelX - textWidth - padX
+        : labelX - cardW / 2
+
+  return { labelX, labelY, cardX, cardY: labelY - cardH / 2, cardW, cardH, textWidth }
+}
+
+interface Box {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+function labelBox(station: Station, placement: LabelPlacement, isInterchange: boolean): Box {
+  const g = labelGeometry(station, placement, isInterchange)
+  return { x: station.x + g.cardX, y: station.y + g.cardY, width: g.cardW, height: g.cardH }
+}
+
+function overlaps(a: Box, b: Box, gap = 0): boolean {
+  return (
+    a.x - gap < b.x + b.width &&
+    b.x - gap < a.x + a.width &&
+    a.y - gap < b.y + b.height &&
+    b.y - gap < a.y + a.height
+  )
+}
+
 function angularDistance(a: number, b: number): number {
   const twoPi = Math.PI * 2
   let diff = Math.abs(a - b) % twoPi
@@ -52,23 +149,85 @@ function incidentAngles(stationId: string, lineList: Line[], stations: Record<st
   return angles
 }
 
-/**
- * Picks whichever of the 8 compass directions sits farthest (angularly) from every
- * line segment touching this station, so the name never sits on top of a line's path.
- * Untouched stations default to straight below, matching the map's previous look.
- */
-export function computeLabelPlacement(stationId: string, lineList: Line[], stations: Record<string, Station>): LabelPlacement {
-  const incident = incidentAngles(stationId, lineList, stations)
-  if (incident.length === 0) return LABEL_DIRECTIONS[0]
+/** How far a direction sits from the nearest line leaving the station — the higher the
+ * better, since it's the name keeping clear of the track. */
+function clearanceScore(direction: LabelPlacement, incident: number[]): number {
+  if (incident.length === 0) return Infinity
+  return Math.min(...incident.map(a => angularDistance(a, direction.angle)))
+}
 
-  let best = LABEL_DIRECTIONS[0]
-  let bestScore = -Infinity
-  for (const direction of LABEL_DIRECTIONS) {
-    const score = Math.min(...incident.map(a => angularDistance(a, direction.angle)))
-    if (score > bestScore + 1e-6) {
-      bestScore = score
-      best = direction
+/**
+ * Places every station's name, in one pass over the whole map.
+ *
+ * Each label still prefers the compass direction furthest from its own lines, but the choice
+ * is now made against what's already on the map: a direction whose card would land on an
+ * earlier label, or across another station's marker, is rejected before clearance is even
+ * weighed. Deciding station by station in isolation is what let two names sit on top of one
+ * another — each was individually correct about the tracks and blind to its neighbour.
+ *
+ * Greedy, so the order is the priority: principal stations claim a spot first, then
+ * interchanges, then the rest in map order. Ties and total deadlock fall back to pure
+ * clearance, which is the behaviour this had before — a label that can't avoid every
+ * neighbour should at least keep off the tracks.
+ */
+export function computeLabelPlacements(
+  stationList: Station[],
+  lineList: Line[],
+  stations: Record<string, Station>,
+  interchangeIds: Set<string>,
+): Record<string, LabelPlacement> {
+  const isInterchange = (station: Station) => interchangeIds.has(station.id) || station.transfer
+
+  // Markers are fixed obstacles: unlike labels they can't be moved out of the way, so every
+  // label has to work around all of them from the start.
+  const markers = new Map<string, Box>(
+    stationList.map(station => {
+      const r = isInterchange(station) ? INTERCHANGE_RADIUS : PLAIN_RADIUS
+      return [station.id, { x: station.x - r, y: station.y - r, width: r * 2, height: r * 2 }]
+    }),
+  )
+
+  const ranked = stationList
+    .map((station, index) => ({ station, index, rank: station.main ? 2 : isInterchange(station) ? 1 : 0 }))
+    .sort((a, b) => b.rank - a.rank || a.index - b.index)
+
+  const placed: Box[] = []
+  const result: Record<string, LabelPlacement> = {}
+
+  for (const { station } of ranked) {
+    const incident = incidentAngles(station.id, lineList, stations)
+    const interchange = isInterchange(station)
+    const named = station.name.trim().length > 0
+
+    let best = LABEL_DIRECTIONS[0]
+    let bestScore = -Infinity
+    let bestFree: LabelPlacement | null = null
+    let bestFreeScore = -Infinity
+
+    for (const direction of LABEL_DIRECTIONS) {
+      const score = clearanceScore(direction, incident)
+      if (score > bestScore + 1e-6) {
+        bestScore = score
+        best = direction
+      }
+      if (!named) continue
+
+      const box = labelBox(station, direction, interchange)
+      const hitsLabel = placed.some(other => overlaps(box, other, LABEL_GAP))
+      // A station's own marker never reaches its label — the offset guarantees it — so the
+      // only markers worth testing are everyone else's.
+      const hitsMarker = [...markers].some(([id, marker]) => id !== station.id && overlaps(box, marker))
+      if (hitsLabel || hitsMarker) continue
+      if (score > bestFreeScore + 1e-6) {
+        bestFreeScore = score
+        bestFree = direction
+      }
     }
+
+    const chosen = bestFree ?? best
+    result[station.id] = chosen
+    if (named) placed.push(labelBox(station, chosen, interchange))
   }
-  return best
+
+  return result
 }
