@@ -235,9 +235,22 @@ export const LANE_WIDTH = 7
  * stays hidden under the marker rather than trading one visible artifact for another. */
 const MITER_LIMIT = 9
 
+/** True when a→b runs in segmentKey's canonical order (the smaller endpoint first). Used to
+ * keep a lane's side of the corridor fixed in the world, not relative to travel. */
+function isForwardSegment(a: Point, b: Point): boolean {
+  return a.x < b.x || (a.x === b.x && a.y <= b.y)
+}
+
 /** Perpendicular lane offset for each segment of `points` (length = points.length - 1),
  * based on how many lines share that segment and where this line falls in that group —
- * shared by the line-path renderer and the train animation so both fan out the same way. */
+ * shared by the line-path renderer and the train animation so both fan out the same way.
+ *
+ * The offset is negated for a segment this line traverses against the canonical order. The
+ * shift is applied downstream along each line's own direction-normal, which flips with travel
+ * direction; two lines sharing a corridor in opposite directions would otherwise have both
+ * their offset sign and their normal flip, cancelling out and stacking them on the same lane
+ * instead of fanning. Tying the sign to the segment's fixed orientation keeps a lane on the
+ * same physical side no matter which way a line runs it. */
 export function computeLaneOffsets(points: Point[], lineId: string, segmentLineMap: Map<string, string[]>): number[] {
   const offsets: number[] = []
   for (let i = 0; i < points.length - 1; i++) {
@@ -247,7 +260,8 @@ export function computeLaneOffsets(points: Point[], lineId: string, segmentLineM
       continue
     }
     const index = Math.max(0, group.indexOf(lineId))
-    offsets.push((index - (group.length - 1) / 2) * LANE_WIDTH)
+    const lane = (index - (group.length - 1) / 2) * LANE_WIDTH
+    offsets.push(isForwardSegment(points[i], points[i + 1]) ? lane : -lane)
   }
   return offsets
 }
