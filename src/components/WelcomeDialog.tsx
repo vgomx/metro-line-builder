@@ -1,7 +1,7 @@
-import { Button, Dialog } from 'metro-ds'
+import { Dialog } from 'metro-ds'
 import logoLightUrl from 'metro-ds/assets/logo-mark.svg'
 import logoDarkUrl from 'metro-ds/assets/logo-mark-white.svg'
-import { SparkleIcon, StationIcon } from '../icons'
+import { LINE_COLORS } from '../lineColors'
 import type { Theme } from '../useTheme'
 
 interface WelcomeDialogProps {
@@ -27,7 +27,7 @@ interface WelcomeDialogProps {
  */
 export function WelcomeDialog({ open, theme, onGenerate, onBlank }: WelcomeDialogProps) {
   return (
-    <Dialog open={open} onClose={onBlank} title="" width="420px">
+    <Dialog open={open} onClose={onBlank} title="" width="480px">
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--gap-lg)', textAlign: 'center' }}>
         <img src={theme === 'dark' ? logoDarkUrl : logoLightUrl} alt="" width={64} height={64} />
 
@@ -40,13 +40,55 @@ export function WelcomeDialog({ open, theme, onGenerate, onBlank }: WelcomeDialo
           </p>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)', width: '100%' }}>
-          <Button variant="primary" icon={<SparkleIcon />} onClick={onGenerate} style={{ width: '100%' }}>
-            Start with a generated city
-          </Button>
-          <Button variant="secondary" icon={<StationIcon />} onClick={onBlank} style={{ width: '100%' }}>
-            Start with a blank canvas
-          </Button>
+        {/* Two slots rather than two buttons: the choice is between two kinds of map, and a
+            picture of each says which is which faster than a label can. Each preview is drawn
+            in the app's own vocabulary — its line colours, its station markers, its grid — so
+            the slot is a small promise about what's behind it. */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--gap-md)', width: '100%' }}>
+          <button type="button" className="mlb-slot" onClick={onGenerate}>
+            <svg viewBox="0 0 120 78" className="mlb-slot-art" aria-hidden="true">
+              <rect width="120" height="78" fill="var(--bg-page)" />
+              <g stroke="var(--border-default)" strokeWidth="0.5" opacity="0.7">
+                {[16, 32, 48, 64].map(y => (
+                  <line key={y} x1="0" y1={y} x2="120" y2={y} />
+                ))}
+                {[20, 40, 60, 80, 100].map(x => (
+                  <line key={x} x1={x} y1="0" x2={x} y2="78" />
+                ))}
+              </g>
+              <g fill="none" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 24h30l14 14h34" stroke={LINE_COLORS[0]} />
+                <path d="M22 60h26l16-16h40" stroke={LINE_COLORS[2]} />
+                <path d="M58 68V38l12-12h28" stroke={LINE_COLORS[1]} />
+              </g>
+              <g fill="var(--bg-page)" stroke="var(--text-primary)" strokeWidth="1.6">
+                <circle cx="14" cy="24" r="2.6" />
+                <circle cx="58" cy="38" r="3.4" />
+                <circle cx="92" cy="38" r="2.6" />
+                <circle cx="22" cy="60" r="2.6" />
+                <circle cx="70" cy="26" r="2.6" />
+                <circle cx="98" cy="26" r="2.6" />
+              </g>
+            </svg>
+            <span className="mlb-slot-title">Generated city</span>
+            <span className="mlb-slot-sub">A whole network, ready to pull apart</span>
+          </button>
+
+          <button type="button" className="mlb-slot" onClick={onBlank}>
+            <svg viewBox="0 0 120 78" className="mlb-slot-art" aria-hidden="true">
+              <rect width="120" height="78" fill="var(--bg-page)" />
+              <g stroke="var(--border-default)" strokeWidth="0.5" opacity="0.7">
+                {[16, 32, 48, 64].map(y => (
+                  <line key={y} x1="0" y1={y} x2="120" y2={y} />
+                ))}
+                {[20, 40, 60, 80, 100].map(x => (
+                  <line key={x} x1={x} y1="0" x2={x} y2="78" />
+                ))}
+              </g>
+            </svg>
+            <span className="mlb-slot-title">Blank canvas</span>
+            <span className="mlb-slot-sub">An empty grid and a free hand</span>
+          </button>
         </div>
 
         {/* Small, and last, because it is a notice rather than a welcome — but present, because

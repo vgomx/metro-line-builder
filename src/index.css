@@ -336,3 +336,56 @@ body {
     opacity: 0;
   }
 }
+
+/* Entry slots in the welcome dialog: a picture of the map you'd get, with its label under it.
+   The art sits in its own framed box so the two previews read as two documents to choose
+   between rather than as two illustrations sharing a background. */
+.mlb-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mlb-slot-art {
+  width: 100%;
+  height: auto;
+  display: block;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: 8px;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.mlb-slot:hover .mlb-slot-art,
+.mlb-slot:focus-visible .mlb-slot-art {
+  border-color: var(--interactive-primary);
+  transform: translateY(-2px);
+}
+
+.mlb-slot:focus-visible {
+  outline: none;
+}
+
+.mlb-slot:focus-visible .mlb-slot-art {
+  box-shadow: 0 0 0 2px var(--brand-500);
+}
+
+.mlb-slot-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mlb-slot-sub {
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
