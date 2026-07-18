@@ -152,6 +152,34 @@ body {
   background: var(--color-info-bg);
   border-color: var(--brand-500);
 }
+/* The swatch whose symbol is currently in flight. It stays in place — the palette isn't
+   losing anything — but fades to say the copy in hand came from here. */
+.mlb-poi-swatch[data-dragging='true'] {
+  opacity: 0.35;
+}
+
+/* The tile the pointer carries during a drag. Dressed as the marker it will become — same
+   surface, same border, same rounding as the plate on the map — so the gesture ends by
+   putting down the thing that was picked up, rather than by releasing a bare cutout.
+
+   Parked off-screen because the browser snapshots it at setDragImage time and must find it
+   rendered; it never appears here, only in the snapshot. */
+.mlb-poi-drag-tile {
+  position: fixed;
+  top: -200px;
+  left: -200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+}
+
 .mlb-poi-swatch:focus-visible {
   outline: 2px solid var(--brand-500);
   outline-offset: 1px;
