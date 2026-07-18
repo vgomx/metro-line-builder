@@ -255,6 +255,7 @@ function App() {
             onAddGeoPoint={withSound('node', addGeoPoint)}
             onAddPoi={withSound('station', (x: number, y: number, icon: string) => addPoi(x, y, icon, openMojiLabel(icon)))}
             onMovePois={movePois}
+            onExitPoiTool={() => handleSetTool('select')}
             onFinishGeoFeature={withSound('lineDone', finishGeoFeature)}
             onCancelGeoFeature={cancelGeoFeature}
             onSetSelection={handleSetSelection}

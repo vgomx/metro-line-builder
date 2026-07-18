@@ -67,6 +67,8 @@ interface MapCanvasProps {
   onAddGeoPoint: (x: number, y: number) => void
   /** A symbol has been dropped on the map — the icon comes from the drag itself. */
   onAddPoi: (x: number, y: number, icon: string) => void
+  /** The canvas has been clicked while the point-of-interest tool is up — put the tool down. */
+  onExitPoiTool: () => void
   onMovePois: (ids: string[], dx: number, dy: number) => void
   onFinishGeoFeature: () => void
   onCancelGeoFeature: () => void
@@ -157,6 +159,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onAddGeoPoint,
     onAddPoi,
     onMovePois,
+    onExitPoiTool,
     onFinishGeoFeature,
     onCancelGeoFeature,
     onSetSelection,
@@ -542,6 +545,17 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     setDrag({ kind: 'none' })
   }
 
+  // The point-of-interest palette covers a good slice of the map, and once the landmarks are
+  // down there's nothing left to pick from it. A click on the canvas is the natural way to say
+  // so: the tool goes back to select and the panel leaves with it. On the root rather than the
+  // background rect so a click that lands on a station or a line dismisses it too — with the
+  // tool up, neither of those does anything else. Space-held panning is exempt: that's
+  // navigation, and it would be a poor reward for looking around.
+  const handleRootPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (e.button !== 0 || spaceHeld) return
+    if (tool === 'add-poi') onExitPoiTool()
+  }
+
   // Dragging a symbol in from the palette. dragover has to preventDefault on every event or
   // the browser refuses the drop, and the payload itself is unreadable until drop — only the
   // *types* are exposed mid-drag, which is exactly enough to tell our symbols from anything
@@ -713,6 +727,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       width="100%"
       height="100%"
       style={{ display: 'block', background: 'var(--bg-page)', cursor, userSelect: 'none', WebkitUserSelect: 'none' }}
+      onPointerDown={handleRootPointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={() => setCursorWorld(null)}
