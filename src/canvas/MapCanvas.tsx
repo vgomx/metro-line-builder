@@ -138,6 +138,8 @@ const DRAW_TOOLS: Tool[] = ['add-station', 'draw-line', 'draw-river', 'draw-park
  * to settle into it. */
 const IMPACT_MS = 520
 const SETTLE_MS = 340
+/** A station's ripple: shorter than a landmark's, because it's a nudge rather than an event. */
+const STATION_RIPPLE_MS = 380
 /** How long a deleted landmark takes to come apart, and how long its ghost is held. */
 const CRUMBLE_MS = 380
 const POI_EXIT_HOLD_MS = 440
@@ -207,7 +209,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const [dropPoint, setDropPoint] = useState<Point | null>(null)
   /** The last landing, kept only long enough for the ripple to play out. Keyed so two drops in
    * quick succession restart the animation rather than sharing one that's already running. */
-  const [impact, setImpact] = useState<{ key: number; points: Point[] } | null>(null)
+  const [impact, setImpact] = useState<{ key: number; points: Point[]; soft: boolean } | null>(null)
   const impactSeq = useRef(0)
   /** Landmarks that have just been put down after a move, so their marker settles the way a
    * freshly dropped one does. New arrivals come from useAppearance instead — they have no
@@ -220,12 +222,17 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
    * they're the same gesture as far as the map is concerned, and only the sound and the
    * marker's own animation differ between them.
    */
-  const announceLanding = (points: Point[], settled: string[] = []) => {
+  const showImpact = (points: Point[], soft: boolean) => {
     if (points.length === 0) return
     impactSeq.current += 1
     const key = impactSeq.current
-    setImpact({ key, points })
-    window.setTimeout(() => setImpact(prev => (prev?.key === key ? null : prev)), IMPACT_MS)
+    setImpact({ key, points, soft })
+    window.setTimeout(() => setImpact(prev => (prev?.key === key ? null : prev)), soft ? STATION_RIPPLE_MS : IMPACT_MS)
+  }
+
+  const announceLanding = (points: Point[], settled: string[] = []) => {
+    if (points.length === 0) return
+    showImpact(points, false)
     if (settled.length > 0) {
       setSettlingPoiIds(new Set(settled))
       window.setTimeout(() => setSettlingPoiIds(new Set()), SETTLE_MS)
@@ -599,6 +606,14 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         )
         if (target) onMergeStations(target.id, draggedId)
       }
+
+      // Where each dragged station came to rest. The landmark's ripple, dialled down: a
+      // station moves constantly while a map is being drawn, so it gets a nudge rather than
+      // the ceremony a landmark gets.
+      showImpact(
+        drag.ids.map(id => stations[id]).filter((s): s is Station => Boolean(s)).map(s => ({ x: s.x, y: s.y })),
+        true,
+      )
 
       snapSessionRef.current += 1
       setSnapSession({ key: String(snapSessionRef.current), originalPositions: drag.originalPositions })
@@ -1046,16 +1061,23 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           <g key={impact.key} style={{ pointerEvents: 'none' }}>
             {impact.points.map((point, index) => (
               <g key={index} transform={`translate(${point.x}, ${point.y})`}>
-                {[0, 90].map(delay => (
+                {(impact.soft ? [0] : [0, 90]).map(delay => (
                   <g
                     key={delay}
                     style={{
                       transformBox: 'fill-box',
                       transformOrigin: 'center',
-                      animation: `mlb-poi-impact ${IMPACT_MS - delay}ms cubic-bezier(0.2, 0.6, 0.3, 1) ${delay}ms both`,
+                      animation: impact.soft
+                        ? `mlb-station-ripple ${STATION_RIPPLE_MS}ms cubic-bezier(0.2, 0.6, 0.3, 1) both`
+                        : `mlb-poi-impact ${IMPACT_MS - delay}ms cubic-bezier(0.2, 0.6, 0.3, 1) ${delay}ms both`,
                     }}
                   >
-                    <circle r={13} fill="none" stroke="var(--text-primary)" strokeWidth={2} />
+                    <circle
+                      r={impact.soft ? 9 : 13}
+                      fill="none"
+                      stroke="var(--text-primary)"
+                      strokeWidth={impact.soft ? 1.5 : 2}
+                    />
                   </g>
                 ))}
               </g>
