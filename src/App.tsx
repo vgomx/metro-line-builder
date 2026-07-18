@@ -14,6 +14,7 @@ import { CanvasLegend } from './components/CanvasLegend'
 import { LineAnnouncer } from './components/LineAnnouncer'
 import { exportMapAsJson, pickMapFile } from './export'
 import { exclusiveStationIds, stationIdsOfLine } from './canvas/lineNodes'
+import { geoTypeOfTool, MIN_GEO_POINTS } from './geoDraft'
 import { useTheme } from './useTheme'
 import { useSound } from './useSound'
 import { playSound } from './sound'
@@ -237,8 +238,33 @@ function App() {
       ? `${selectedGeoFeature.type === 'river' ? 'River' : 'Park'}: ${selectedGeoFeature.name}`
       : null
 
-  const geoDraftLabel = state.tool === 'draw-river' ? 'river' : state.tool === 'draw-park' ? 'park' : null
-  const geoMinPoints = state.tool === 'draw-park' ? 3 : 2
+  /**
+   * What the drawing tool in hand is drafting, or null if it isn't one. Both kinds answer the
+   * same four questions — how to start, how many points before it's finishable, what the
+   * button says, and what finishing calls — so the chrome asks them once rather than existing
+   * twice with rivers and parks getting the poorer half.
+   */
+  const geoType = geoTypeOfTool(state.tool)
+  const draft =
+    state.tool === 'draw-line'
+      ? {
+          points: state.draftLineNodes.length,
+          minimum: 2,
+          startHint: 'Click a station or the canvas to start drawing a line · Esc to put the pen down',
+          finishLabel: state.draftLineId
+            ? `Update line (${state.draftLineNodes.length} points)`
+            : `Finish line (${state.draftLineNodes.length} points)`,
+          onFinish: finishDraftLine,
+        }
+      : geoType
+        ? {
+            points: state.draftGeoPoints.length,
+            minimum: MIN_GEO_POINTS[geoType],
+            startHint: `Click the canvas to start drawing a ${geoType} · Esc to put the pen down`,
+            finishLabel: `Finish ${geoType} (${state.draftGeoPoints.length} points)`,
+            onFinish: finishGeoFeature,
+          }
+        : null
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100svh' }}>
@@ -299,7 +325,7 @@ function App() {
             onAddPoi={(x: number, y: number, icon: string) => addPoi(x, y, icon, openMojiLabel(icon))}
             onPoiLand={() => playSound('drop')}
             onMovePois={movePois}
-            onExitPoiTool={() => handleSetTool('select')}
+            onReturnToSelect={() => handleSetTool('select')}
             onFinishGeoFeature={withSound('lineDone', finishGeoFeature)}
             onCancelGeoFeature={cancelGeoFeature}
             onSetSelection={handleSetSelection}
@@ -346,7 +372,11 @@ function App() {
 
             {/* Everything the line-drawing tool has to say, stacked in one column so the
                 button and the hint beneath it can't land on top of each other. */}
-            {state.tool === 'draw-line' && (
+            {/* Everything a drawing tool has to say, in one column so the button and the
+                hints beneath it can't land on top of each other. Lines and geography share it:
+                they are drawn the same way, finished the same way, and were equally silent
+                about both. */}
+            {draft && (
               <div
                 style={{
                   position: 'absolute',
@@ -359,7 +389,7 @@ function App() {
                   gap: 'var(--gap-sm)',
                 }}
               >
-                {state.draftLineNodes.length === 0 && (
+                {draft.points === 0 && (
                   <div
                     style={{
                       background: 'var(--ink-900)',
@@ -371,37 +401,19 @@ function App() {
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    Click a station or the canvas to start drawing a line
+                    {draft.startHint}
                   </div>
                 )}
 
-                {state.draftLineNodes.length >= 2 && (
+                {draft.points >= draft.minimum && (
                   <div style={{ pointerEvents: 'auto' }}>
-                    <Button variant="primary" onClick={finishDraftLine}>
-                      {state.draftLineId
-                        ? `Update line (${state.draftLineNodes.length} points)`
-                        : `Finish line (${state.draftLineNodes.length} points)`}
+                    <Button variant="primary" onClick={draft.onFinish}>
+                      {draft.finishLabel}
                     </Button>
                   </div>
                 )}
 
-                <DraftFinishHint active={state.draftLineNodes.length >= 2} />
-              </div>
-            )}
-
-            {geoDraftLabel && state.draftGeoPoints.length >= geoMinPoints && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 'var(--space-3)',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  pointerEvents: 'auto',
-                }}
-              >
-                <Button variant="primary" onClick={finishGeoFeature}>
-                  Finish {geoDraftLabel} ({state.draftGeoPoints.length} points)
-                </Button>
+                <DraftFinishHint active={draft.points >= draft.minimum} />
               </div>
             )}
 

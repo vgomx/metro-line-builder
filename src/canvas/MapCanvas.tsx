@@ -14,6 +14,7 @@ import { SnapAnimation } from './SnapAnimation'
 import { RefanAnimation } from './RefanAnimation'
 import { routeOrthogonal } from './routing'
 import { GRID_SIZE, snapToGrid, snapToPoiGrid } from '../grid'
+import { minGeoPointsForTool } from '../geoDraft'
 import {
   buildLineTrack,
   buildNetworkGeometry,
@@ -69,8 +70,9 @@ interface MapCanvasProps {
   onAddPoi: (x: number, y: number, icon: string) => void
   /** A landmark has come to rest, whether newly dropped or moved. Fires once per landing. */
   onPoiLand?: () => void
-  /** The canvas has been clicked while the point-of-interest tool is up — put the tool down. */
-  onExitPoiTool: () => void
+  /** Put the drawing tool down and go back to select — a click on the canvas with the
+   * point-of-interest palette up, or Escape with nothing drafted. */
+  onReturnToSelect: () => void
   onMovePois: (ids: string[], dx: number, dy: number) => void
   onFinishGeoFeature: () => void
   onCancelGeoFeature: () => void
@@ -173,7 +175,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onAddGeoPoint,
     onAddPoi,
     onMovePois,
-    onExitPoiTool,
+    onReturnToSelect,
     onPoiLand,
     onFinishGeoFeature,
     onCancelGeoFeature,
@@ -307,6 +309,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       if (e.key === 'Escape') {
         if (draftLineNodes.length > 0) onCancelDraftLine()
         else if (draftGeoPoints.length > 0) onCancelGeoFeature()
+        // Nothing drafted, so Escape backs out of the tool itself rather than doing nothing
+        // visible. A drawing tool you can't put down with the key that means "stop" is the
+        // same trap as a draft you can't finish.
+        else if (DRAW_TOOLS.includes(tool) || tool === 'add-poi') onReturnToSelect()
         else onClearSelection()
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedWaypoint) {
@@ -322,8 +328,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           onDeleteSelected()
         }
       } else if (e.key === 'Enter') {
+        // Against the tool's own minimum, not a flat two. A park needs three points, and
+        // finishing one on two reached a reducer that silently threw the draft away.
+        const geoMinimum = minGeoPointsForTool(tool)
         if (draftLineNodes.length >= 2) onFinishDraftLine()
-        else if (draftGeoPoints.length >= 2) onFinishGeoFeature()
+        else if (geoMinimum !== null && draftGeoPoints.length >= geoMinimum) onFinishGeoFeature()
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault()
         if (e.shiftKey) onRedo()
@@ -343,9 +352,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     selectedGeoFeatureIds,
     selectedPoiIds,
     selectedWaypoint,
+    tool,
     onCancelDraftLine,
     onCancelGeoFeature,
     onClearSelection,
+    onReturnToSelect,
     onDeleteWaypoint,
     onDeleteSelected,
     onFinishDraftLine,
@@ -608,7 +619,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   // navigation, and it would be a poor reward for looking around.
   const handleRootPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (e.button !== 0 || spaceHeld) return
-    if (tool === 'add-poi') onExitPoiTool()
+    if (tool === 'add-poi') onReturnToSelect()
   }
 
   // Dragging a symbol in from the palette. dragover has to preventDefault on every event or
@@ -641,8 +652,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     if (spaceHeld) return
     if (tool === 'draw-line' && draftLineNodes.length >= 2) {
       onFinishDraftLine()
-    } else if ((tool === 'draw-river' || tool === 'draw-park') && draftGeoPoints.length >= 2) {
-      onFinishGeoFeature()
+    } else {
+      const geoMinimum = minGeoPointsForTool(tool)
+      if (geoMinimum !== null && draftGeoPoints.length >= geoMinimum) onFinishGeoFeature()
     }
   }
 

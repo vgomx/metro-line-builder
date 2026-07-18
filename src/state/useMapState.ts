@@ -5,6 +5,7 @@ import { DEFAULT_COMPANY_SYMBOL } from '../companySymbols'
 import { nextLineColor } from '../lineColors'
 import { isUsableLineNumber, nextFreeLineNumber } from '../lineNumber'
 import { snapToGrid, snapToPoiGrid } from '../grid'
+import { MIN_GEO_POINTS } from '../geoDraft'
 import { pickLineName, pickMapName, pickStationName } from '../names'
 import { buildRandomMap } from '../generate'
 import { exactSegmentIndex, exclusiveStationIds, lineHasStation, resolveLineNodes, sameNode } from '../canvas/lineNodes'
@@ -110,11 +111,6 @@ const MAX_HISTORY = 50
 const GEO_FEATURE_LABEL: Record<GeoFeatureType, string> = {
   river: 'River',
   park: 'Park',
-}
-
-const MIN_GEO_POINTS: Record<GeoFeatureType, number> = {
-  river: 2,
-  park: 3,
 }
 
 // Actions that mutate map content get a history entry pushed before they run, so
