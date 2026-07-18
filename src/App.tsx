@@ -431,7 +431,7 @@ function App() {
             onRecolorLine={recolorLine}
             onSetLineCompany={setLineCompany}
             onExtendLine={startExtendLine}
-            onDeleteLine={withSound('remove', deleteLine)}
+            onDeleteLine={withSound('remove', (lineId: string, withStations: boolean) => deleteLine(lineId, withStations))}
             onRenameStation={renameStation}
             onToggleTransfer={withSound('toggle', toggleStationTransfer)}
             onToggleMain={withSound('toggle', toggleStationMain)}

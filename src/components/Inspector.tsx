@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Badge, Button, Divider, Input, Select, Tag, Toggle } from 'metro-ds'
+import { createPortal } from 'react-dom'
+import { Badge, Button, Dialog, Divider, Input, Select, Tag, Toggle } from 'metro-ds'
 import { ParkIcon, PenIcon, PoiIcon, RiverIcon, TrashIcon } from '../icons'
 import { LINE_COLORS } from '../lineColors'
 import { isUsableLineNumber, MAX_LINE_NUMBER } from '../lineNumber'
@@ -56,6 +57,97 @@ function LineNumberField({
   )
 }
 
+
+/**
+ * "Delete line", and the question that goes with it: a line's stations outlive it by default,
+ * but the ones it alone served are usually rubble the user then has to clear by hand.
+ *
+ * The question is only worth asking when there's something to ask about — a line whose every
+ * stop is shared with another line has nothing that could go with it, so that case deletes
+ * straight away rather than opening a dialog with one real answer.
+ */
+function DeleteLineButton({
+  line,
+  lines,
+  stations,
+  onDeleteLine,
+}: {
+  line: Line
+  lines: Record<string, Line>
+  stations: Record<string, Station>
+  onDeleteLine: (lineId: string, withStations: boolean) => void
+}) {
+  const [asking, setAsking] = useState(false)
+
+  const others = Object.values(lines).filter(other => other.id !== line.id)
+  const ownStationIds = [...new Set(stationIdsOfLine(line))]
+  const exclusive = ownStationIds.filter(id => !others.some(other => lineHasStation(other, id)))
+  const shared = ownStationIds.length - exclusive.length
+  const name = line.name.trim() || `Line ${line.number}`
+
+  const remove = (withStations: boolean) => {
+    setAsking(false)
+    onDeleteLine(line.id, withStations)
+  }
+
+  return (
+    <>
+      <Button
+        variant="destructive"
+        size="sm"
+        icon={<TrashIcon />}
+        onClick={() => (exclusive.length > 0 ? setAsking(true) : remove(false))}
+      >
+        Delete line
+      </Button>
+
+      {/* Portalled for the same reason the More menu's dialogs are: the panel this sits in is
+          frosted, and a backdrop-filter makes the element the containing block for any fixed
+          descendant — leaving the dialog laid out against a 272px column instead of the
+          window. */}
+      {createPortal(
+        <Dialog
+          open={asking}
+          onClose={() => setAsking(false)}
+          title={`Delete ${name}?`}
+          width="440px"
+          footer={
+            <>
+              <Button variant="ghost" size="sm" onClick={() => setAsking(false)}>
+                Cancel
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => remove(false)}>
+                Keep stations
+              </Button>
+              <Button variant="destructive" size="sm" onClick={() => remove(true)}>
+                Delete {exclusive.length} station{exclusive.length === 1 ? '' : 's'} too
+              </Button>
+            </>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
+              {exclusive.length} of this line&rsquo;s {ownStationIds.length} stations are served by no other line.
+              They can go with it, or stay on the map for another route to pick up.
+            </p>
+            {shared > 0 && (
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
+                The other {shared} also {shared === 1 ? 'serves' : 'serve'} another line and {shared === 1 ? 'is' : 'are'} kept either way.
+              </p>
+            )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--gap-tight)' }}>
+              {exclusive.map(id => (
+                <Tag key={id}>{stations[id]?.name ?? id}</Tag>
+              ))}
+            </div>
+          </div>
+        </Dialog>,
+        document.body,
+      )}
+    </>
+  )
+}
+
 interface InspectorProps {
   selectedLine: Line | null
   selectedStation: Station | null
@@ -71,7 +163,7 @@ interface InspectorProps {
   onRecolorLine: (lineId: string, color: string) => void
   onSetLineCompany: (lineId: string, companyId: string | null) => void
   onExtendLine: (lineId: string, end: 'start' | 'end') => void
-  onDeleteLine: (lineId: string) => void
+  onDeleteLine: (lineId: string, withStations: boolean) => void
   onRenameStation: (stationId: string, name: string) => void
   onToggleTransfer: (stationId: string) => void
   onToggleMain: (stationId: string) => void
@@ -449,9 +541,7 @@ export function Inspector({
             </div>
           </div>
         </div>
-        <Button variant="destructive" size="sm" icon={<TrashIcon />} onClick={() => onDeleteLine(line.id)}>
-          Delete line
-        </Button>
+        <DeleteLineButton line={line} lines={lines} stations={stations} onDeleteLine={onDeleteLine} />
       </div>
     )
   }

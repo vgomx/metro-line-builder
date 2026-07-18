@@ -7,7 +7,7 @@ import { isUsableLineNumber, nextFreeLineNumber } from '../lineNumber'
 import { snapToGrid, snapToPoiGrid } from '../grid'
 import { pickLineName, pickMapName, pickStationName } from '../names'
 import { buildRandomMap } from '../generate'
-import { exactSegmentIndex, lineHasStation, resolveLineNodes, sameNode } from '../canvas/lineNodes'
+import { exactSegmentIndex, lineHasStation, resolveLineNodes, sameNode, stationIdsOfLine } from '../canvas/lineNodes'
 
 export interface DataSnapshot {
   mapName: string
@@ -93,7 +93,7 @@ type Action =
   | { type: 'selectWaypoint'; lineId: string; index: number }
   | { type: 'deleteWaypoint'; lineId: string; index: number }
   | { type: 'deleteSelected' }
-  | { type: 'deleteLine'; lineId: string }
+  | { type: 'deleteLine'; lineId: string; withStations: boolean }
   | { type: 'deleteStation'; stationId: string }
   | { type: 'renameLine'; lineId: string; name: string }
   | { type: 'setLineNumber'; lineId: string; number: number }
@@ -1012,13 +1012,34 @@ function reducer(rawState: MapState, action: Action): MapState {
     }
 
     case 'deleteLine': {
+      const line = state.lines[action.lineId]
       const lines = { ...state.lines }
       delete lines[action.lineId]
+
+      // Only the stations this line alone served can go with it. One that also sits on another
+      // line is that line's stop too, and taking it would tear a hole in a route the user
+      // never asked to touch — so the set is computed here rather than trusted from the caller,
+      // whatever the dialog offered.
+      const stations = { ...state.stations }
+      let stationOrder = state.stationOrder
+      let removedStationIds = new Set<string>()
+      if (action.withStations && line) {
+        const survivors = Object.values(lines)
+        removedStationIds = new Set(
+          stationIdsOfLine(line).filter(id => !survivors.some(other => lineHasStation(other, id))),
+        )
+        for (const id of removedStationIds) delete stations[id]
+        stationOrder = state.stationOrder.filter(id => !removedStationIds.has(id))
+      }
+
       return {
         ...state,
         lines,
+        stations,
+        stationOrder,
         lineOrder: state.lineOrder.filter(id => id !== action.lineId),
         selectedLineIds: state.selectedLineIds.filter(id => id !== action.lineId),
+        selectedStationIds: state.selectedStationIds.filter(id => !removedStationIds.has(id)),
         selectedWaypoint: state.selectedWaypoint?.lineId === action.lineId ? null : state.selectedWaypoint,
       }
     }
@@ -1242,7 +1263,10 @@ export function useMapState() {
     [],
   )
   const deleteSelected = useCallback(() => dispatch({ type: 'deleteSelected' }), [])
-  const deleteLine = useCallback((lineId: string) => dispatch({ type: 'deleteLine', lineId }), [])
+  const deleteLine = useCallback(
+    (lineId: string, withStations = false) => dispatch({ type: 'deleteLine', lineId, withStations }),
+    [],
+  )
   const deleteStation = useCallback((stationId: string) => dispatch({ type: 'deleteStation', stationId }), [])
   const renameLine = useCallback((lineId: string, name: string) => dispatch({ type: 'renameLine', lineId, name }), [])
   const setLineNumber = useCallback((lineId: string, number: number) => dispatch({ type: 'setLineNumber', lineId, number }), [])
