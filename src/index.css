@@ -205,3 +205,27 @@ body {
   outline: 2px solid var(--brand-500);
   outline-offset: 1px;
 }
+
+/* Accordion headings in the Legal dialog. A real button so the list is reachable and
+   operable from the keyboard, styled back down to a row: full width, text left, and the
+   licence tag riding the right edge. */
+.mlb-accordion-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+.mlb-accordion-head:hover {
+  background: var(--bg-subtle);
+}
+.mlb-accordion-head:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: -2px;
+}

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Dialog, Divider, IconButton } from 'metro-ds'
 import logoLightUrl from 'metro-ds/assets/logo-mark.svg'
 import logoDarkUrl from 'metro-ds/assets/logo-mark-white.svg'
-import { MoreIcon } from '../icons'
+import { ChevronDownIcon, MoreIcon } from '../icons'
 import { LEGAL_NOTICES } from '../legalNotices'
 import type { Theme } from '../useTheme'
 
@@ -16,7 +16,12 @@ interface MoreMenuProps {
 export function MoreMenu({ theme }: MoreMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeDialog, setActiveDialog] = useState<'legal' | 'about' | null>(null)
+  // One notice open at a time. Several at once would put the list back where it started —
+  // taller than the dialog, with the thing you just opened somewhere off the bottom.
+  const [openNotice, setOpenNotice] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const legalScrollRef = useRef<HTMLDivElement>(null)
+  const noticeRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   useEffect(() => {
     if (!menuOpen) return
@@ -36,7 +41,26 @@ export function MoreMenu({ theme }: MoreMenuProps) {
 
   const openDialog = (dialog: 'legal' | 'about') => {
     setMenuOpen(false)
+    setOpenNotice(null)
     setActiveDialog(dialog)
+  }
+
+  /**
+   * Opening a notice further down the list would otherwise leave its heading where it was
+   * while the text unfolded below the fold — so the newly opened one is brought to the top of
+   * the scroll surface. Deferred a frame because the text has to be in the DOM before there's
+   * anything to scroll to.
+   */
+  const toggleNotice = (name: string) => {
+    const next = openNotice === name ? null : name
+    setOpenNotice(next)
+    if (!next) return
+    requestAnimationFrame(() => {
+      const scroller = legalScrollRef.current
+      const item = noticeRefs.current[name]
+      if (!scroller || !item) return
+      scroller.scrollTo({ top: item.offsetTop - scroller.offsetTop, behavior: 'smooth' })
+    })
   }
 
   return (
@@ -78,44 +102,100 @@ export function MoreMenu({ theme }: MoreMenuProps) {
       {createPortal(
         <>
         <Dialog open={activeDialog === 'legal'} onClose={() => setActiveDialog(null)} title="Legal" width="560px">
-          {/* The dialog itself neither caps its height nor scrolls, and clips what overflows —
-              so with a notice per shipped package this list runs off the bottom of the screen
-              unreachable. Capping it here against the viewport gives the body its own scroll.
-              The subtracted space covers the dialog's own margin, header and padding; svh
-              rather than vh so a mobile browser's retracting toolbar doesn't crop it. */}
-          <div style={{ maxHeight: 'calc(100svh - 200px)', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+          {/* The dialog neither caps its height nor scrolls, and clips what overflows — so with
+              a notice per shipped package the list runs off the bottom of the screen
+              unreachable. Capping it against the viewport gives the body a scroll. The
+              subtracted space covers the dialog's own margin, header and padding; svh rather
+              than vh so a mobile browser's retracting toolbar doesn't crop it.
+
+              This is the only scrolling surface in the dialog. The notices are an accordion
+              precisely so it stays that way: a licence is thousands of words nobody reads
+              start to finish, and giving each one its own scroll box meant a wheel gesture
+              landed in whichever box the pointer happened to be over rather than on the list
+              you were trying to move. Collapsed, the whole list fits and the scroll belongs
+              to one thing. */}
+          <div
+            ref={legalScrollRef}
+            style={{ maxHeight: 'calc(100svh - 200px)', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}
+          >
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
               Metro Line Builder is built with the following open-source software. Only packages actually shipped
               in the app are listed below — build-only tooling isn't included since it never reaches end users.
             </p>
-            {LEGAL_NOTICES.map(notice => (
-              <div key={notice.name}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--gap-sm)', marginBottom: '6px' }}>
-                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>{notice.name}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-muted)' }}>
-                    {notice.license} — {notice.packages}
-                  </span>
-                </div>
-                <pre
-                  style={{
-                    margin: 0,
-                    padding: 'var(--space-3)',
-                    background: 'var(--bg-page)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 'var(--radius-md)',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '10px',
-                    lineHeight: 1.5,
-                    color: 'var(--text-secondary)',
-                    whiteSpace: 'pre-wrap',
-                    maxHeight: '160px',
-                    overflowY: 'auto',
-                  }}
-                >
-                  {notice.text}
-                </pre>
-              </div>
-            ))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {LEGAL_NOTICES.map(notice => {
+                const isOpen = openNotice === notice.name
+                return (
+                  <div
+                    key={notice.name}
+                    ref={el => { noticeRefs.current[notice.name] = el }}
+                    style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}
+                  >
+                    <button
+                      type="button"
+                      className="mlb-accordion-head"
+                      aria-expanded={isOpen}
+                      aria-controls={`legal-${notice.name}`}
+                      onClick={() => toggleNotice(notice.name)}
+                    >
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          display: 'flex',
+                          color: 'var(--text-muted)',
+                          transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
+                          transition: 'transform 120ms ease',
+                        }}
+                      >
+                        <ChevronDownIcon />
+                      </span>
+                      <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {notice.name}
+                      </span>
+                      <span
+                        style={{
+                          marginLeft: 'auto',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: '10px',
+                          color: 'var(--text-muted)',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {notice.license}
+                      </span>
+                    </button>
+                    {isOpen && (
+                      <div id={`legal-${notice.name}`} style={{ padding: '0 var(--space-3) var(--space-3)' }}>
+                        <div
+                          style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: '10px',
+                            color: 'var(--text-muted)',
+                            marginBottom: '8px',
+                          }}
+                        >
+                          {notice.packages}
+                        </div>
+                        {/* No maxHeight and no overflow here on purpose: the licence runs to
+                            its full length and the dialog's own scroll carries it. */}
+                        <pre
+                          style={{
+                            margin: 0,
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: '10px',
+                            lineHeight: 1.55,
+                            color: 'var(--text-secondary)',
+                            whiteSpace: 'pre-wrap',
+                          }}
+                        >
+                          {notice.text}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </Dialog>
 
