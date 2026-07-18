@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { Button, Toast } from 'metro-ds'
-import { useMapState } from './state/useMapState'
+import { hasSavedMap, useMapState } from './state/useMapState'
 import { MapCanvas } from './canvas/MapCanvas'
 import type { MapCanvasHandle } from './canvas/MapCanvas'
 import { TopBar } from './components/TopBar'
@@ -9,6 +9,7 @@ import { RightPanel, RIGHT_PANEL_WIDTH } from './components/RightPanel'
 import { CanvasStats, SelectionLabel } from './components/CanvasOverlay'
 import { PoiPicker } from './components/PoiPicker'
 import { DraftFinishHint } from './components/DraftFinishHint'
+import { WelcomeDialog } from './components/WelcomeDialog'
 import { DeleteStationsDialog } from './components/DeleteStationsDialog'
 import { CanvasLegend } from './components/CanvasLegend'
 import { LineAnnouncer } from './components/LineAnnouncer'
@@ -106,6 +107,9 @@ function App() {
   const [showGrid, setShowGrid] = useState(true)
   const [showTrains, setShowTrains] = useState(false)
   const [showPanel, setShowPanel] = useState(true)
+  // Asked once, on the first visit this browser has ever had. Read at mount, before the
+  // persistence effect writes anything — a beat later there would be a saved map either way.
+  const [showWelcome, setShowWelcome] = useState(() => !hasSavedMap())
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
   // Set while the Delete key is waiting on an answer about the stations its lines alone serve.
@@ -131,6 +135,15 @@ function App() {
     'Behold — a transit network nobody asked for. Ctrl+Z to un-behold it.',
     'A whole new city. The commuters are already grumbling.',
   ]
+  const handleWelcomeGenerate = () => {
+    setShowWelcome(false)
+    playSound('generate')
+    generateMap()
+    // Same two frames the Surprise button waits: React has to commit the new line paths and
+    // the browser has to lay out the fresh SVG before there's anything to frame.
+    requestAnimationFrame(() => requestAnimationFrame(() => mapCanvasRef.current?.fitContent()))
+  }
+
   const handleSurprise = () => {
     playSound('generate')
     generateMap()
@@ -443,6 +456,13 @@ function App() {
             onDeleteAll={() => resolvePendingDelete(true)}
           />
         )}
+
+        <WelcomeDialog
+          open={showWelcome}
+          theme={theme}
+          onGenerate={handleWelcomeGenerate}
+          onBlank={() => setShowWelcome(false)}
+        />
 
         <LeftToolbar tool={state.tool} onSetTool={handleSetTool} theme={theme} />
 

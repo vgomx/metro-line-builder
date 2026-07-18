@@ -340,6 +340,22 @@ function normalizeSnapshot(parsed: DataSnapshot): DataSnapshot {
   return parsed
 }
 
+/**
+ * Whether this browser has a map from a previous visit. Read before anything is written —
+ * the persistence effect saves on mount, so a moment later every visitor looks like a
+ * returning one, and the welcome would never show.
+ */
+export function hasSavedMap(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY) !== null
+  } catch {
+    // A browser with storage denied has no saved map by definition, and is also a browser
+    // that will greet its user every time. That's the honest answer to a question it can't
+    // remember the answer to.
+    return false
+  }
+}
+
 function loadPersisted(): DataSnapshot | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
