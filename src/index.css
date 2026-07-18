@@ -277,3 +277,48 @@ body {
     transform: translateY(0) scale(1);
   }
 }
+
+/* A landmark being deleted, answering the landing: the rings that were pushed out on impact
+   rush back in, and the marker buckles — a lurch outward first, then it crumples to nothing
+   with a twist. The twist is what keeps it from reading as a plain shrink. */
+@keyframes mlb-poi-crumble {
+  0% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  30% {
+    transform: scale(1.1) rotate(-4deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.12) rotate(11deg);
+    opacity: 0;
+  }
+}
+
+@keyframes mlb-poi-collapse {
+  0% {
+    transform: scale(2.3);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(0.15);
+    opacity: 0;
+  }
+}
+
+/* The drawing hint arriving — it appears mid-gesture, so it rises into place rather than
+   snapping in under the pointer. */
+@keyframes mlb-hint-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

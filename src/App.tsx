@@ -8,6 +8,7 @@ import { LeftToolbar, LEFT_TOOLBAR_WIDTH } from './components/LeftToolbar'
 import { RightPanel, RIGHT_PANEL_WIDTH } from './components/RightPanel'
 import { CanvasStats, SelectionLabel } from './components/CanvasOverlay'
 import { PoiPicker } from './components/PoiPicker'
+import { DraftFinishHint } from './components/DraftFinishHint'
 import { DeleteStationsDialog } from './components/DeleteStationsDialog'
 import { CanvasLegend } from './components/CanvasLegend'
 import { LineAnnouncer } from './components/LineAnnouncer'
@@ -335,40 +336,48 @@ function App() {
               />
             )}
 
-            {state.tool === 'draw-line' && state.draftLineNodes.length === 0 && (
+            {/* Everything the line-drawing tool has to say, stacked in one column so the
+                button and the hint beneath it can't land on top of each other. */}
+            {state.tool === 'draw-line' && (
               <div
                 style={{
                   position: 'absolute',
                   top: 'var(--space-3)',
                   left: '50%',
                   transform: 'translateX(-50%)',
-                  background: 'var(--ink-900)',
-                  color: 'var(--ink-0)',
-                  borderRadius: 'var(--radius-lg)',
-                  padding: '5px 12px',
-                  fontSize: 'var(--text-xs)',
-                  fontWeight: 500,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 'var(--gap-sm)',
                 }}
               >
-                Click a station or the canvas to start drawing a line
-              </div>
-            )}
+                {state.draftLineNodes.length === 0 && (
+                  <div
+                    style={{
+                      background: 'var(--ink-900)',
+                      color: 'var(--ink-0)',
+                      borderRadius: 'var(--radius-lg)',
+                      padding: '5px 12px',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 500,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Click a station or the canvas to start drawing a line
+                  </div>
+                )}
 
-            {state.draftLineNodes.length >= 2 && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 'var(--space-3)',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  pointerEvents: 'auto',
-                }}
-              >
-                <Button variant="primary" onClick={finishDraftLine}>
-                  {state.draftLineId
-                    ? `Update line (${state.draftLineNodes.length} points)`
-                    : `Finish line (${state.draftLineNodes.length} points)`}
-                </Button>
+                {state.draftLineNodes.length >= 2 && (
+                  <div style={{ pointerEvents: 'auto' }}>
+                    <Button variant="primary" onClick={finishDraftLine}>
+                      {state.draftLineId
+                        ? `Update line (${state.draftLineNodes.length} points)`
+                        : `Finish line (${state.draftLineNodes.length} points)`}
+                    </Button>
+                  </div>
+                )}
+
+                <DraftFinishHint active={state.draftLineNodes.length >= 2} />
               </div>
             )}
 

@@ -24,7 +24,7 @@ import {
 } from './lineNodes'
 import type { RefanLine } from './lineNodes'
 import { computeLabelPlacements } from './labelPlacement'
-import { POI_DRAG_MIME } from '../openmoji'
+import { openMojiUrl, POI_DRAG_MIME } from '../openmoji'
 import { useAppearance } from './useAppearance'
 import { useExit } from './useExit'
 import { buildLinePath } from './lineNodes'
@@ -136,6 +136,9 @@ const DRAW_TOOLS: Tool[] = ['add-station', 'draw-line', 'draw-river', 'draw-park
  * to settle into it. */
 const IMPACT_MS = 520
 const SETTLE_MS = 340
+/** How long a deleted landmark takes to come apart, and how long its ghost is held. */
+const CRUMBLE_MS = 380
+const POI_EXIT_HOLD_MS = 440
 const LINE_SHATTER_MS = 620
 const LINE_EXIT_HOLD_MS = 700
 const RIVER_DRAFT_STROKE = '#60A5FA'
@@ -749,6 +752,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     LINE_EXIT_HOLD_MS,
   )
 
+  const exitingPois = useExit(
+    new Map(poiList.map(poi => [poi.id, { x: poi.x, y: poi.y, icon: poi.icon }])),
+    POI_EXIT_HOLD_MS,
+  )
+
   const draftLineStationIdSet = new Set(
     draftLineNodes.filter((n): n is Extract<LineNode, { kind: 'station' }> => n.kind === 'station').map(n => n.stationId),
   )
@@ -1053,6 +1061,45 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             onPointerDown={handlePoiPointerDown}
           />
         ))}
+
+        {/* A deleted landmark comes apart where it stood, the impact rings running backwards
+            into it as it goes. */}
+        {exitingPois.map(ghost => {
+          const href = openMojiUrl(ghost.data.icon)
+          return (
+            <g key={ghost.key} transform={`translate(${ghost.data.x}, ${ghost.data.y})`} style={{ pointerEvents: 'none' }}>
+              <g
+                style={{
+                  transformBox: 'fill-box',
+                  transformOrigin: 'center',
+                  animation: `mlb-poi-collapse ${CRUMBLE_MS}ms cubic-bezier(0.4, 0, 0.4, 1) both`,
+                }}
+              >
+                <circle r={13} fill="none" stroke="var(--text-primary)" strokeWidth={2} />
+              </g>
+              <g
+                style={{
+                  transformBox: 'fill-box',
+                  transformOrigin: 'center',
+                  animation: `mlb-poi-crumble ${CRUMBLE_MS}ms cubic-bezier(0.5, -0.2, 0.7, 1) both`,
+                }}
+              >
+                <rect
+                  x={-14}
+                  y={-14}
+                  width={28}
+                  height={28}
+                  rx={6}
+                  fill="var(--bg-surface)"
+                  stroke="var(--border-subtle)"
+                  strokeWidth={1}
+                  opacity={0.92}
+                />
+                {href && <image href={href} x={-13} y={-13} width={26} height={26} />}
+              </g>
+            </g>
+          )
+        })}
 
         {/* Deleted stations shrink and fade from where they were. */}
         {exitingStations.map(ghost => (
