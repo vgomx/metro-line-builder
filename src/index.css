@@ -123,6 +123,27 @@ body {
   }
 }
 
+/* A deleted line comes apart rather than fading: the stroke fractures into shorter and
+   shorter dashes until there is nothing left of it. Values are fractions of the path's
+   length (the ghost carries pathLength="1"), so a route breaks into a consistent number of
+   pieces regardless of how far it runs. Round caps turn the last fragments into grains.
+
+   No particles anywhere in this — it is one animated property on the path the renderer
+   already produced, which is why it costs nothing on a long line and needs no measuring. */
+@keyframes mlb-line-shatter {
+  0% {
+    stroke-dasharray: 1 0;
+  }
+  55% {
+    stroke-dasharray: 0.035 0.022;
+    opacity: 0.9;
+  }
+  100% {
+    stroke-dasharray: 0.006 0.05;
+    opacity: 0;
+  }
+}
+
 /* Icon tiles, shared by the picker's palette and the Inspector's symbol grid. The artwork
    carries the meaning, so the chrome stays out of its way until hover or selection. */
 .mlb-poi-swatch {
@@ -152,7 +173,59 @@ body {
   background: var(--color-info-bg);
   border-color: var(--brand-500);
 }
+/* The swatch whose symbol is currently in flight. It stays in place — the palette isn't
+   losing anything — but fades to say the copy in hand came from here. */
+.mlb-poi-swatch[data-dragging='true'] {
+  opacity: 0.35;
+}
+
+/* The tile the pointer carries during a drag. Dressed as the marker it will become — same
+   surface, same border, same rounding as the plate on the map — so the gesture ends by
+   putting down the thing that was picked up, rather than by releasing a bare cutout.
+
+   Parked off-screen because the browser snapshots it at setDragImage time and must find it
+   rendered; it never appears here, only in the snapshot. */
+.mlb-poi-drag-tile {
+  position: fixed;
+  top: -200px;
+  left: -200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+}
+
 .mlb-poi-swatch:focus-visible {
   outline: 2px solid var(--brand-500);
   outline-offset: 1px;
+}
+
+/* Accordion headings in the Legal dialog. A real button so the list is reachable and
+   operable from the keyboard, styled back down to a row: full width, text left, and the
+   licence tag riding the right edge. */
+.mlb-accordion-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+.mlb-accordion-head:hover {
+  background: var(--bg-subtle);
+}
+.mlb-accordion-head:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: -2px;
 }

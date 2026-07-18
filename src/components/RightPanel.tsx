@@ -41,7 +41,7 @@ interface RightPanelProps {
   onRecolorLine: (lineId: string, color: string) => void
   onSetLineCompany: (lineId: string, companyId: string | null) => void
   onExtendLine: (lineId: string, end: 'start' | 'end') => void
-  onDeleteLine: (lineId: string) => void
+  onDeleteLine: (lineId: string, withStations: boolean) => void
   onRenameStation: (stationId: string, name: string) => void
   onToggleTransfer: (stationId: string) => void
   onToggleMain: (stationId: string) => void

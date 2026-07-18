@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import type { DragEvent as ReactDragEvent } from 'react'
 import { Input } from 'metro-ds'
 import { openMojiBySubgroup, openMojiUrl, POI_DRAG_MIME, SUBGROUP_LABELS } from '../openmoji'
 
@@ -9,9 +10,48 @@ import { openMojiBySubgroup, openMojiUrl, POI_DRAG_MIME, SUBGROUP_LABELS } from 
  * of the gesture. The tool is modal, so the picker is too: it appears with the tool and
  * leaves with it.
  */
+/** Side of the tile the pointer carries, in px. Larger than a swatch and close to the
+ * marker's drawn size, so what's in hand reads as the thing that will land. */
+const DRAG_TILE = 40
+const DRAG_TILE_ICON = 30
+
 export function PoiPicker() {
   const [query, setQuery] = useState('')
+  const [draggingIcon, setDraggingIcon] = useState<string | null>(null)
   const groups = useMemo(() => openMojiBySubgroup(), [])
+
+  // The tile the browser snapshots as the drag image. It has to be a real, rendered element
+  // at snapshot time — display:none or a detached node yields nothing — so it's parked
+  // off-screen for the length of the gesture and taken away on dragend. Held in a ref rather
+  // than state because it must exist before setDragImage runs, and a render is too late.
+  const ghostRef = useRef<HTMLDivElement | null>(null)
+
+  const startDrag = (e: ReactDragEvent<HTMLDivElement>, hexcode: string, url: string | undefined) => {
+    e.dataTransfer.setData(POI_DRAG_MIME, hexcode)
+    e.dataTransfer.effectAllowed = 'copy'
+    setDraggingIcon(hexcode)
+    if (!url) return
+
+    const ghost = document.createElement('div')
+    ghost.className = 'mlb-poi-drag-tile'
+    const img = document.createElement('img')
+    img.src = url
+    img.width = DRAG_TILE_ICON
+    img.height = DRAG_TILE_ICON
+    img.alt = ''
+    ghost.appendChild(img)
+    document.body.appendChild(ghost)
+    // Centred under the pointer: the gesture ends by pointing at where the landmark goes, so
+    // the tile should sit on that spot rather than hang below and to the right of it.
+    e.dataTransfer.setDragImage(ghost, DRAG_TILE / 2, DRAG_TILE / 2)
+    ghostRef.current = ghost
+  }
+
+  const endDrag = () => {
+    setDraggingIcon(null)
+    ghostRef.current?.remove()
+    ghostRef.current = null
+  }
 
   const needle = query.trim().toLowerCase()
   const filtered = needle
@@ -76,14 +116,13 @@ export function PoiPicker() {
                     title={entry.name}
                     role="img"
                     aria-label={entry.name}
-                    onDragStart={e => {
-                      e.dataTransfer.setData(POI_DRAG_MIME, entry.hexcode)
-                      e.dataTransfer.effectAllowed = 'copy'
-                    }}
+                    data-dragging={entry.hexcode === draggingIcon}
+                    onDragStart={e => startDrag(e, entry.hexcode, url)}
+                    onDragEnd={endDrag}
                   >
-                    {/* The img is the drag image the browser lifts, so it carries the whole
-                        gesture's feedback — draggable={false} on it would kill the drag the
-                        moment the pointer went down on the artwork rather than the padding. */}
+                    {/* No draggable={false} on the img: the pointer usually goes down on the
+                        artwork rather than the padding around it, and opting the img out would
+                        kill the drag before it started. */}
                     {url && <img src={url} alt="" width={26} height={26} />}
                   </div>
                 )

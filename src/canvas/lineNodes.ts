@@ -27,6 +27,22 @@ export function connectedLineCount(stationId: string, lines: Line[]): number {
   return count
 }
 
+/**
+ * The stations that go down with a set of lines: those the removed lines called at and no
+ * surviving line does. The rule for "can this station be deleted along with its line" lives
+ * here and nowhere else — the reducer enforces it and the confirmation dialog previews it, and
+ * the two must never disagree about which stations are at stake.
+ */
+export function exclusiveStationIds(removed: Line[], surviving: Line[]): string[] {
+  const ids = new Set<string>()
+  for (const line of removed) {
+    for (const id of stationIdsOfLine(line)) {
+      if (!surviving.some(other => lineHasStation(other, id))) ids.add(id)
+    }
+  }
+  return [...ids]
+}
+
 /** A station reads as a transfer hub either because it's manually flagged, or because it sits on 2+ lines. */
 export function isTransferStation(station: Station, lines: Line[]): boolean {
   return station.transfer || connectedLineCount(station.id, lines) >= 2

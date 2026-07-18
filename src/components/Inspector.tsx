@@ -6,8 +6,9 @@ import { isUsableLineNumber, MAX_LINE_NUMBER } from '../lineNumber'
 import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
 import { COMPANY_SYMBOLS } from '../types'
 import { CompanySymbolIcon } from '../companySymbols'
+import { DeleteStationsDialog } from './DeleteStationsDialog'
 import { openMojiBySubgroup, openMojiUrl, SUBGROUP_LABELS } from '../openmoji'
-import { connectedLineCount, isTransferStation, lineHasStation, stationIdsOfLine } from '../canvas/lineNodes'
+import { connectedLineCount, exclusiveStationIds, isTransferStation, lineHasStation, stationIdsOfLine } from '../canvas/lineNodes'
 
 /** Why `draft` can't be committed, or undefined if it can. One rule drives both the message
  * and whether the edit lands, so the field can never show an error while having applied the
@@ -56,6 +57,62 @@ function LineNumberField({
   )
 }
 
+
+/**
+ * "Delete line", and the question that goes with it: a line's stations outlive it by default,
+ * but the ones it alone served are usually rubble the user then has to clear by hand.
+ *
+ * The question is only worth asking when there's something to ask about — a line whose every
+ * stop is shared with another line has nothing that could go with it, so that case deletes
+ * straight away rather than opening a dialog with one real answer.
+ */
+function DeleteLineButton({
+  line,
+  lines,
+  stations,
+  onDeleteLine,
+}: {
+  line: Line
+  lines: Record<string, Line>
+  stations: Record<string, Station>
+  onDeleteLine: (lineId: string, withStations: boolean) => void
+}) {
+  const [asking, setAsking] = useState(false)
+
+  const others = Object.values(lines).filter(other => other.id !== line.id)
+  const ownStationIds = [...new Set(stationIdsOfLine(line))]
+  const exclusive = exclusiveStationIds([line], others)
+  const name = line.name.trim() || `Line ${line.number}`
+
+  const remove = (withStations: boolean) => {
+    setAsking(false)
+    onDeleteLine(line.id, withStations)
+  }
+
+  return (
+    <>
+      <Button
+        variant="destructive"
+        size="sm"
+        icon={<TrashIcon />}
+        onClick={() => (exclusive.length > 0 ? setAsking(true) : remove(false))}
+      >
+        Delete line
+      </Button>
+
+      <DeleteStationsDialog
+        open={asking}
+        title={`Delete ${name}?`}
+        totalStationCount={ownStationIds.length}
+        atRisk={exclusive.map(id => stations[id]?.name ?? id)}
+        onCancel={() => setAsking(false)}
+        onKeep={() => remove(false)}
+        onDeleteAll={() => remove(true)}
+      />
+    </>
+  )
+}
+
 interface InspectorProps {
   selectedLine: Line | null
   selectedStation: Station | null
@@ -71,7 +128,7 @@ interface InspectorProps {
   onRecolorLine: (lineId: string, color: string) => void
   onSetLineCompany: (lineId: string, companyId: string | null) => void
   onExtendLine: (lineId: string, end: 'start' | 'end') => void
-  onDeleteLine: (lineId: string) => void
+  onDeleteLine: (lineId: string, withStations: boolean) => void
   onRenameStation: (stationId: string, name: string) => void
   onToggleTransfer: (stationId: string) => void
   onToggleMain: (stationId: string) => void
@@ -449,9 +506,7 @@ export function Inspector({
             </div>
           </div>
         </div>
-        <Button variant="destructive" size="sm" icon={<TrashIcon />} onClick={() => onDeleteLine(line.id)}>
-          Delete line
-        </Button>
+        <DeleteLineButton line={line} lines={lines} stations={stations} onDeleteLine={onDeleteLine} />
       </div>
     )
   }

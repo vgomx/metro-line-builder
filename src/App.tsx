@@ -8,15 +8,16 @@ import { LeftToolbar, LEFT_TOOLBAR_WIDTH } from './components/LeftToolbar'
 import { RightPanel, RIGHT_PANEL_WIDTH } from './components/RightPanel'
 import { CanvasStats, SelectionLabel } from './components/CanvasOverlay'
 import { PoiPicker } from './components/PoiPicker'
+import { DeleteStationsDialog } from './components/DeleteStationsDialog'
 import { CanvasLegend } from './components/CanvasLegend'
 import { LineAnnouncer } from './components/LineAnnouncer'
 import { exportMapAsJson, pickMapFile } from './export'
-import { stationIdsOfLine } from './canvas/lineNodes'
+import { exclusiveStationIds, stationIdsOfLine } from './canvas/lineNodes'
 import { useTheme } from './useTheme'
 import { useSound } from './useSound'
 import { playSound } from './sound'
 import type { SoundName } from './sound'
-import type { Tool } from './types'
+import type { Line, Tool } from './types'
 import { openMojiLabel } from './openmoji'
 
 // The canvas runs edge to edge underneath the floating toolbar and panel, so the parts of
@@ -101,6 +102,8 @@ function App() {
   const [showTrains, setShowTrains] = useState(false)
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
+  // Set while the Delete key is waiting on an answer about the stations its lines alone serve.
+  const [pendingDelete, setPendingDelete] = useState<{ title: string; total: number; atRisk: string[] } | null>(null)
 
   const handleOpen = () => {
     pickMapFile(
@@ -134,6 +137,37 @@ function App() {
   // Company selection lives outside the reducer's station/line/geo selection (companies
   // aren't canvas entities), so canvas selection and company selection stay mutually
   // exclusive by clearing the other side whenever one is set.
+  /**
+   * Delete, from the canvas. The same question the Inspector's button asks, asked here too —
+   * a line deleted by keyboard leaves the same stations behind as one deleted by button, and
+   * having only one of the two offer to tidy up would be arbitrary.
+   *
+   * Stations already in the selection are going regardless, so they're not what the question
+   * is about; if nothing else is at stake, the delete just happens.
+   */
+  const handleDeleteSelected = () => {
+    const doomed = state.selectedLineIds.map(id => state.lines[id]).filter((l): l is Line => Boolean(l))
+    const surviving = lineList.filter(line => !state.selectedLineIds.includes(line.id))
+    const atRisk = exclusiveStationIds(doomed, surviving).filter(id => !state.selectedStationIds.includes(id))
+    if (atRisk.length === 0) {
+      playSound('remove')
+      deleteSelected(false)
+      return
+    }
+    const served = new Set(doomed.flatMap(line => stationIdsOfLine(line)))
+    setPendingDelete({
+      title: doomed.length === 1 ? `Delete ${doomed[0].name.trim() || `Line ${doomed[0].number}`}?` : `Delete ${doomed.length} lines?`,
+      total: served.size,
+      atRisk: atRisk.map(id => state.stations[id]?.name ?? id),
+    })
+  }
+
+  const resolvePendingDelete = (withStations: boolean) => {
+    setPendingDelete(null)
+    playSound('remove')
+    deleteSelected(withStations)
+  }
+
   const handleSetSelection = (stationIds: string[], lineIds: string[], geoFeatureIds: string[], poiIds: string[] = []) => {
     setSelectedCompanyId(null)
     setSelection(stationIds, lineIds, geoFeatureIds, poiIds)
@@ -255,13 +289,14 @@ function App() {
             onAddGeoPoint={withSound('node', addGeoPoint)}
             onAddPoi={withSound('station', (x: number, y: number, icon: string) => addPoi(x, y, icon, openMojiLabel(icon)))}
             onMovePois={movePois}
+            onExitPoiTool={() => handleSetTool('select')}
             onFinishGeoFeature={withSound('lineDone', finishGeoFeature)}
             onCancelGeoFeature={cancelGeoFeature}
             onSetSelection={handleSetSelection}
             onClearSelection={handleClearSelection}
             onSelectWaypoint={selectWaypoint}
             onDeleteWaypoint={withSound('remove', deleteWaypoint)}
-            onDeleteSelected={withSound('remove', deleteSelected)}
+            onDeleteSelected={handleDeleteSelected}
             onCheckpoint={checkpoint}
             onStationGrab={() => playSound('grab')}
             onLineReroute={() => playSound('reroute')}
@@ -367,6 +402,18 @@ function App() {
           </div>
         </main>
 
+        {pendingDelete && (
+          <DeleteStationsDialog
+            open
+            title={pendingDelete.title}
+            totalStationCount={pendingDelete.total}
+            atRisk={pendingDelete.atRisk}
+            onCancel={() => setPendingDelete(null)}
+            onKeep={() => resolvePendingDelete(false)}
+            onDeleteAll={() => resolvePendingDelete(true)}
+          />
+        )}
+
         <LeftToolbar tool={state.tool} onSetTool={handleSetTool} theme={theme} />
 
         {state.tool === 'add-poi' && <PoiPicker />}
@@ -430,7 +477,7 @@ function App() {
             onRecolorLine={recolorLine}
             onSetLineCompany={setLineCompany}
             onExtendLine={startExtendLine}
-            onDeleteLine={withSound('remove', deleteLine)}
+            onDeleteLine={withSound('remove', (lineId: string, withStations: boolean) => deleteLine(lineId, withStations))}
             onRenameStation={renameStation}
             onToggleTransfer={withSound('toggle', toggleStationTransfer)}
             onToggleMain={withSound('toggle', toggleStationMain)}

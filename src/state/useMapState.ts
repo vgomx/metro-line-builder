@@ -4,10 +4,10 @@ import { COMPANY_SYMBOLS } from '../types'
 import { DEFAULT_COMPANY_SYMBOL } from '../companySymbols'
 import { nextLineColor } from '../lineColors'
 import { isUsableLineNumber, nextFreeLineNumber } from '../lineNumber'
-import { snapToGrid } from '../grid'
+import { snapToGrid, snapToPoiGrid } from '../grid'
 import { pickLineName, pickMapName, pickStationName } from '../names'
 import { buildRandomMap } from '../generate'
-import { exactSegmentIndex, lineHasStation, resolveLineNodes, sameNode } from '../canvas/lineNodes'
+import { exactSegmentIndex, exclusiveStationIds, lineHasStation, resolveLineNodes, sameNode } from '../canvas/lineNodes'
 
 export interface DataSnapshot {
   mapName: string
@@ -92,8 +92,8 @@ type Action =
   | { type: 'clearSelection' }
   | { type: 'selectWaypoint'; lineId: string; index: number }
   | { type: 'deleteWaypoint'; lineId: string; index: number }
-  | { type: 'deleteSelected' }
-  | { type: 'deleteLine'; lineId: string }
+  | { type: 'deleteSelected'; withStations: boolean }
+  | { type: 'deleteLine'; lineId: string; withStations: boolean }
   | { type: 'deleteStation'; stationId: string }
   | { type: 'renameLine'; lineId: string; name: string }
   | { type: 'setLineNumber'; lineId: string; number: number }
@@ -333,9 +333,12 @@ function normalizeSnapshot(parsed: DataSnapshot): DataSnapshot {
   for (const feature of Object.values(parsed.geoFeatures)) {
     feature.points = feature.points.map(p => ({ x: snapToGrid(p.x), y: snapToGrid(p.y) }))
   }
+  // Landmarks re-snap to their own half-grid, not the station one — running them through
+  // snapToGrid here would haul every landmark placed in the middle of a square back onto the
+  // nearest crossing, once per load, with nothing in the UI to explain the drift.
   for (const poi of Object.values(parsed.pointsOfInterest)) {
-    poi.x = snapToGrid(poi.x)
-    poi.y = snapToGrid(poi.y)
+    poi.x = snapToPoiGrid(poi.x)
+    poi.y = snapToPoiGrid(poi.y)
   }
 
   return parsed
@@ -1009,13 +1012,31 @@ function reducer(rawState: MapState, action: Action): MapState {
     }
 
     case 'deleteLine': {
+      const line = state.lines[action.lineId]
       const lines = { ...state.lines }
       delete lines[action.lineId]
+
+      // Only the stations this line alone served can go with it. One that also sits on another
+      // line is that line's stop too, and taking it would tear a hole in a route the user
+      // never asked to touch — so the set is computed here rather than trusted from the caller,
+      // whatever the dialog offered.
+      const stations = { ...state.stations }
+      let stationOrder = state.stationOrder
+      let removedStationIds = new Set<string>()
+      if (action.withStations && line) {
+        removedStationIds = new Set(exclusiveStationIds([line], Object.values(lines)))
+        for (const id of removedStationIds) delete stations[id]
+        stationOrder = state.stationOrder.filter(id => !removedStationIds.has(id))
+      }
+
       return {
         ...state,
         lines,
+        stations,
+        stationOrder,
         lineOrder: state.lineOrder.filter(id => id !== action.lineId),
         selectedLineIds: state.selectedLineIds.filter(id => id !== action.lineId),
+        selectedStationIds: state.selectedStationIds.filter(id => !removedStationIds.has(id)),
         selectedWaypoint: state.selectedWaypoint?.lineId === action.lineId ? null : state.selectedWaypoint,
       }
     }
@@ -1061,6 +1082,25 @@ function reducer(rawState: MapState, action: Action): MapState {
         removedStationIds,
       )
 
+      // Stations the deleted lines alone called at, when the user said to take them. Computed
+      // against the lines that actually survive — which is after removeStationsFromLines has
+      // had its say, since a line that fell below two stops is gone too and can't be what
+      // keeps a station alive.
+      let stationsAfterLines = stations
+      let stationOrderAfterLines = stationOrder
+      if (action.withStations && removedLineIds.size > 0) {
+        const orphans = exclusiveStationIds(
+          [...removedLineIds].map(id => state.lines[id]).filter((l): l is Line => Boolean(l)),
+          Object.values(lines),
+        ).filter(id => !removedStationIds.has(id))
+        if (orphans.length > 0) {
+          stationsAfterLines = { ...stations }
+          for (const id of orphans) delete stationsAfterLines[id]
+          const orphanSet = new Set(orphans)
+          stationOrderAfterLines = stationOrder.filter(id => !orphanSet.has(id))
+        }
+      }
+
       const geoFeatures = { ...state.geoFeatures }
       const geoFeatureOrder = state.geoFeatureOrder.filter(id => {
         if (removedGeoFeatureIds.has(id)) {
@@ -1081,8 +1121,8 @@ function reducer(rawState: MapState, action: Action): MapState {
 
       return {
         ...state,
-        stations,
-        stationOrder,
+        stations: stationsAfterLines,
+        stationOrder: stationOrderAfterLines,
         lines,
         lineOrder,
         geoFeatures,
@@ -1238,8 +1278,14 @@ export function useMapState() {
     (lineId: string, index: number) => dispatch({ type: 'deleteWaypoint', lineId, index }),
     [],
   )
-  const deleteSelected = useCallback(() => dispatch({ type: 'deleteSelected' }), [])
-  const deleteLine = useCallback((lineId: string) => dispatch({ type: 'deleteLine', lineId }), [])
+  const deleteSelected = useCallback(
+    (withStations = false) => dispatch({ type: 'deleteSelected', withStations }),
+    [],
+  )
+  const deleteLine = useCallback(
+    (lineId: string, withStations = false) => dispatch({ type: 'deleteLine', lineId, withStations }),
+    [],
+  )
   const deleteStation = useCallback((stationId: string) => dispatch({ type: 'deleteStation', stationId }), [])
   const renameLine = useCallback((lineId: string, name: string) => dispatch({ type: 'renameLine', lineId, name }), [])
   const setLineNumber = useCallback((lineId: string, number: number) => dispatch({ type: 'setLineNumber', lineId, number }), [])

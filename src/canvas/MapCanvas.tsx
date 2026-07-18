@@ -13,7 +13,7 @@ import { TrainMarker } from './TrainMarker'
 import { SnapAnimation } from './SnapAnimation'
 import { RefanAnimation } from './RefanAnimation'
 import { routeOrthogonal } from './routing'
-import { GRID_SIZE, snapToGrid } from '../grid'
+import { GRID_SIZE, snapToGrid, snapToPoiGrid } from '../grid'
 import {
   buildLineTrack,
   buildNetworkGeometry,
@@ -67,6 +67,8 @@ interface MapCanvasProps {
   onAddGeoPoint: (x: number, y: number) => void
   /** A symbol has been dropped on the map — the icon comes from the drag itself. */
   onAddPoi: (x: number, y: number, icon: string) => void
+  /** The canvas has been clicked while the point-of-interest tool is up — put the tool down. */
+  onExitPoiTool: () => void
   onMovePois: (ids: string[], dx: number, dy: number) => void
   onFinishGeoFeature: () => void
   onCancelGeoFeature: () => void
@@ -125,6 +127,11 @@ type DragState =
 
 const GRID_EXTENT = 4000
 const DRAW_TOOLS: Tool[] = ['add-station', 'draw-line', 'draw-river', 'draw-park']
+/** How long a deleted line spends coming apart, and how long its ghost is held for. The
+ * hold outlasts the animation so the final frame isn't clipped. A line that's merely been
+ * switched off keeps the old quick fade — see the ghost renderer. */
+const LINE_SHATTER_MS = 620
+const LINE_EXIT_HOLD_MS = 700
 const RIVER_DRAFT_STROKE = '#60A5FA'
 const PARK_DRAFT_STROKE = '#4ADE80'
 
@@ -157,6 +164,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onAddGeoPoint,
     onAddPoi,
     onMovePois,
+    onExitPoiTool,
     onFinishGeoFeature,
     onCancelGeoFeature,
     onSetSelection,
@@ -267,7 +275,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         if (selectedWaypoint) {
           e.preventDefault()
           onDeleteWaypoint(selectedWaypoint.lineId, selectedWaypoint.index)
-        } else if (selectedStationIds.length > 0 || selectedLineIds.length > 0 || selectedGeoFeatureIds.length > 0) {
+        } else if (
+          selectedStationIds.length > 0 ||
+          selectedLineIds.length > 0 ||
+          selectedGeoFeatureIds.length > 0 ||
+          selectedPoiIds.length > 0
+        ) {
           e.preventDefault()
           onDeleteSelected()
         }
@@ -291,6 +304,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     selectedStationIds,
     selectedLineIds,
     selectedGeoFeatureIds,
+    selectedPoiIds,
     selectedWaypoint,
     onCancelDraftLine,
     onCancelGeoFeature,
@@ -459,8 +473,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       setDrag({ ...drag, x, y })
     } else if (drag.kind === 'pois') {
       const pointerWorld = toWorld(e.clientX, e.clientY)
-      const targetX = snapToGrid(drag.startAnchorX + (pointerWorld.x - drag.startPointerX))
-      const targetY = snapToGrid(drag.startAnchorY + (pointerWorld.y - drag.startPointerY))
+      const targetX = snapToPoiGrid(drag.startAnchorX + (pointerWorld.x - drag.startPointerX))
+      const targetY = snapToPoiGrid(drag.startAnchorY + (pointerWorld.y - drag.startPointerY))
       const anchor = poiList.find(p => p.id === drag.anchorId)
       if (anchor) {
         const dx = targetX - anchor.x
@@ -542,6 +556,17 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     setDrag({ kind: 'none' })
   }
 
+  // The point-of-interest palette covers a good slice of the map, and once the landmarks are
+  // down there's nothing left to pick from it. A click on the canvas is the natural way to say
+  // so: the tool goes back to select and the panel leaves with it. On the root rather than the
+  // background rect so a click that lands on a station or a line dismisses it too — with the
+  // tool up, neither of those does anything else. Space-held panning is exempt: that's
+  // navigation, and it would be a poor reward for looking around.
+  const handleRootPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (e.button !== 0 || spaceHeld) return
+    if (tool === 'add-poi') onExitPoiTool()
+  }
+
   // Dragging a symbol in from the palette. dragover has to preventDefault on every event or
   // the browser refuses the drop, and the payload itself is unreadable until drop — only the
   // *types* are exposed mid-drag, which is exactly enough to tell our symbols from anything
@@ -551,7 +576,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
     const w = toWorld(e.clientX, e.clientY)
-    const snapped = { x: snapToGrid(w.x), y: snapToGrid(w.y) }
+    const snapped = { x: snapToPoiGrid(w.x), y: snapToPoiGrid(w.y) }
     // dragover fires continuously; skipping the identical position keeps it from re-rendering
     // the whole canvas between one grid square and the next.
     setDropPoint(prev => (prev && prev.x === snapped.x && prev.y === snapped.y ? prev : snapped))
@@ -563,7 +588,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     if (!icon) return
     e.preventDefault()
     const { x, y } = toWorld(e.clientX, e.clientY)
-    onAddPoi(snapToGrid(x), snapToGrid(y), icon)
+    onAddPoi(snapToPoiGrid(x), snapToPoiGrid(y), icon)
   }
 
   const handleDoubleClick = () => {
@@ -673,7 +698,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           return [line.id, { color: line.color, d: geometry ? buildLinePath(geometry, line.id, network.segmentLineMap) : '' }]
         }),
     ),
-    260,
+    LINE_EXIT_HOLD_MS,
   )
 
   const draftLineStationIdSet = new Set(
@@ -713,6 +738,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       width="100%"
       height="100%"
       style={{ display: 'block', background: 'var(--bg-page)', cursor, userSelect: 'none', WebkitUserSelect: 'none' }}
+      onPointerDown={handleRootPointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={() => setCursorWorld(null)}
@@ -808,23 +834,37 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           />
         )}
 
-        {/* Deleted / hidden lines fade out from their last shape. */}
-        {exitingLines.map(
-          ghost =>
-            ghost.data.d && (
-              <path
-                key={ghost.key}
-                d={ghost.data.d}
-                fill="none"
-                stroke={ghost.data.color}
-                strokeWidth={5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                opacity={0.9}
-                style={{ pointerEvents: 'none', animation: 'mlb-line-exit 240ms ease forwards' }}
-              />
-            ),
-        )}
+        {/* A line leaves the map for one of two reasons, and they shouldn't look alike: a
+            deleted line comes apart, while one that's merely been switched off fades, because
+            it's still there to be switched back on. The ghost carries its id, so which of the
+            two happened is just "does this line still exist". */}
+        {exitingLines.map(ghost => {
+          if (!ghost.data.d) return null
+          const switchedOff = lineList.some(line => line.id === ghost.id)
+          return (
+            <path
+              key={ghost.key}
+              d={ghost.data.d}
+              // Normalised length, so the fragments the stroke breaks into are the same
+              // fraction of the route whatever its length — a short branch and a cross-city
+              // line come apart into the same number of pieces rather than one shattering
+              // into dust while the other snaps in half.
+              pathLength={1}
+              fill="none"
+              stroke={ghost.data.color}
+              strokeWidth={5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={0.9}
+              style={{
+                pointerEvents: 'none',
+                animation: switchedOff
+                  ? 'mlb-line-exit 240ms ease forwards'
+                  : `mlb-line-shatter ${LINE_SHATTER_MS}ms cubic-bezier(0.3, 0.5, 0.5, 1) forwards`,
+              }}
+            />
+          )
+        })}
 
         {/* Bare waypoints on a selected line get a small marker so a stray or
             unwanted route-shaping point can be selected and deleted — stations

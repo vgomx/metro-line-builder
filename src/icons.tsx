@@ -260,3 +260,9 @@ export const PoiIcon = () => (
     <circle cx="8" cy="6" r="1.6" stroke="currentColor" strokeWidth="1.3" />
   </svg>
 )
+
+export const ChevronDownIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <path d="M4 6.5 8 10.5l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
