@@ -78,7 +78,12 @@ export function MoreMenu({ theme }: MoreMenuProps) {
       {createPortal(
         <>
         <Dialog open={activeDialog === 'legal'} onClose={() => setActiveDialog(null)} title="Legal" width="560px">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+          {/* The dialog itself neither caps its height nor scrolls, and clips what overflows —
+              so with a notice per shipped package this list runs off the bottom of the screen
+              unreachable. Capping it here against the viewport gives the body its own scroll.
+              The subtracted space covers the dialog's own margin, header and padding; svh
+              rather than vh so a mobile browser's retracting toolbar doesn't crop it. */}
+          <div style={{ maxHeight: 'calc(100svh - 200px)', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
               Metro Line Builder is built with the following open-source software. Only packages actually shipped
               in the app are listed below — build-only tooling isn't included since it never reaches end users.
