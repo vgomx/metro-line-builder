@@ -105,7 +105,10 @@ export function PoiPicker() {
             >
               {SUBGROUP_LABELS[group.subgroup] ?? group.subgroup}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
+            {/* Five to a row rather than six. These are pictograms being told apart, not
+                swatches being counted, and a bus at 26px reads as an orange smudge — the
+                width the row gives back goes straight into the artwork. */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
               {group.icons.map(entry => {
                 const url = openMojiUrl(entry.hexcode)
                 return (
@@ -123,7 +126,7 @@ export function PoiPicker() {
                     {/* No draggable={false} on the img: the pointer usually goes down on the
                         artwork rather than the padding around it, and opting the img out would
                         kill the drag before it started. */}
-                    {url && <img src={url} alt="" width={26} height={26} />}
+                    {url && <img src={url} alt="" width={34} height={34} />}
                   </div>
                 )
               })}
