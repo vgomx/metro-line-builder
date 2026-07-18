@@ -7,7 +7,7 @@ import { isUsableLineNumber, nextFreeLineNumber } from '../lineNumber'
 import { snapToGrid, snapToPoiGrid } from '../grid'
 import { pickLineName, pickMapName, pickStationName } from '../names'
 import { buildRandomMap } from '../generate'
-import { exactSegmentIndex, lineHasStation, resolveLineNodes, sameNode, stationIdsOfLine } from '../canvas/lineNodes'
+import { exactSegmentIndex, exclusiveStationIds, lineHasStation, resolveLineNodes, sameNode } from '../canvas/lineNodes'
 
 export interface DataSnapshot {
   mapName: string
@@ -92,7 +92,7 @@ type Action =
   | { type: 'clearSelection' }
   | { type: 'selectWaypoint'; lineId: string; index: number }
   | { type: 'deleteWaypoint'; lineId: string; index: number }
-  | { type: 'deleteSelected' }
+  | { type: 'deleteSelected'; withStations: boolean }
   | { type: 'deleteLine'; lineId: string; withStations: boolean }
   | { type: 'deleteStation'; stationId: string }
   | { type: 'renameLine'; lineId: string; name: string }
@@ -1024,10 +1024,7 @@ function reducer(rawState: MapState, action: Action): MapState {
       let stationOrder = state.stationOrder
       let removedStationIds = new Set<string>()
       if (action.withStations && line) {
-        const survivors = Object.values(lines)
-        removedStationIds = new Set(
-          stationIdsOfLine(line).filter(id => !survivors.some(other => lineHasStation(other, id))),
-        )
+        removedStationIds = new Set(exclusiveStationIds([line], Object.values(lines)))
         for (const id of removedStationIds) delete stations[id]
         stationOrder = state.stationOrder.filter(id => !removedStationIds.has(id))
       }
@@ -1085,6 +1082,25 @@ function reducer(rawState: MapState, action: Action): MapState {
         removedStationIds,
       )
 
+      // Stations the deleted lines alone called at, when the user said to take them. Computed
+      // against the lines that actually survive — which is after removeStationsFromLines has
+      // had its say, since a line that fell below two stops is gone too and can't be what
+      // keeps a station alive.
+      let stationsAfterLines = stations
+      let stationOrderAfterLines = stationOrder
+      if (action.withStations && removedLineIds.size > 0) {
+        const orphans = exclusiveStationIds(
+          [...removedLineIds].map(id => state.lines[id]).filter((l): l is Line => Boolean(l)),
+          Object.values(lines),
+        ).filter(id => !removedStationIds.has(id))
+        if (orphans.length > 0) {
+          stationsAfterLines = { ...stations }
+          for (const id of orphans) delete stationsAfterLines[id]
+          const orphanSet = new Set(orphans)
+          stationOrderAfterLines = stationOrder.filter(id => !orphanSet.has(id))
+        }
+      }
+
       const geoFeatures = { ...state.geoFeatures }
       const geoFeatureOrder = state.geoFeatureOrder.filter(id => {
         if (removedGeoFeatureIds.has(id)) {
@@ -1105,8 +1121,8 @@ function reducer(rawState: MapState, action: Action): MapState {
 
       return {
         ...state,
-        stations,
-        stationOrder,
+        stations: stationsAfterLines,
+        stationOrder: stationOrderAfterLines,
         lines,
         lineOrder,
         geoFeatures,
@@ -1262,7 +1278,10 @@ export function useMapState() {
     (lineId: string, index: number) => dispatch({ type: 'deleteWaypoint', lineId, index }),
     [],
   )
-  const deleteSelected = useCallback(() => dispatch({ type: 'deleteSelected' }), [])
+  const deleteSelected = useCallback(
+    (withStations = false) => dispatch({ type: 'deleteSelected', withStations }),
+    [],
+  )
   const deleteLine = useCallback(
     (lineId: string, withStations = false) => dispatch({ type: 'deleteLine', lineId, withStations }),
     [],

@@ -275,7 +275,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         if (selectedWaypoint) {
           e.preventDefault()
           onDeleteWaypoint(selectedWaypoint.lineId, selectedWaypoint.index)
-        } else if (selectedStationIds.length > 0 || selectedLineIds.length > 0 || selectedGeoFeatureIds.length > 0) {
+        } else if (
+          selectedStationIds.length > 0 ||
+          selectedLineIds.length > 0 ||
+          selectedGeoFeatureIds.length > 0 ||
+          selectedPoiIds.length > 0
+        ) {
           e.preventDefault()
           onDeleteSelected()
         }
@@ -299,6 +304,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     selectedStationIds,
     selectedLineIds,
     selectedGeoFeatureIds,
+    selectedPoiIds,
     selectedWaypoint,
     onCancelDraftLine,
     onCancelGeoFeature,

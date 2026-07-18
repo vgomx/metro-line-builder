@@ -1,14 +1,14 @@
 import { useState } from 'react'
-import { createPortal } from 'react-dom'
-import { Badge, Button, Dialog, Divider, Input, Select, Tag, Toggle } from 'metro-ds'
+import { Badge, Button, Divider, Input, Select, Tag, Toggle } from 'metro-ds'
 import { ParkIcon, PenIcon, PoiIcon, RiverIcon, TrashIcon } from '../icons'
 import { LINE_COLORS } from '../lineColors'
 import { isUsableLineNumber, MAX_LINE_NUMBER } from '../lineNumber'
 import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
 import { COMPANY_SYMBOLS } from '../types'
 import { CompanySymbolIcon } from '../companySymbols'
+import { DeleteStationsDialog } from './DeleteStationsDialog'
 import { openMojiBySubgroup, openMojiUrl, SUBGROUP_LABELS } from '../openmoji'
-import { connectedLineCount, isTransferStation, lineHasStation, stationIdsOfLine } from '../canvas/lineNodes'
+import { connectedLineCount, exclusiveStationIds, isTransferStation, lineHasStation, stationIdsOfLine } from '../canvas/lineNodes'
 
 /** Why `draft` can't be committed, or undefined if it can. One rule drives both the message
  * and whether the edit lands, so the field can never show an error while having applied the
@@ -81,8 +81,7 @@ function DeleteLineButton({
 
   const others = Object.values(lines).filter(other => other.id !== line.id)
   const ownStationIds = [...new Set(stationIdsOfLine(line))]
-  const exclusive = ownStationIds.filter(id => !others.some(other => lineHasStation(other, id)))
-  const shared = ownStationIds.length - exclusive.length
+  const exclusive = exclusiveStationIds([line], others)
   const name = line.name.trim() || `Line ${line.number}`
 
   const remove = (withStations: boolean) => {
@@ -101,49 +100,15 @@ function DeleteLineButton({
         Delete line
       </Button>
 
-      {/* Portalled for the same reason the More menu's dialogs are: the panel this sits in is
-          frosted, and a backdrop-filter makes the element the containing block for any fixed
-          descendant — leaving the dialog laid out against a 272px column instead of the
-          window. */}
-      {createPortal(
-        <Dialog
-          open={asking}
-          onClose={() => setAsking(false)}
-          title={`Delete ${name}?`}
-          width="440px"
-          footer={
-            <>
-              <Button variant="ghost" size="sm" onClick={() => setAsking(false)}>
-                Cancel
-              </Button>
-              <Button variant="secondary" size="sm" onClick={() => remove(false)}>
-                Keep stations
-              </Button>
-              <Button variant="destructive" size="sm" onClick={() => remove(true)}>
-                Delete {exclusive.length} station{exclusive.length === 1 ? '' : 's'} too
-              </Button>
-            </>
-          }
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-md)' }}>
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
-              {exclusive.length} of this line&rsquo;s {ownStationIds.length} stations are served by no other line.
-              They can go with it, or stay on the map for another route to pick up.
-            </p>
-            {shared > 0 && (
-              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
-                The other {shared} also {shared === 1 ? 'serves' : 'serve'} another line and {shared === 1 ? 'is' : 'are'} kept either way.
-              </p>
-            )}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--gap-tight)' }}>
-              {exclusive.map(id => (
-                <Tag key={id}>{stations[id]?.name ?? id}</Tag>
-              ))}
-            </div>
-          </div>
-        </Dialog>,
-        document.body,
-      )}
+      <DeleteStationsDialog
+        open={asking}
+        title={`Delete ${name}?`}
+        totalStationCount={ownStationIds.length}
+        atRisk={exclusive.map(id => stations[id]?.name ?? id)}
+        onCancel={() => setAsking(false)}
+        onKeep={() => remove(false)}
+        onDeleteAll={() => remove(true)}
+      />
     </>
   )
 }
