@@ -229,3 +229,51 @@ body {
   outline: 2px solid var(--brand-500);
   outline-offset: -2px;
 }
+
+/* A landmark landing. Two rings pushed out from the point of impact, the second a beat
+   behind the first, fading as they widen — the air shoved aside by something with mass.
+   Scaled rather than animating the circle's r: SVG geometry properties in CSS are a newer
+   trick than transforms, and a transform on a group is understood everywhere. */
+@keyframes mlb-poi-impact {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+/* The marker itself arriving: dropped from slightly above and overshooting into the ground
+   before settling, which is what sells the weight the rings imply.
+
+   Two variants because the two arrivals differ: a landmark coming off the palette is new to
+   the map and fades in as it falls, while one being moved is already there — fading it would
+   read as a delete and a re-create rather than as putting something down. */
+@keyframes mlb-poi-land {
+  0% {
+    transform: translateY(-7px) scale(1.25);
+    opacity: 0;
+  }
+  55% {
+    transform: translateY(0) scale(0.9);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes mlb-poi-settle {
+  0% {
+    transform: translateY(-7px) scale(1.25);
+  }
+  55% {
+    transform: translateY(0) scale(0.9);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}

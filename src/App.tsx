@@ -287,7 +287,8 @@ function App() {
             onFinishDraftLine={withSound('lineDone', finishDraftLine)}
             onCancelDraftLine={cancelDraftLine}
             onAddGeoPoint={withSound('node', addGeoPoint)}
-            onAddPoi={withSound('station', (x: number, y: number, icon: string) => addPoi(x, y, icon, openMojiLabel(icon)))}
+            onAddPoi={(x: number, y: number, icon: string) => addPoi(x, y, icon, openMojiLabel(icon))}
+            onPoiLand={() => playSound('drop')}
             onMovePois={movePois}
             onExitPoiTool={() => handleSetTool('select')}
             onFinishGeoFeature={withSound('lineDone', finishGeoFeature)}

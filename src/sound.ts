@@ -56,6 +56,11 @@ const PATCHES = {
    * sound in the set that bends, because it's the only one standing for something still in
    * motion. Fires once per drag, when the route first gives, not per frame. */
   reroute: [0.4, 0.03, 300, 0.005, 0.06, 0.1, 0, 1, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0.4, 0.06],
+  /** A landmark landing on the map. The one weighty sound in the set: low, with a fast
+   * downward slide and a touch of noise, so it reads as something with mass settling rather
+   * than another pip. It answers a gesture that ends by letting go, and it can't be mistaken
+   * for the station pip an octave and a half above it. */
+  drop: [0.55, 0.05, 150, 0.001, 0.04, 0.14, 0, 1.4, -6, 0, 0, 0, 0, 0.12, 0, 0, 0, 0.35, 0.06],
   /** The elastic snap when a dropped line springs into its new shape. Answers `reroute` — that
    * one bends upward as the route gives, this one dips and comes back (slide down, deltaSlide
    * up) the way the easing overshoots and settles. Released on the drop, so the pair brackets

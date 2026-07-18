@@ -9,6 +9,10 @@ interface PoiNodeProps {
   selected: boolean
   /** True while this landmark is being actively repositioned by a drag. */
   dragging: boolean
+  /** A landing to play, or undefined for none. 'appear' is a landmark arriving from the
+   * palette, which fades in as it drops; 'settle' is one that was already on the map being
+   * put down somewhere else, which must not blink out and back on the way. */
+  landing?: 'appear' | 'settle'
   onPointerDown: (e: ReactPointerEvent<SVGGElement>, poi: PointOfInterest) => void
 }
 
@@ -21,8 +25,10 @@ const LABEL_FONT_SIZE = 6.5
 /** Matches StationNode's answer to the cursor, so every marker on the map swells alike. */
 const HOVER_GROWTH = 1.5
 const DRAG_GROWTH = 2
+/** How long the marker takes to land. Paired with the ripple MapCanvas draws under it. */
+const LAND_MS = 320
 
-export function PoiNode({ poi, selected, dragging, onPointerDown }: PoiNodeProps) {
+export function PoiNode({ poi, selected, dragging, landing, onPointerDown }: PoiNodeProps) {
   const [hovered, setHovered] = useState(false)
   const href = openMojiUrl(poi.icon)
   const grown = dragging ? DRAG_GROWTH : hovered ? HOVER_GROWTH : 0
@@ -38,7 +44,18 @@ export function PoiNode({ poi, selected, dragging, onPointerDown }: PoiNodeProps
       onMouseLeave={() => setHovered(false)}
       style={{ cursor: dragging ? 'grabbing' : 'pointer' }}
     >
-      <g filter={dragging ? 'url(#station-drag-shadow)' : undefined}>
+      <g
+        filter={dragging ? 'url(#station-drag-shadow)' : undefined}
+        style={
+          landing
+            ? {
+                transformBox: 'fill-box',
+                transformOrigin: 'center',
+                animation: `${landing === 'appear' ? 'mlb-poi-land' : 'mlb-poi-settle'} ${LAND_MS}ms cubic-bezier(0.3, 1.4, 0.5, 1) both`,
+              }
+            : undefined
+        }
+      >
         {selected && (
           <rect
             x={-half - 4}
