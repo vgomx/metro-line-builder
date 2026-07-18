@@ -33,6 +33,9 @@ const CANVAS_INSETS = {
   top: FLOAT_GAP,
   bottom: FLOAT_GAP,
 }
+/** With the panel put away, the map has that whole side back — framing and the centred canvas
+ * chrome both have to know, or they keep dodging something that isn't there. */
+const CANVAS_INSETS_NO_PANEL = { ...CANVAS_INSETS, right: FLOAT_GAP }
 
 function App() {
   const {
@@ -101,6 +104,7 @@ function App() {
   const [zoom, setZoom] = useState(1)
   const [showGrid, setShowGrid] = useState(true)
   const [showTrains, setShowTrains] = useState(false)
+  const [showPanel, setShowPanel] = useState(true)
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
   // Set while the Delete key is waiting on an answer about the stations its lines alone serve.
@@ -219,6 +223,8 @@ function App() {
     state.selectedPoiIds.length === 1 ? (state.pointsOfInterest[state.selectedPoiIds[0]] ?? null) : null
   const selectedCompany = selectedCompanyId ? (state.companies[selectedCompanyId] ?? null) : null
 
+  const insets = showPanel ? CANVAS_INSETS : CANVAS_INSETS_NO_PANEL
+
   const authorityDisplayName = state.authorityName || `${state.mapName.trim() || 'Untitled Map'} Transit Authority`
 
   // Line selection gets its own bottom-center LED announcer (below) instead of the
@@ -246,6 +252,8 @@ function App() {
         onToggleGrid={withSound('toggle', () => setShowGrid(g => !g))}
         showTrains={showTrains}
         onToggleTrains={withSound('toggle', () => setShowTrains(t => !t))}
+        showPanel={showPanel}
+        onTogglePanel={withSound('toggle', () => setShowPanel(p => !p))}
         soundEnabled={soundEnabled}
         onToggleSound={toggleSound}
         theme={theme}
@@ -278,7 +286,7 @@ function App() {
             draftGeoPoints={state.draftGeoPoints}
             showGrid={showGrid}
             showTrains={showTrains}
-            viewportInsets={CANVAS_INSETS}
+            viewportInsets={insets}
             onAddStation={withSound('station', addStation)}
             onMoveStations={moveStations}
             onMergeStations={withSound('lineDone', mergeStations)}
@@ -315,8 +323,8 @@ function App() {
               position: 'absolute',
               top: 0,
               bottom: 0,
-              left: CANVAS_INSETS.left,
-              right: CANVAS_INSETS.right,
+              left: insets.left,
+              right: insets.right,
               // Click-through so the canvas underneath still gets the pointer; each child
               // that needs a pointer (buttons, the toast, the line chip) opts back in.
               pointerEvents: 'none',
@@ -440,66 +448,74 @@ function App() {
             width: RIGHT_PANEL_WIDTH,
             display: 'flex',
             flexDirection: 'column',
+            // Bottom-aligned so the authority mark keeps its corner when the panel is put
+            // away. With the panel there it flexes to fill and this changes nothing.
+            justifyContent: 'flex-end',
             gap: FLOAT_GAP,
             pointerEvents: 'none',
             zIndex: 10,
             }}
         >
-          <RightPanel
-            mapName={state.mapName}
-            authorityName={state.authorityName}
-            authorityDisplayName={authorityDisplayName}
-            lineList={lineList}
-            stationList={stationList}
-            geoFeatureList={geoFeatureList}
-            companyList={companyList}
-            lines={state.lines}
-            stations={state.stations}
-            selectedLine={selectedLine}
-            selectedStation={selectedStation}
-            selectedGeoFeature={selectedGeoFeature}
-            selectedPoi={selectedPoi}
-            poiList={poiList}
-            selectedCompany={selectedCompany}
-            onSelectLine={id => {
-              playSound('tool')
-              handleSetSelection([], [id], [])
-              // Fly to the line only when picked from the list; a click on the canvas
-              // leaves the viewport alone (the line is already where the user is looking).
-              mapCanvasRef.current?.frameLine(id)
-            }}
-            onSelectStation={withSound('tool', (id: string) => handleSetSelection([id], [], []))}
-            onSelectGeoFeature={withSound('tool', (id: string) => handleSetSelection([], [], [id]))}
-            onSelectCompany={handleSelectCompany}
-            onToggleLineVisibility={withSound('toggle', toggleLineVisibility)}
-            onAddLine={() => handleSetTool('draw-line')}
-            onAddRiver={() => handleSetTool('draw-river')}
-            onAddPark={() => handleSetTool('draw-park')}
-            onAddPoi={() => handleSetTool('add-poi')}
-            onSelectPoi={withSound('tool', (id: string) => handleSetSelection([], [], [], [id]))}
-            onRenamePoi={renamePoi}
-            onSetPoiIcon={withSound('toggle', setPoiIcon)}
-            onDeletePoi={withSound('remove', deletePoi)}
-            onAddCompany={withSound('station', addCompany)}
-            onSetAuthorityName={setAuthorityName}
-            onRenameLine={renameLine}
-            onSetLineNumber={setLineNumber}
-            onRecolorLine={recolorLine}
-            onSetLineCompany={setLineCompany}
-            onExtendLine={startExtendLine}
-            onDeleteLine={withSound('remove', (lineId: string, withStations: boolean) => deleteLine(lineId, withStations))}
-            onRenameStation={renameStation}
-            onToggleTransfer={withSound('toggle', toggleStationTransfer)}
-            onToggleMain={withSound('toggle', toggleStationMain)}
-            onDeleteStation={withSound('remove', deleteStation)}
-            onRenameGeoFeature={renameGeoFeature}
-            onExtendGeoFeature={startExtendGeoFeature}
-            onDeleteGeoFeature={withSound('remove', deleteGeoFeature)}
-            onRenameCompany={renameCompany}
-            onSetCompanyType={setCompanyType}
-            onSetCompanySymbol={withSound('toggle', setCompanySymbol)}
-            onDeleteCompany={withSound('remove', deleteCompany)}
-          />
+          {/* The authority mark below stays whatever the panel does: it reads as part of
+              the map rather than as chrome on top of it, and putting the panel away is a
+              request to see the map. */}
+          {showPanel && (
+            <RightPanel
+              mapName={state.mapName}
+              authorityName={state.authorityName}
+              authorityDisplayName={authorityDisplayName}
+              lineList={lineList}
+              stationList={stationList}
+              geoFeatureList={geoFeatureList}
+              companyList={companyList}
+              lines={state.lines}
+              stations={state.stations}
+              selectedLine={selectedLine}
+              selectedStation={selectedStation}
+              selectedGeoFeature={selectedGeoFeature}
+              selectedPoi={selectedPoi}
+              poiList={poiList}
+              selectedCompany={selectedCompany}
+              onSelectLine={id => {
+                playSound('tool')
+                handleSetSelection([], [id], [])
+                // Fly to the line only when picked from the list; a click on the canvas
+                // leaves the viewport alone (the line is already where the user is looking).
+                mapCanvasRef.current?.frameLine(id)
+              }}
+              onSelectStation={withSound('tool', (id: string) => handleSetSelection([id], [], []))}
+              onSelectGeoFeature={withSound('tool', (id: string) => handleSetSelection([], [], [id]))}
+              onSelectCompany={handleSelectCompany}
+              onToggleLineVisibility={withSound('toggle', toggleLineVisibility)}
+              onAddLine={() => handleSetTool('draw-line')}
+              onAddRiver={() => handleSetTool('draw-river')}
+              onAddPark={() => handleSetTool('draw-park')}
+              onAddPoi={() => handleSetTool('add-poi')}
+              onSelectPoi={withSound('tool', (id: string) => handleSetSelection([], [], [], [id]))}
+              onRenamePoi={renamePoi}
+              onSetPoiIcon={withSound('toggle', setPoiIcon)}
+              onDeletePoi={withSound('remove', deletePoi)}
+              onAddCompany={withSound('station', addCompany)}
+              onSetAuthorityName={setAuthorityName}
+              onRenameLine={renameLine}
+              onSetLineNumber={setLineNumber}
+              onRecolorLine={recolorLine}
+              onSetLineCompany={setLineCompany}
+              onExtendLine={startExtendLine}
+              onDeleteLine={withSound('remove', (lineId: string, withStations: boolean) => deleteLine(lineId, withStations))}
+              onRenameStation={renameStation}
+              onToggleTransfer={withSound('toggle', toggleStationTransfer)}
+              onToggleMain={withSound('toggle', toggleStationMain)}
+              onDeleteStation={withSound('remove', deleteStation)}
+              onRenameGeoFeature={renameGeoFeature}
+              onExtendGeoFeature={startExtendGeoFeature}
+              onDeleteGeoFeature={withSound('remove', deleteGeoFeature)}
+              onRenameCompany={renameCompany}
+              onSetCompanyType={setCompanyType}
+              onSetCompanySymbol={withSound('toggle', setCompanySymbol)}
+              onDeleteCompany={withSound('remove', deleteCompany)}
+            />
+          )}
 
           <CanvasLegend mapName={state.mapName} authorityName={state.authorityName} />
         </div>
