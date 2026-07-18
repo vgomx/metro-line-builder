@@ -127,6 +127,11 @@ type DragState =
 
 const GRID_EXTENT = 4000
 const DRAW_TOOLS: Tool[] = ['add-station', 'draw-line', 'draw-river', 'draw-park']
+/** How long a deleted line spends coming apart, and how long its ghost is held for. The
+ * hold outlasts the animation so the final frame isn't clipped. A line that's merely been
+ * switched off keeps the old quick fade — see the ghost renderer. */
+const LINE_SHATTER_MS = 620
+const LINE_EXIT_HOLD_MS = 700
 const RIVER_DRAFT_STROKE = '#60A5FA'
 const PARK_DRAFT_STROKE = '#4ADE80'
 
@@ -687,7 +692,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           return [line.id, { color: line.color, d: geometry ? buildLinePath(geometry, line.id, network.segmentLineMap) : '' }]
         }),
     ),
-    260,
+    LINE_EXIT_HOLD_MS,
   )
 
   const draftLineStationIdSet = new Set(
@@ -823,23 +828,37 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           />
         )}
 
-        {/* Deleted / hidden lines fade out from their last shape. */}
-        {exitingLines.map(
-          ghost =>
-            ghost.data.d && (
-              <path
-                key={ghost.key}
-                d={ghost.data.d}
-                fill="none"
-                stroke={ghost.data.color}
-                strokeWidth={5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                opacity={0.9}
-                style={{ pointerEvents: 'none', animation: 'mlb-line-exit 240ms ease forwards' }}
-              />
-            ),
-        )}
+        {/* A line leaves the map for one of two reasons, and they shouldn't look alike: a
+            deleted line comes apart, while one that's merely been switched off fades, because
+            it's still there to be switched back on. The ghost carries its id, so which of the
+            two happened is just "does this line still exist". */}
+        {exitingLines.map(ghost => {
+          if (!ghost.data.d) return null
+          const switchedOff = lineList.some(line => line.id === ghost.id)
+          return (
+            <path
+              key={ghost.key}
+              d={ghost.data.d}
+              // Normalised length, so the fragments the stroke breaks into are the same
+              // fraction of the route whatever its length — a short branch and a cross-city
+              // line come apart into the same number of pieces rather than one shattering
+              // into dust while the other snaps in half.
+              pathLength={1}
+              fill="none"
+              stroke={ghost.data.color}
+              strokeWidth={5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={0.9}
+              style={{
+                pointerEvents: 'none',
+                animation: switchedOff
+                  ? 'mlb-line-exit 240ms ease forwards'
+                  : `mlb-line-shatter ${LINE_SHATTER_MS}ms cubic-bezier(0.3, 0.5, 0.5, 1) forwards`,
+              }}
+            />
+          )
+        })}
 
         {/* Bare waypoints on a selected line get a small marker so a stray or
             unwanted route-shaping point can be selected and deleted — stations

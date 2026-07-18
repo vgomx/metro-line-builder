@@ -123,6 +123,27 @@ body {
   }
 }
 
+/* A deleted line comes apart rather than fading: the stroke fractures into shorter and
+   shorter dashes until there is nothing left of it. Values are fractions of the path's
+   length (the ghost carries pathLength="1"), so a route breaks into a consistent number of
+   pieces regardless of how far it runs. Round caps turn the last fragments into grains.
+
+   No particles anywhere in this — it is one animated property on the path the renderer
+   already produced, which is why it costs nothing on a long line and needs no measuring. */
+@keyframes mlb-line-shatter {
+  0% {
+    stroke-dasharray: 1 0;
+  }
+  55% {
+    stroke-dasharray: 0.035 0.022;
+    opacity: 0.9;
+  }
+  100% {
+    stroke-dasharray: 0.006 0.05;
+    opacity: 0;
+  }
+}
+
 /* Icon tiles, shared by the picker's palette and the Inspector's symbol grid. The artwork
    carries the meaning, so the chrome stays out of its way until hover or selection. */
 .mlb-poi-swatch {
