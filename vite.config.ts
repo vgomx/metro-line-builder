@@ -13,7 +13,7 @@ export default defineConfig({
     // JS bundle and parsed on every load, whether or not a map uses any of it. Keeping them
     // as real files means the browser fetches only the icons actually shown, and caches
     // them separately from the app. Everything else keeps the default.
-    assetsInlineLimit: (filePath: string) => (filePath.includes('/assets/openmoji/') ? false : undefined),
+    assetsInlineLimit: (filePath: string) => (filePath.includes('/assets/openmoji/') || filePath.includes('/assets/landmarks/') ? false : undefined),
   },
   // metro-ds is a local `file:` dependency (symlinked) with its own node_modules/react.
   // Without dedupe, the production build (Rollup) bundles two separate React copies —

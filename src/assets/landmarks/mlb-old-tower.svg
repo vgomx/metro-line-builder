@@ -1,0 +1,25 @@
+<svg id="emoji" viewBox="0 0 72 72" xmlns="http://www.w3.org/2000/svg">
+  <g id="color">
+    <polygon points="25 26 47 26 45.5 61 26.5 61" fill="#d0cfce"/>
+    <rect x="22" y="21" width="28" height="5" fill="#fff"/>
+    <rect x="22" y="16" width="7" height="5" fill="#fff"/>
+    <rect x="32.5" y="16" width="7" height="5" fill="#fff"/>
+    <rect x="43" y="16" width="7" height="5" fill="#fff"/>
+    <path d="M30.5 61V50a5.5 5.5 0 0 1 11 0v11z" fill="#9b9b9a"/>
+    <rect x="29.5" y="32" width="5.5" height="8" fill="#92d3f5"/>
+    <rect x="37" y="32" width="5.5" height="8" fill="#92d3f5"/>
+  </g>
+  <g id="hair"/>
+  <g id="skin"/>
+  <g id="skin-shadow"/>
+  <g id="line">
+    <polygon points="25 26 47 26 45.5 61 26.5 61" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2"/>
+    <rect x="22" y="21" width="28" height="5" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2"/>
+    <rect x="22" y="16" width="7" height="5" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2"/>
+    <rect x="32.5" y="16" width="7" height="5" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2"/>
+    <rect x="43" y="16" width="7" height="5" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2"/>
+    <path d="M30.5 61V50a5.5 5.5 0 0 1 11 0v11" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2"/>
+    <rect x="29.5" y="32" width="5.5" height="8" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="1.6"/>
+    <rect x="37" y="32" width="5.5" height="8" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="1.6"/>
+  </g>
+</svg>

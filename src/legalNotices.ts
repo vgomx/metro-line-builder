@@ -133,4 +133,22 @@ License: https://creativecommons.org/licenses/by-sa/4.0/
 This licence is reproduced by reference rather than in full, as it permits. Note the
 ShareAlike term: adaptations of these icons must be shared under the same licence.`,
   },
+  {
+    name: 'Metro Line Builder landmarks',
+    packages: 'obelisk, monument, old tower, statue',
+    license: 'CC-BY-SA-4.0',
+    text: `Four landmark symbols — obelisk, monument, old tower and statue — were drawn for
+this project rather than taken from OpenMoji, which ships only named landmarks
+(Tokyo tower, the Statue of Liberty) where a map usually wants a generic one.
+
+They follow OpenMoji's visual language deliberately, so that the palette reads as
+one set: the same 72x72 canvas, the same stone and window-blue palette, the same
+black line layer over flat colour. No path data was copied from OpenMoji's files,
+and OpenMoji's own icons remain byte-for-byte as published — but these are offered
+under the same CC BY-SA 4.0 licence regardless, so that a palette which looks like
+one set is licensed like one set.
+
+Copyright (c) Metro Line Builder contributors
+License: https://creativecommons.org/licenses/by-sa/4.0/`,
+  },
 ]
