@@ -69,6 +69,13 @@ interface MapCanvasProps {
   onDeleteWaypoint: (lineId: string, index: number) => void
   onDeleteSelected: () => void
   onCheckpoint: () => void
+  /** A station has been picked up — fires on every grab, before anything moves. */
+  onStationGrab?: () => void
+  /** A drag has pulled a line into a new shape. Fires once per drag, the first time the
+   * route actually gives, not per frame. */
+  onLineReroute?: () => void
+  /** A dropped line is springing into its new shape — fires as the elastic snap begins. */
+  onLineSnap?: () => void
   onUndo: () => void
   onRedo: () => void
   onTransformChange?: (transform: ZoomTransform) => void
@@ -137,6 +144,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onDeleteWaypoint,
     onDeleteSelected,
     onCheckpoint,
+    onStationGrab,
+    onLineReroute,
+    onLineSnap,
     onUndo,
     onRedo,
     onTransformChange,
@@ -321,6 +331,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       return
     }
 
+    // Past the shift-click branch above, so this is a real pick-up rather than a
+    // selection toggle.
+    onStationGrab?.()
     safeSetPointerCapture(e.target as Element, e.pointerId)
     const ids = selectedStationIds.includes(station.id) ? selectedStationIds : [station.id]
     if (!selectedStationIds.includes(station.id)) {
@@ -400,7 +413,15 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         const dx = targetX - anchor.x
         const dy = targetY - anchor.y
         if (dx !== 0 || dy !== 0) {
-          if (!drag.moved) onCheckpoint()
+          if (!drag.moved) {
+            onCheckpoint()
+            // Only a station some line runs through can reshape a route; dragging a station
+            // that sits on no line moves a marker and nothing else.
+            const reshapesALine = lineList.some(line =>
+              line.nodes.some(n => n.kind === 'station' && drag.ids.includes(n.stationId)),
+            )
+            if (reshapesALine) onLineReroute?.()
+          }
           onMoveStations(drag.ids, dx, dy)
           setDrag({ ...drag, moved: true })
         }
@@ -441,6 +462,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
 
       snapSessionRef.current += 1
       setSnapSession({ key: String(snapSessionRef.current), originalPositions: drag.originalPositions })
+      // Same gate as the reroute: only a line the drag actually reshaped has a spring to
+      // play, so a lone station settling back makes no sound.
+      if (lineList.some(line => line.nodes.some(n => n.kind === 'station' && drag.ids.includes(n.stationId)))) {
+        onLineSnap?.()
+      }
     }
     setDrag({ kind: 'none' })
   }
