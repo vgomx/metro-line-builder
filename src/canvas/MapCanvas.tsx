@@ -14,6 +14,7 @@ import { SnapAnimation } from './SnapAnimation'
 import { RefanAnimation } from './RefanAnimation'
 import { routeOrthogonal } from './routing'
 import { GRID_SIZE, snapToGrid, snapToPoiGrid } from '../grid'
+import { minGeoPointsForTool } from '../geoDraft'
 import {
   buildLineTrack,
   buildNetworkGeometry,
@@ -24,7 +25,7 @@ import {
 } from './lineNodes'
 import type { RefanLine } from './lineNodes'
 import { computeLabelPlacements } from './labelPlacement'
-import { POI_DRAG_MIME } from '../openmoji'
+import { openMojiUrl, POI_DRAG_MIME } from '../openmoji'
 import { useAppearance } from './useAppearance'
 import { useExit } from './useExit'
 import { buildLinePath } from './lineNodes'
@@ -69,8 +70,9 @@ interface MapCanvasProps {
   onAddPoi: (x: number, y: number, icon: string) => void
   /** A landmark has come to rest, whether newly dropped or moved. Fires once per landing. */
   onPoiLand?: () => void
-  /** The canvas has been clicked while the point-of-interest tool is up — put the tool down. */
-  onExitPoiTool: () => void
+  /** Put the drawing tool down and go back to select — a click on the canvas with the
+   * point-of-interest palette up, or Escape with nothing drafted. */
+  onReturnToSelect: () => void
   onMovePois: (ids: string[], dx: number, dy: number) => void
   onFinishGeoFeature: () => void
   onCancelGeoFeature: () => void
@@ -136,6 +138,11 @@ const DRAW_TOOLS: Tool[] = ['add-station', 'draw-line', 'draw-river', 'draw-park
  * to settle into it. */
 const IMPACT_MS = 520
 const SETTLE_MS = 340
+/** A station's ripple: shorter than a landmark's, because it's a nudge rather than an event. */
+const STATION_RIPPLE_MS = 380
+/** How long a deleted landmark takes to come apart, and how long its ghost is held. */
+const CRUMBLE_MS = 380
+const POI_EXIT_HOLD_MS = 440
 const LINE_SHATTER_MS = 620
 const LINE_EXIT_HOLD_MS = 700
 const RIVER_DRAFT_STROKE = '#60A5FA'
@@ -170,7 +177,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onAddGeoPoint,
     onAddPoi,
     onMovePois,
-    onExitPoiTool,
+    onReturnToSelect,
     onPoiLand,
     onFinishGeoFeature,
     onCancelGeoFeature,
@@ -202,7 +209,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const [dropPoint, setDropPoint] = useState<Point | null>(null)
   /** The last landing, kept only long enough for the ripple to play out. Keyed so two drops in
    * quick succession restart the animation rather than sharing one that's already running. */
-  const [impact, setImpact] = useState<{ key: number; points: Point[] } | null>(null)
+  const [impact, setImpact] = useState<{ key: number; points: Point[]; soft: boolean } | null>(null)
   const impactSeq = useRef(0)
   /** Landmarks that have just been put down after a move, so their marker settles the way a
    * freshly dropped one does. New arrivals come from useAppearance instead — they have no
@@ -215,12 +222,17 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
    * they're the same gesture as far as the map is concerned, and only the sound and the
    * marker's own animation differ between them.
    */
-  const announceLanding = (points: Point[], settled: string[] = []) => {
+  const showImpact = (points: Point[], soft: boolean) => {
     if (points.length === 0) return
     impactSeq.current += 1
     const key = impactSeq.current
-    setImpact({ key, points })
-    window.setTimeout(() => setImpact(prev => (prev?.key === key ? null : prev)), IMPACT_MS)
+    setImpact({ key, points, soft })
+    window.setTimeout(() => setImpact(prev => (prev?.key === key ? null : prev)), soft ? STATION_RIPPLE_MS : IMPACT_MS)
+  }
+
+  const announceLanding = (points: Point[], settled: string[] = []) => {
+    if (points.length === 0) return
+    showImpact(points, false)
     if (settled.length > 0) {
       setSettlingPoiIds(new Set(settled))
       window.setTimeout(() => setSettlingPoiIds(new Set()), SETTLE_MS)
@@ -304,6 +316,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       if (e.key === 'Escape') {
         if (draftLineNodes.length > 0) onCancelDraftLine()
         else if (draftGeoPoints.length > 0) onCancelGeoFeature()
+        // Nothing drafted, so Escape backs out of the tool itself rather than doing nothing
+        // visible. A drawing tool you can't put down with the key that means "stop" is the
+        // same trap as a draft you can't finish.
+        else if (DRAW_TOOLS.includes(tool) || tool === 'add-poi') onReturnToSelect()
         else onClearSelection()
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedWaypoint) {
@@ -319,8 +335,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           onDeleteSelected()
         }
       } else if (e.key === 'Enter') {
+        // Against the tool's own minimum, not a flat two. A park needs three points, and
+        // finishing one on two reached a reducer that silently threw the draft away.
+        const geoMinimum = minGeoPointsForTool(tool)
         if (draftLineNodes.length >= 2) onFinishDraftLine()
-        else if (draftGeoPoints.length >= 2) onFinishGeoFeature()
+        else if (geoMinimum !== null && draftGeoPoints.length >= geoMinimum) onFinishGeoFeature()
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault()
         if (e.shiftKey) onRedo()
@@ -340,9 +359,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     selectedGeoFeatureIds,
     selectedPoiIds,
     selectedWaypoint,
+    tool,
     onCancelDraftLine,
     onCancelGeoFeature,
     onClearSelection,
+    onReturnToSelect,
     onDeleteWaypoint,
     onDeleteSelected,
     onFinishDraftLine,
@@ -586,6 +607,14 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         if (target) onMergeStations(target.id, draggedId)
       }
 
+      // Where each dragged station came to rest. The landmark's ripple, dialled down: a
+      // station moves constantly while a map is being drawn, so it gets a nudge rather than
+      // the ceremony a landmark gets.
+      showImpact(
+        drag.ids.map(id => stations[id]).filter((s): s is Station => Boolean(s)).map(s => ({ x: s.x, y: s.y })),
+        true,
+      )
+
       snapSessionRef.current += 1
       setSnapSession({ key: String(snapSessionRef.current), originalPositions: drag.originalPositions })
       // Same gate as the reroute: only a line the drag actually reshaped has a spring to
@@ -605,7 +634,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   // navigation, and it would be a poor reward for looking around.
   const handleRootPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (e.button !== 0 || spaceHeld) return
-    if (tool === 'add-poi') onExitPoiTool()
+    if (tool === 'add-poi') onReturnToSelect()
   }
 
   // Dragging a symbol in from the palette. dragover has to preventDefault on every event or
@@ -638,8 +667,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     if (spaceHeld) return
     if (tool === 'draw-line' && draftLineNodes.length >= 2) {
       onFinishDraftLine()
-    } else if ((tool === 'draw-river' || tool === 'draw-park') && draftGeoPoints.length >= 2) {
-      onFinishGeoFeature()
+    } else {
+      const geoMinimum = minGeoPointsForTool(tool)
+      if (geoMinimum !== null && draftGeoPoints.length >= geoMinimum) onFinishGeoFeature()
     }
   }
 
@@ -747,6 +777,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         }),
     ),
     LINE_EXIT_HOLD_MS,
+  )
+
+  const exitingPois = useExit(
+    new Map(poiList.map(poi => [poi.id, { x: poi.x, y: poi.y, icon: poi.icon }])),
+    POI_EXIT_HOLD_MS,
   )
 
   const draftLineStationIdSet = new Set(
@@ -1026,16 +1061,23 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           <g key={impact.key} style={{ pointerEvents: 'none' }}>
             {impact.points.map((point, index) => (
               <g key={index} transform={`translate(${point.x}, ${point.y})`}>
-                {[0, 90].map(delay => (
+                {(impact.soft ? [0] : [0, 90]).map(delay => (
                   <g
                     key={delay}
                     style={{
                       transformBox: 'fill-box',
                       transformOrigin: 'center',
-                      animation: `mlb-poi-impact ${IMPACT_MS - delay}ms cubic-bezier(0.2, 0.6, 0.3, 1) ${delay}ms both`,
+                      animation: impact.soft
+                        ? `mlb-station-ripple ${STATION_RIPPLE_MS}ms cubic-bezier(0.2, 0.6, 0.3, 1) both`
+                        : `mlb-poi-impact ${IMPACT_MS - delay}ms cubic-bezier(0.2, 0.6, 0.3, 1) ${delay}ms both`,
                     }}
                   >
-                    <circle r={13} fill="none" stroke="var(--text-primary)" strokeWidth={2} />
+                    <circle
+                      r={impact.soft ? 9 : 13}
+                      fill="none"
+                      stroke="var(--text-primary)"
+                      strokeWidth={impact.soft ? 1.5 : 2}
+                    />
                   </g>
                 ))}
               </g>
@@ -1053,6 +1095,45 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             onPointerDown={handlePoiPointerDown}
           />
         ))}
+
+        {/* A deleted landmark comes apart where it stood, the impact rings running backwards
+            into it as it goes. */}
+        {exitingPois.map(ghost => {
+          const href = openMojiUrl(ghost.data.icon)
+          return (
+            <g key={ghost.key} transform={`translate(${ghost.data.x}, ${ghost.data.y})`} style={{ pointerEvents: 'none' }}>
+              <g
+                style={{
+                  transformBox: 'fill-box',
+                  transformOrigin: 'center',
+                  animation: `mlb-poi-collapse ${CRUMBLE_MS}ms cubic-bezier(0.4, 0, 0.4, 1) both`,
+                }}
+              >
+                <circle r={13} fill="none" stroke="var(--text-primary)" strokeWidth={2} />
+              </g>
+              <g
+                style={{
+                  transformBox: 'fill-box',
+                  transformOrigin: 'center',
+                  animation: `mlb-poi-crumble ${CRUMBLE_MS}ms cubic-bezier(0.5, -0.2, 0.7, 1) both`,
+                }}
+              >
+                <rect
+                  x={-14}
+                  y={-14}
+                  width={28}
+                  height={28}
+                  rx={6}
+                  fill="var(--bg-surface)"
+                  stroke="var(--border-subtle)"
+                  strokeWidth={1}
+                  opacity={0.92}
+                />
+                {href && <image href={href} x={-13} y={-13} width={26} height={26} />}
+              </g>
+            </g>
+          )
+        })}
 
         {/* Deleted stations shrink and fade from where they were. */}
         {exitingStations.map(ghost => (

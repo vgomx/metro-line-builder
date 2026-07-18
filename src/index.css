@@ -184,7 +184,8 @@ body {
    putting down the thing that was picked up, rather than by releasing a bare cutout.
 
    Parked off-screen because the browser snapshots it at setDragImage time and must find it
-   rendered; it never appears here, only in the snapshot. */
+   rendered; it never appears here, only in the snapshot. Its size is set on the element, not
+   here: it tracks the map's zoom so the tile is the landmark's real size. */
 .mlb-poi-drag-tile {
   position: fixed;
   top: -200px;
@@ -192,8 +193,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
@@ -276,4 +275,117 @@ body {
   100% {
     transform: translateY(0) scale(1);
   }
+}
+
+/* A landmark being deleted, answering the landing: the rings that were pushed out on impact
+   rush back in, and the marker buckles — a lurch outward first, then it crumples to nothing
+   with a twist. The twist is what keeps it from reading as a plain shrink. */
+@keyframes mlb-poi-crumble {
+  0% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  30% {
+    transform: scale(1.1) rotate(-4deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.12) rotate(11deg);
+    opacity: 0;
+  }
+}
+
+@keyframes mlb-poi-collapse {
+  0% {
+    transform: scale(2.3);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(0.15);
+    opacity: 0;
+  }
+}
+
+/* The drawing hint arriving — it appears mid-gesture, so it rises into place rather than
+   snapping in under the pointer. */
+@keyframes mlb-hint-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* The same idea as a landmark's impact, dialled down for a station: one ring instead of two,
+   smaller, and fainter. A station is moved constantly while a map is being drawn — often
+   several at once — so this has to register as a nudge and then get out of the way, where a
+   landmark landing is allowed to be an event. */
+@keyframes mlb-station-ripple {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.3;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+/* Entry slots in the welcome dialog: a picture of the map you'd get, with its label under it.
+   The art sits in its own framed box so the two previews read as two documents to choose
+   between rather than as two illustrations sharing a background. */
+.mlb-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mlb-slot-art {
+  width: 100%;
+  height: auto;
+  display: block;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: 8px;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.mlb-slot:hover .mlb-slot-art,
+.mlb-slot:focus-visible .mlb-slot-art {
+  border-color: var(--interactive-primary);
+  transform: translateY(-2px);
+}
+
+.mlb-slot:focus-visible {
+  outline: none;
+}
+
+.mlb-slot:focus-visible .mlb-slot-art {
+  box-shadow: 0 0 0 2px var(--brand-500);
+}
+
+.mlb-slot-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mlb-slot-sub {
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--text-secondary);
 }

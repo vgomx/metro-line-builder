@@ -16,8 +16,9 @@ interface PoiNodeProps {
   onPointerDown: (e: ReactPointerEvent<SVGGElement>, poi: PointOfInterest) => void
 }
 
-/** Drawn size of the icon on the map, in world units. */
-const ICON_SIZE = 26
+/** Drawn size of the icon on the map, in world units. Exported because the palette sizes the
+ * tile it hands the pointer from this, so what's dragged is the size of what will land. */
+export const POI_ICON_SIZE = 26
 /** Deliberately well under a station's 10: landmarks now sit half a square apart, so their
  * names have to pass each other — and beside the network, a landmark is a footnote. Small
  * enough that two adjacent ones don't fight, rather than adding a second placement solver. */
@@ -32,7 +33,7 @@ export function PoiNode({ poi, selected, dragging, landing, onPointerDown }: Poi
   const [hovered, setHovered] = useState(false)
   const href = openMojiUrl(poi.icon)
   const grown = dragging ? DRAG_GROWTH : hovered ? HOVER_GROWTH : 0
-  const size = ICON_SIZE + grown * 2
+  const size = POI_ICON_SIZE + grown * 2
   const half = size / 2
   const name = poi.name.trim()
 

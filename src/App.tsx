@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { Button, Toast } from 'metro-ds'
-import { useMapState } from './state/useMapState'
+import { hasSavedMap, useMapState } from './state/useMapState'
 import { MapCanvas } from './canvas/MapCanvas'
 import type { MapCanvasHandle } from './canvas/MapCanvas'
 import { TopBar } from './components/TopBar'
@@ -8,11 +8,14 @@ import { LeftToolbar, LEFT_TOOLBAR_WIDTH } from './components/LeftToolbar'
 import { RightPanel, RIGHT_PANEL_WIDTH } from './components/RightPanel'
 import { CanvasStats, SelectionLabel } from './components/CanvasOverlay'
 import { PoiPicker } from './components/PoiPicker'
+import { DraftFinishHint } from './components/DraftFinishHint'
+import { WelcomeDialog } from './components/WelcomeDialog'
 import { DeleteStationsDialog } from './components/DeleteStationsDialog'
 import { CanvasLegend } from './components/CanvasLegend'
 import { LineAnnouncer } from './components/LineAnnouncer'
 import { exportMapAsJson, pickMapFile } from './export'
 import { exclusiveStationIds, stationIdsOfLine } from './canvas/lineNodes'
+import { geoTypeOfTool, MIN_GEO_POINTS } from './geoDraft'
 import { useTheme } from './useTheme'
 import { useSound } from './useSound'
 import { playSound } from './sound'
@@ -32,6 +35,9 @@ const CANVAS_INSETS = {
   top: FLOAT_GAP,
   bottom: FLOAT_GAP,
 }
+/** With the panel put away, the map has that whole side back — framing and the centred canvas
+ * chrome both have to know, or they keep dodging something that isn't there. */
+const CANVAS_INSETS_NO_PANEL = { ...CANVAS_INSETS, right: FLOAT_GAP }
 
 function App() {
   const {
@@ -100,6 +106,10 @@ function App() {
   const [zoom, setZoom] = useState(1)
   const [showGrid, setShowGrid] = useState(true)
   const [showTrains, setShowTrains] = useState(false)
+  const [showPanel, setShowPanel] = useState(true)
+  // Asked once, on the first visit this browser has ever had. Read at mount, before the
+  // persistence effect writes anything — a beat later there would be a saved map either way.
+  const [showWelcome, setShowWelcome] = useState(() => !hasSavedMap())
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
   // Set while the Delete key is waiting on an answer about the stations its lines alone serve.
@@ -125,6 +135,15 @@ function App() {
     'Behold — a transit network nobody asked for. Ctrl+Z to un-behold it.',
     'A whole new city. The commuters are already grumbling.',
   ]
+  const handleWelcomeGenerate = () => {
+    setShowWelcome(false)
+    playSound('generate')
+    generateMap()
+    // Same two frames the Surprise button waits: React has to commit the new line paths and
+    // the browser has to lay out the fresh SVG before there's anything to frame.
+    requestAnimationFrame(() => requestAnimationFrame(() => mapCanvasRef.current?.fitContent()))
+  }
+
   const handleSurprise = () => {
     playSound('generate')
     generateMap()
@@ -218,6 +237,8 @@ function App() {
     state.selectedPoiIds.length === 1 ? (state.pointsOfInterest[state.selectedPoiIds[0]] ?? null) : null
   const selectedCompany = selectedCompanyId ? (state.companies[selectedCompanyId] ?? null) : null
 
+  const insets = showPanel ? CANVAS_INSETS : CANVAS_INSETS_NO_PANEL
+
   const authorityDisplayName = state.authorityName || `${state.mapName.trim() || 'Untitled Map'} Transit Authority`
 
   // Line selection gets its own bottom-center LED announcer (below) instead of the
@@ -230,8 +251,33 @@ function App() {
       ? `${selectedGeoFeature.type === 'river' ? 'River' : 'Park'}: ${selectedGeoFeature.name}`
       : null
 
-  const geoDraftLabel = state.tool === 'draw-river' ? 'river' : state.tool === 'draw-park' ? 'park' : null
-  const geoMinPoints = state.tool === 'draw-park' ? 3 : 2
+  /**
+   * What the drawing tool in hand is drafting, or null if it isn't one. Both kinds answer the
+   * same four questions — how to start, how many points before it's finishable, what the
+   * button says, and what finishing calls — so the chrome asks them once rather than existing
+   * twice with rivers and parks getting the poorer half.
+   */
+  const geoType = geoTypeOfTool(state.tool)
+  const draft =
+    state.tool === 'draw-line'
+      ? {
+          points: state.draftLineNodes.length,
+          minimum: 2,
+          startHint: 'Click a station or the canvas to start drawing a line · Esc to put the pen down',
+          finishLabel: state.draftLineId
+            ? `Update line (${state.draftLineNodes.length} points)`
+            : `Finish line (${state.draftLineNodes.length} points)`,
+          onFinish: finishDraftLine,
+        }
+      : geoType
+        ? {
+            points: state.draftGeoPoints.length,
+            minimum: MIN_GEO_POINTS[geoType],
+            startHint: `Click the canvas to start drawing a ${geoType} · Esc to put the pen down`,
+            finishLabel: `Finish ${geoType} (${state.draftGeoPoints.length} points)`,
+            onFinish: finishGeoFeature,
+          }
+        : null
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100svh' }}>
@@ -245,6 +291,8 @@ function App() {
         onToggleGrid={withSound('toggle', () => setShowGrid(g => !g))}
         showTrains={showTrains}
         onToggleTrains={withSound('toggle', () => setShowTrains(t => !t))}
+        showPanel={showPanel}
+        onTogglePanel={withSound('toggle', () => setShowPanel(p => !p))}
         soundEnabled={soundEnabled}
         onToggleSound={toggleSound}
         theme={theme}
@@ -277,7 +325,7 @@ function App() {
             draftGeoPoints={state.draftGeoPoints}
             showGrid={showGrid}
             showTrains={showTrains}
-            viewportInsets={CANVAS_INSETS}
+            viewportInsets={insets}
             onAddStation={withSound('station', addStation)}
             onMoveStations={moveStations}
             onMergeStations={withSound('lineDone', mergeStations)}
@@ -290,7 +338,7 @@ function App() {
             onAddPoi={(x: number, y: number, icon: string) => addPoi(x, y, icon, openMojiLabel(icon))}
             onPoiLand={() => playSound('drop')}
             onMovePois={movePois}
-            onExitPoiTool={() => handleSetTool('select')}
+            onReturnToSelect={() => handleSetTool('select')}
             onFinishGeoFeature={withSound('lineDone', finishGeoFeature)}
             onCancelGeoFeature={cancelGeoFeature}
             onSetSelection={handleSetSelection}
@@ -314,8 +362,8 @@ function App() {
               position: 'absolute',
               top: 0,
               bottom: 0,
-              left: CANVAS_INSETS.left,
-              right: CANVAS_INSETS.right,
+              left: insets.left,
+              right: insets.right,
               // Click-through so the canvas underneath still gets the pointer; each child
               // that needs a pointer (buttons, the toast, the line chip) opts back in.
               pointerEvents: 'none',
@@ -335,56 +383,50 @@ function App() {
               />
             )}
 
-            {state.tool === 'draw-line' && state.draftLineNodes.length === 0 && (
+            {/* Everything the line-drawing tool has to say, stacked in one column so the
+                button and the hint beneath it can't land on top of each other. */}
+            {/* Everything a drawing tool has to say, in one column so the button and the
+                hints beneath it can't land on top of each other. Lines and geography share it:
+                they are drawn the same way, finished the same way, and were equally silent
+                about both. */}
+            {draft && (
               <div
                 style={{
                   position: 'absolute',
                   top: 'var(--space-3)',
                   left: '50%',
                   transform: 'translateX(-50%)',
-                  background: 'var(--ink-900)',
-                  color: 'var(--ink-0)',
-                  borderRadius: 'var(--radius-lg)',
-                  padding: '5px 12px',
-                  fontSize: 'var(--text-xs)',
-                  fontWeight: 500,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 'var(--gap-sm)',
                 }}
               >
-                Click a station or the canvas to start drawing a line
-              </div>
-            )}
+                {draft.points === 0 && (
+                  <div
+                    style={{
+                      background: 'var(--ink-900)',
+                      color: 'var(--ink-0)',
+                      borderRadius: 'var(--radius-lg)',
+                      padding: '5px 12px',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 500,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {draft.startHint}
+                  </div>
+                )}
 
-            {state.draftLineNodes.length >= 2 && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 'var(--space-3)',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  pointerEvents: 'auto',
-                }}
-              >
-                <Button variant="primary" onClick={finishDraftLine}>
-                  {state.draftLineId
-                    ? `Update line (${state.draftLineNodes.length} points)`
-                    : `Finish line (${state.draftLineNodes.length} points)`}
-                </Button>
-              </div>
-            )}
+                {draft.points >= draft.minimum && (
+                  <div style={{ pointerEvents: 'auto' }}>
+                    <Button variant="primary" onClick={draft.onFinish}>
+                      {draft.finishLabel}
+                    </Button>
+                  </div>
+                )}
 
-            {geoDraftLabel && state.draftGeoPoints.length >= geoMinPoints && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 'var(--space-3)',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  pointerEvents: 'auto',
-                }}
-              >
-                <Button variant="primary" onClick={finishGeoFeature}>
-                  Finish {geoDraftLabel} ({state.draftGeoPoints.length} points)
-                </Button>
+                <DraftFinishHint active={draft.points >= draft.minimum} />
               </div>
             )}
 
@@ -415,9 +457,16 @@ function App() {
           />
         )}
 
+        <WelcomeDialog
+          open={showWelcome}
+          theme={theme}
+          onGenerate={handleWelcomeGenerate}
+          onBlank={() => setShowWelcome(false)}
+        />
+
         <LeftToolbar tool={state.tool} onSetTool={handleSetTool} theme={theme} />
 
-        {state.tool === 'add-poi' && <PoiPicker />}
+        {state.tool === 'add-poi' && <PoiPicker scale={zoom} />}
 
         {/* Right-hand column: the panel flexes to fill it, leaving the authority mark
             seated beneath. Click-through so the gap between them, and the canvas showing
@@ -431,66 +480,74 @@ function App() {
             width: RIGHT_PANEL_WIDTH,
             display: 'flex',
             flexDirection: 'column',
+            // Bottom-aligned so the authority mark keeps its corner when the panel is put
+            // away. With the panel there it flexes to fill and this changes nothing.
+            justifyContent: 'flex-end',
             gap: FLOAT_GAP,
             pointerEvents: 'none',
             zIndex: 10,
             }}
         >
-          <RightPanel
-            mapName={state.mapName}
-            authorityName={state.authorityName}
-            authorityDisplayName={authorityDisplayName}
-            lineList={lineList}
-            stationList={stationList}
-            geoFeatureList={geoFeatureList}
-            companyList={companyList}
-            lines={state.lines}
-            stations={state.stations}
-            selectedLine={selectedLine}
-            selectedStation={selectedStation}
-            selectedGeoFeature={selectedGeoFeature}
-            selectedPoi={selectedPoi}
-            poiList={poiList}
-            selectedCompany={selectedCompany}
-            onSelectLine={id => {
-              playSound('tool')
-              handleSetSelection([], [id], [])
-              // Fly to the line only when picked from the list; a click on the canvas
-              // leaves the viewport alone (the line is already where the user is looking).
-              mapCanvasRef.current?.frameLine(id)
-            }}
-            onSelectStation={withSound('tool', (id: string) => handleSetSelection([id], [], []))}
-            onSelectGeoFeature={withSound('tool', (id: string) => handleSetSelection([], [], [id]))}
-            onSelectCompany={handleSelectCompany}
-            onToggleLineVisibility={withSound('toggle', toggleLineVisibility)}
-            onAddLine={() => handleSetTool('draw-line')}
-            onAddRiver={() => handleSetTool('draw-river')}
-            onAddPark={() => handleSetTool('draw-park')}
-            onAddPoi={() => handleSetTool('add-poi')}
-            onSelectPoi={withSound('tool', (id: string) => handleSetSelection([], [], [], [id]))}
-            onRenamePoi={renamePoi}
-            onSetPoiIcon={withSound('toggle', setPoiIcon)}
-            onDeletePoi={withSound('remove', deletePoi)}
-            onAddCompany={withSound('station', addCompany)}
-            onSetAuthorityName={setAuthorityName}
-            onRenameLine={renameLine}
-            onSetLineNumber={setLineNumber}
-            onRecolorLine={recolorLine}
-            onSetLineCompany={setLineCompany}
-            onExtendLine={startExtendLine}
-            onDeleteLine={withSound('remove', (lineId: string, withStations: boolean) => deleteLine(lineId, withStations))}
-            onRenameStation={renameStation}
-            onToggleTransfer={withSound('toggle', toggleStationTransfer)}
-            onToggleMain={withSound('toggle', toggleStationMain)}
-            onDeleteStation={withSound('remove', deleteStation)}
-            onRenameGeoFeature={renameGeoFeature}
-            onExtendGeoFeature={startExtendGeoFeature}
-            onDeleteGeoFeature={withSound('remove', deleteGeoFeature)}
-            onRenameCompany={renameCompany}
-            onSetCompanyType={setCompanyType}
-            onSetCompanySymbol={withSound('toggle', setCompanySymbol)}
-            onDeleteCompany={withSound('remove', deleteCompany)}
-          />
+          {/* The authority mark below stays whatever the panel does: it reads as part of
+              the map rather than as chrome on top of it, and putting the panel away is a
+              request to see the map. */}
+          {showPanel && (
+            <RightPanel
+              mapName={state.mapName}
+              authorityName={state.authorityName}
+              authorityDisplayName={authorityDisplayName}
+              lineList={lineList}
+              stationList={stationList}
+              geoFeatureList={geoFeatureList}
+              companyList={companyList}
+              lines={state.lines}
+              stations={state.stations}
+              selectedLine={selectedLine}
+              selectedStation={selectedStation}
+              selectedGeoFeature={selectedGeoFeature}
+              selectedPoi={selectedPoi}
+              poiList={poiList}
+              selectedCompany={selectedCompany}
+              onSelectLine={id => {
+                playSound('tool')
+                handleSetSelection([], [id], [])
+                // Fly to the line only when picked from the list; a click on the canvas
+                // leaves the viewport alone (the line is already where the user is looking).
+                mapCanvasRef.current?.frameLine(id)
+              }}
+              onSelectStation={withSound('tool', (id: string) => handleSetSelection([id], [], []))}
+              onSelectGeoFeature={withSound('tool', (id: string) => handleSetSelection([], [], [id]))}
+              onSelectCompany={handleSelectCompany}
+              onToggleLineVisibility={withSound('toggle', toggleLineVisibility)}
+              onAddLine={() => handleSetTool('draw-line')}
+              onAddRiver={() => handleSetTool('draw-river')}
+              onAddPark={() => handleSetTool('draw-park')}
+              onAddPoi={() => handleSetTool('add-poi')}
+              onSelectPoi={withSound('tool', (id: string) => handleSetSelection([], [], [], [id]))}
+              onRenamePoi={renamePoi}
+              onSetPoiIcon={withSound('toggle', setPoiIcon)}
+              onDeletePoi={withSound('remove', deletePoi)}
+              onAddCompany={withSound('station', addCompany)}
+              onSetAuthorityName={setAuthorityName}
+              onRenameLine={renameLine}
+              onSetLineNumber={setLineNumber}
+              onRecolorLine={recolorLine}
+              onSetLineCompany={setLineCompany}
+              onExtendLine={startExtendLine}
+              onDeleteLine={withSound('remove', (lineId: string, withStations: boolean) => deleteLine(lineId, withStations))}
+              onRenameStation={renameStation}
+              onToggleTransfer={withSound('toggle', toggleStationTransfer)}
+              onToggleMain={withSound('toggle', toggleStationMain)}
+              onDeleteStation={withSound('remove', deleteStation)}
+              onRenameGeoFeature={renameGeoFeature}
+              onExtendGeoFeature={startExtendGeoFeature}
+              onDeleteGeoFeature={withSound('remove', deleteGeoFeature)}
+              onRenameCompany={renameCompany}
+              onSetCompanyType={setCompanyType}
+              onSetCompanySymbol={withSound('toggle', setCompanySymbol)}
+              onDeleteCompany={withSound('remove', deleteCompany)}
+            />
+          )}
 
           <CanvasLegend mapName={state.mapName} authorityName={state.authorityName} />
         </div>

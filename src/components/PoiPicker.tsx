@@ -2,6 +2,12 @@ import { useMemo, useRef, useState } from 'react'
 import type { DragEvent as ReactDragEvent } from 'react'
 import { Input } from 'metro-ds'
 import { openMojiBySubgroup, openMojiUrl, POI_DRAG_MIME, SUBGROUP_LABELS } from '../openmoji'
+import { POI_ICON_SIZE } from '../canvas/PoiNode'
+
+interface PoiPickerProps {
+  /** The canvas's current zoom, so the dragged tile can be the size the landmark will be. */
+  scale: number
+}
 
 /**
  * The palette that stands beside the toolbar while the point-of-interest tool is live.
@@ -10,12 +16,11 @@ import { openMojiBySubgroup, openMojiUrl, POI_DRAG_MIME, SUBGROUP_LABELS } from 
  * of the gesture. The tool is modal, so the picker is too: it appears with the tool and
  * leaves with it.
  */
-/** Side of the tile the pointer carries, in px. Larger than a swatch and close to the
- * marker's drawn size, so what's in hand reads as the thing that will land. */
-const DRAG_TILE = 40
-const DRAG_TILE_ICON = 30
+/** Below this the tile is too small to see under the pointer at all. Only bites when the map
+ * is zoomed a long way out, where the landmark really would be a speck. */
+const MIN_DRAG_TILE = 18
 
-export function PoiPicker() {
+export function PoiPicker({ scale }: PoiPickerProps) {
   const [query, setQuery] = useState('')
   const [draggingIcon, setDraggingIcon] = useState<string | null>(null)
   const groups = useMemo(() => openMojiBySubgroup(), [])
@@ -32,18 +37,27 @@ export function PoiPicker() {
     setDraggingIcon(hexcode)
     if (!url) return
 
+    // Sized at the map's current zoom rather than at some fixed picker size, so the tile in
+    // hand is the landmark that will land — zoomed out it's a speck, zoomed in it's a slab,
+    // and either way you can see what you're about to commit to before letting go.
+    const iconPx = Math.max(MIN_DRAG_TILE, POI_ICON_SIZE * scale)
+    const tilePx = iconPx + 2
+
     const ghost = document.createElement('div')
     ghost.className = 'mlb-poi-drag-tile'
+    ghost.style.width = `${tilePx}px`
+    ghost.style.height = `${tilePx}px`
+    ghost.style.borderRadius = `${Math.max(3, 6 * scale)}px`
     const img = document.createElement('img')
     img.src = url
-    img.width = DRAG_TILE_ICON
-    img.height = DRAG_TILE_ICON
+    img.width = iconPx
+    img.height = iconPx
     img.alt = ''
     ghost.appendChild(img)
     document.body.appendChild(ghost)
     // Centred under the pointer: the gesture ends by pointing at where the landmark goes, so
     // the tile should sit on that spot rather than hang below and to the right of it.
-    e.dataTransfer.setDragImage(ghost, DRAG_TILE / 2, DRAG_TILE / 2)
+    e.dataTransfer.setDragImage(ghost, tilePx / 2, tilePx / 2)
     ghostRef.current = ghost
   }
 

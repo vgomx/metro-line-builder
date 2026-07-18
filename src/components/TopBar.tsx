@@ -3,7 +3,22 @@ import type { ChangeEvent } from 'react'
 import { Button, IconButton } from 'metro-ds'
 import logoLightUrl from 'metro-ds/assets/logo.svg'
 import logoDarkUrl from 'metro-ds/assets/logo-horizontal-white.svg'
-import { DownloadIcon, FolderOpenIcon, GridIcon, MoonIcon, RedoIcon, SoundOffIcon, SoundOnIcon, SparkleIcon, SunIcon, TrainIcon, UndoIcon, ZoomInIcon, ZoomOutIcon } from '../icons'
+import {
+  DownloadIcon,
+  FolderOpenIcon,
+  GridIcon,
+  MoonIcon,
+  PanelIcon,
+  RedoIcon,
+  SoundOffIcon,
+  SoundOnIcon,
+  SparkleIcon,
+  SunIcon,
+  TrainIcon,
+  UndoIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
+} from '../icons'
 import type { Theme } from '../useTheme'
 
 interface TopBarProps {
@@ -16,6 +31,8 @@ interface TopBarProps {
   onToggleGrid: () => void
   showTrains: boolean
   onToggleTrains: () => void
+  showPanel: boolean
+  onTogglePanel: () => void
   soundEnabled: boolean
   onToggleSound: () => void
   theme: Theme
@@ -39,6 +56,8 @@ export function TopBar({
   onToggleGrid,
   showTrains,
   onToggleTrains,
+  showPanel,
+  onTogglePanel,
   soundEnabled,
   onToggleSound,
   theme,
@@ -129,6 +148,13 @@ export function TopBar({
 
       <IconButton icon={<GridIcon />} label="Toggle grid" size="sm" active={showGrid} onClick={onToggleGrid} />
       <IconButton icon={<TrainIcon />} label="Toggle trains" size="sm" active={showTrains} onClick={onToggleTrains} />
+      <IconButton
+        icon={<PanelIcon />}
+        label={showPanel ? 'Hide side panel' : 'Show side panel'}
+        size="sm"
+        active={showPanel}
+        onClick={onTogglePanel}
+      />
       <IconButton
         icon={soundEnabled ? <SoundOnIcon /> : <SoundOffIcon />}
         label={soundEnabled ? 'Mute interface sounds' : 'Unmute interface sounds'}

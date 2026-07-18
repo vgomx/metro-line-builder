@@ -5,6 +5,7 @@ import { DEFAULT_COMPANY_SYMBOL } from '../companySymbols'
 import { nextLineColor } from '../lineColors'
 import { isUsableLineNumber, nextFreeLineNumber } from '../lineNumber'
 import { snapToGrid, snapToPoiGrid } from '../grid'
+import { MIN_GEO_POINTS } from '../geoDraft'
 import { pickLineName, pickMapName, pickStationName } from '../names'
 import { buildRandomMap } from '../generate'
 import { exactSegmentIndex, exclusiveStationIds, lineHasStation, resolveLineNodes, sameNode } from '../canvas/lineNodes'
@@ -110,11 +111,6 @@ const MAX_HISTORY = 50
 const GEO_FEATURE_LABEL: Record<GeoFeatureType, string> = {
   river: 'River',
   park: 'Park',
-}
-
-const MIN_GEO_POINTS: Record<GeoFeatureType, number> = {
-  river: 2,
-  park: 3,
 }
 
 // Actions that mutate map content get a history entry pushed before they run, so
@@ -342,6 +338,22 @@ function normalizeSnapshot(parsed: DataSnapshot): DataSnapshot {
   }
 
   return parsed
+}
+
+/**
+ * Whether this browser has a map from a previous visit. Read before anything is written —
+ * the persistence effect saves on mount, so a moment later every visitor looks like a
+ * returning one, and the welcome would never show.
+ */
+export function hasSavedMap(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY) !== null
+  } catch {
+    // A browser with storage denied has no saved map by definition, and is also a browser
+    // that will greet its user every time. That's the honest answer to a question it can't
+    // remember the answer to.
+    return false
+  }
 }
 
 function loadPersisted(): DataSnapshot | null {
