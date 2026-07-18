@@ -184,7 +184,8 @@ body {
    putting down the thing that was picked up, rather than by releasing a bare cutout.
 
    Parked off-screen because the browser snapshots it at setDragImage time and must find it
-   rendered; it never appears here, only in the snapshot. */
+   rendered; it never appears here, only in the snapshot. Its size is set on the element, not
+   here: it tracks the map's zoom so the tile is the landmark's real size. */
 .mlb-poi-drag-tile {
   position: fixed;
   top: -200px;
@@ -192,8 +193,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;

@@ -446,7 +446,7 @@ function App() {
 
         <LeftToolbar tool={state.tool} onSetTool={handleSetTool} theme={theme} />
 
-        {state.tool === 'add-poi' && <PoiPicker />}
+        {state.tool === 'add-poi' && <PoiPicker scale={zoom} />}
 
         {/* Right-hand column: the panel flexes to fill it, leaving the authority mark
             seated beneath. Click-through so the gap between them, and the canvas showing
