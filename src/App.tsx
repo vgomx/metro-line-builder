@@ -7,6 +7,7 @@ import { TopBar } from './components/TopBar'
 import { LeftToolbar, LEFT_TOOLBAR_WIDTH } from './components/LeftToolbar'
 import { RightPanel, RIGHT_PANEL_WIDTH } from './components/RightPanel'
 import { CanvasStats, SelectionLabel } from './components/CanvasOverlay'
+import { PoiPicker } from './components/PoiPicker'
 import { CanvasLegend } from './components/CanvasLegend'
 import { LineAnnouncer } from './components/LineAnnouncer'
 import { exportMapAsJson, pickMapFile } from './export'
@@ -16,6 +17,7 @@ import { useSound } from './useSound'
 import { playSound } from './sound'
 import type { SoundName } from './sound'
 import type { Tool } from './types'
+import { openMojiLabel } from './openmoji'
 
 // The canvas runs edge to edge underneath the floating toolbar and panel, so the parts of
 // it they cover aren't usable space. These insets keep the two things that care in sync:
@@ -37,6 +39,7 @@ function App() {
     lineList,
     geoFeatureList,
     companyList,
+    poiList,
     snapshot,
     setTool,
     setMapName,
@@ -67,6 +70,11 @@ function App() {
     cancelGeoFeature,
     deleteGeoFeature,
     renameGeoFeature,
+    addPoi,
+    movePois,
+    renamePoi,
+    setPoiIcon,
+    deletePoi,
     setSelection,
     clearSelection,
     selectWaypoint,
@@ -126,9 +134,9 @@ function App() {
   // Company selection lives outside the reducer's station/line/geo selection (companies
   // aren't canvas entities), so canvas selection and company selection stay mutually
   // exclusive by clearing the other side whenever one is set.
-  const handleSetSelection = (stationIds: string[], lineIds: string[], geoFeatureIds: string[]) => {
+  const handleSetSelection = (stationIds: string[], lineIds: string[], geoFeatureIds: string[], poiIds: string[] = []) => {
     setSelectedCompanyId(null)
-    setSelection(stationIds, lineIds, geoFeatureIds)
+    setSelection(stationIds, lineIds, geoFeatureIds, poiIds)
   }
   const handleClearSelection = () => {
     setSelectedCompanyId(null)
@@ -172,6 +180,8 @@ function App() {
     state.selectedGeoFeatureIds.length === 1 && state.selectedStationIds.length === 0 && state.selectedLineIds.length === 0
       ? (state.geoFeatures[state.selectedGeoFeatureIds[0]] ?? null)
       : null
+  const selectedPoi =
+    state.selectedPoiIds.length === 1 ? (state.pointsOfInterest[state.selectedPoiIds[0]] ?? null) : null
   const selectedCompany = selectedCompanyId ? (state.companies[selectedCompanyId] ?? null) : null
 
   const authorityDisplayName = state.authorityName || `${state.mapName.trim() || 'Untitled Map'} Transit Authority`
@@ -180,6 +190,8 @@ function App() {
   // plain text pill used for station/geo selections.
   const selectionLabel = selectedStation
     ? `Station: ${selectedStation.name}`
+    : selectedPoi
+      ? `Point of interest: ${selectedPoi.name}`
     : selectedGeoFeature
       ? `${selectedGeoFeature.type === 'river' ? 'River' : 'Park'}: ${selectedGeoFeature.name}`
       : null
@@ -220,10 +232,12 @@ function App() {
             stationList={stationList}
             lineList={lineList}
             geoFeatureList={geoFeatureList}
+            poiList={poiList}
             stations={state.stations}
             selectedStationIds={state.selectedStationIds}
             selectedLineIds={state.selectedLineIds}
             selectedGeoFeatureIds={state.selectedGeoFeatureIds}
+            selectedPoiIds={state.selectedPoiIds}
             selectedWaypoint={state.selectedWaypoint}
             draftLineNodes={state.draftLineNodes}
             draftGeoPoints={state.draftGeoPoints}
@@ -239,6 +253,8 @@ function App() {
             onFinishDraftLine={withSound('lineDone', finishDraftLine)}
             onCancelDraftLine={cancelDraftLine}
             onAddGeoPoint={withSound('node', addGeoPoint)}
+            onAddPoi={withSound('station', (x: number, y: number, icon: string) => addPoi(x, y, icon, openMojiLabel(icon)))}
+            onMovePois={movePois}
             onFinishGeoFeature={withSound('lineDone', finishGeoFeature)}
             onCancelGeoFeature={cancelGeoFeature}
             onSetSelection={handleSetSelection}
@@ -353,6 +369,8 @@ function App() {
 
         <LeftToolbar tool={state.tool} onSetTool={handleSetTool} theme={theme} />
 
+        {state.tool === 'add-poi' && <PoiPicker />}
+
         {/* Right-hand column: the panel flexes to fill it, leaving the authority mark
             seated beneath. Click-through so the gap between them, and the canvas showing
             through beside the mark, still belong to the map. */}
@@ -383,6 +401,8 @@ function App() {
             selectedLine={selectedLine}
             selectedStation={selectedStation}
             selectedGeoFeature={selectedGeoFeature}
+            selectedPoi={selectedPoi}
+            poiList={poiList}
             selectedCompany={selectedCompany}
             onSelectLine={id => {
               playSound('tool')
@@ -398,6 +418,11 @@ function App() {
             onAddLine={() => handleSetTool('draw-line')}
             onAddRiver={() => handleSetTool('draw-river')}
             onAddPark={() => handleSetTool('draw-park')}
+            onAddPoi={() => handleSetTool('add-poi')}
+            onSelectPoi={withSound('tool', (id: string) => handleSetSelection([], [], [], [id]))}
+            onRenamePoi={renamePoi}
+            onSetPoiIcon={withSound('toggle', setPoiIcon)}
+            onDeletePoi={withSound('remove', deletePoi)}
             onAddCompany={withSound('station', addCompany)}
             onSetAuthorityName={setAuthorityName}
             onRenameLine={renameLine}

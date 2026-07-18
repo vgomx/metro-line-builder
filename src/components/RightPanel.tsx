@@ -6,7 +6,7 @@ import { StationsPanel } from './StationsPanel'
 import { GeoPanel } from './GeoPanel'
 import { CompaniesPanel } from './CompaniesPanel'
 import { Inspector } from './Inspector'
-import type { Company, GeoFeature, Line, Station } from '../types'
+import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
 
 interface RightPanelProps {
   mapName: string
@@ -15,21 +15,25 @@ interface RightPanelProps {
   lineList: Line[]
   stationList: Station[]
   geoFeatureList: GeoFeature[]
+  poiList: PointOfInterest[]
   companyList: Company[]
   lines: Record<string, Line>
   stations: Record<string, Station>
   selectedLine: Line | null
   selectedStation: Station | null
   selectedGeoFeature: GeoFeature | null
+  selectedPoi: PointOfInterest | null
   selectedCompany: Company | null
   onSelectLine: (lineId: string) => void
   onSelectStation: (stationId: string) => void
   onSelectGeoFeature: (geoFeatureId: string) => void
+  onSelectPoi: (poiId: string) => void
   onSelectCompany: (companyId: string) => void
   onToggleLineVisibility: (lineId: string) => void
   onAddLine: () => void
   onAddRiver: () => void
   onAddPark: () => void
+  onAddPoi: () => void
   onAddCompany: () => void
   onSetAuthorityName: (name: string) => void
   onRenameLine: (lineId: string, name: string) => void
@@ -45,6 +49,9 @@ interface RightPanelProps {
   onRenameGeoFeature: (geoFeatureId: string, name: string) => void
   onExtendGeoFeature: (geoFeatureId: string, end: 'start' | 'end') => void
   onDeleteGeoFeature: (geoFeatureId: string) => void
+  onRenamePoi: (poiId: string, name: string) => void
+  onSetPoiIcon: (poiId: string, icon: string) => void
+  onDeletePoi: (poiId: string) => void
   onRenameCompany: (companyId: string, name: string) => void
   onSetCompanyType: (companyId: string, type: Company['type']) => void
   onSetCompanySymbol: (companyId: string, symbol: Company['symbol']) => void
@@ -62,21 +69,25 @@ export function RightPanel({
   lineList,
   stationList,
   geoFeatureList,
+  poiList,
   companyList,
   lines,
   stations,
   selectedLine,
   selectedStation,
   selectedGeoFeature,
+  selectedPoi,
   selectedCompany,
   onSelectLine,
   onSelectStation,
   onSelectGeoFeature,
+  onSelectPoi,
   onSelectCompany,
   onToggleLineVisibility,
   onAddLine,
   onAddRiver,
   onAddPark,
+  onAddPoi,
   onAddCompany,
   onSetAuthorityName,
   onRenameLine,
@@ -92,6 +103,9 @@ export function RightPanel({
   onRenameGeoFeature,
   onExtendGeoFeature,
   onDeleteGeoFeature,
+  onRenamePoi,
+  onSetPoiIcon,
+  onDeletePoi,
   onRenameCompany,
   onSetCompanyType,
   onSetCompanySymbol,
@@ -103,8 +117,8 @@ export function RightPanel({
   // off. It can only react to the selection *changing*, which is why the lists below don't
   // rely on it.
   useEffect(() => {
-    if (selectedLine || selectedStation || selectedGeoFeature || selectedCompany) setTab('Properties')
-  }, [selectedLine, selectedStation, selectedGeoFeature, selectedCompany])
+    if (selectedLine || selectedStation || selectedGeoFeature || selectedPoi || selectedCompany) setTab('Properties')
+  }, [selectedLine, selectedStation, selectedGeoFeature, selectedPoi, selectedCompany])
 
   /**
    * Picking a row is a request to see that thing, so the click navigates rather than leaving
@@ -127,9 +141,11 @@ export function RightPanel({
       ? { title: selectedStation.name.trim() || 'Station', from: 'Stations' }
       : selectedGeoFeature
         ? { title: selectedGeoFeature.name.trim() || (selectedGeoFeature.type === 'river' ? 'River' : 'Park'), from: 'Geography' }
-        : selectedCompany
-          ? { title: selectedCompany.name.trim() || 'Company', from: 'Companies' }
-          : null
+        : selectedPoi
+          ? { title: selectedPoi.name.trim() || 'Point of interest', from: 'Geography' }
+          : selectedCompany
+            ? { title: selectedCompany.name.trim() || 'Company', from: 'Companies' }
+            : null
 
   // Only Properties-with-a-selection has anywhere to go back to. Everywhere else the
   // subheader is just a title, rather than a dead arrow that reads as broken.
@@ -217,10 +233,14 @@ export function RightPanel({
         {tab === 'Geography' && (
           <GeoPanel
             geoFeatureList={geoFeatureList}
+            poiList={poiList}
             selectedGeoFeatureId={selectedGeoFeature?.id ?? null}
+            selectedPoiId={selectedPoi?.id ?? null}
             onSelect={openDetail(onSelectGeoFeature)}
+            onSelectPoi={openDetail(onSelectPoi)}
             onAddRiver={onAddRiver}
             onAddPark={onAddPark}
+            onAddPoi={onAddPoi}
           />
         )}
         {tab === 'Companies' && (
@@ -239,6 +259,7 @@ export function RightPanel({
             selectedLine={selectedLine}
             selectedStation={selectedStation}
             selectedGeoFeature={selectedGeoFeature}
+            selectedPoi={selectedPoi}
             selectedCompany={selectedCompany}
             stations={stations}
             lines={lines}
@@ -257,6 +278,9 @@ export function RightPanel({
             onRenameGeoFeature={onRenameGeoFeature}
             onExtendGeoFeature={onExtendGeoFeature}
             onDeleteGeoFeature={onDeleteGeoFeature}
+            onRenamePoi={onRenamePoi}
+            onSetPoiIcon={onSetPoiIcon}
+            onDeletePoi={onDeletePoi}
             onRenameCompany={onRenameCompany}
             onSetCompanyType={onSetCompanyType}
             onSetCompanySymbol={onSetCompanySymbol}

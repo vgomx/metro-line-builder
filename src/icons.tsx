@@ -248,3 +248,15 @@ export const FolderOpenIcon = () => (
     <path d="M1.2 10L2.4 5.3A1 1 0 0 1 3.4 4.5H13l-1.4 5.3a1 1 0 0 1-.97.7H2.1a1 1 0 0 1-.9-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
   </svg>
 )
+
+export const PoiIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <path
+      d="M8 1.75c2.35 0 4.25 1.9 4.25 4.25 0 3-4.25 8.25-4.25 8.25S3.75 9 3.75 6c0-2.35 1.9-4.25 4.25-4.25z"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinejoin="round"
+    />
+    <circle cx="8" cy="6" r="1.6" stroke="currentColor" strokeWidth="1.3" />
+  </svg>
+)

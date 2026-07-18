@@ -178,11 +178,14 @@ export function buildRandomMap(): DataSnapshot {
     lineOrder,
     geoFeatures: {},
     geoFeatureOrder: [],
+    pointsOfInterest: {},
+    poiOrder: [],
     companies: {},
     companyOrder: [],
     nextStationNumber: nextStation,
     nextLineNumber: lineOrder.length + 1,
     nextGeoFeatureNumber: 1,
     nextCompanyNumber: 1,
+    nextPoiNumber: 1,
   }
 }

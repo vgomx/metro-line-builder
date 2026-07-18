@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer } from 'react'
-import type { Company, CompanySymbol, CompanyType, GeoFeature, GeoFeatureType, Line, LineNode, Point, Station, Tool } from '../types'
+import type { Company, CompanySymbol, CompanyType, GeoFeature, GeoFeatureType, Line, LineNode, Point, PointOfInterest, Station, Tool } from '../types'
 import { COMPANY_SYMBOLS } from '../types'
 import { DEFAULT_COMPANY_SYMBOL } from '../companySymbols'
 import { nextLineColor } from '../lineColors'
@@ -21,10 +21,13 @@ export interface DataSnapshot {
   geoFeatureOrder: string[]
   companies: Record<string, Company>
   companyOrder: string[]
+  pointsOfInterest: Record<string, PointOfInterest>
+  poiOrder: string[]
   nextStationNumber: number
   nextLineNumber: number
   nextGeoFeatureNumber: number
   nextCompanyNumber: number
+  nextPoiNumber: number
 }
 
 interface MapState extends DataSnapshot {
@@ -32,6 +35,7 @@ interface MapState extends DataSnapshot {
   selectedStationIds: string[]
   selectedLineIds: string[]
   selectedGeoFeatureIds: string[]
+  selectedPoiIds: string[]
   /** A bare waypoint node selected on an already-selected line, by index into its
    * nodes array — lets a stray route-shaping point be targeted for deletion, which
    * stations already support but waypoints (having no id of their own) previously
@@ -78,8 +82,13 @@ type Action =
   | { type: 'finishGeoFeature' }
   | { type: 'cancelGeoFeature' }
   | { type: 'deleteGeoFeature'; geoFeatureId: string }
+  | { type: 'addPoi'; x: number; y: number; icon: string; name: string }
+  | { type: 'movePois'; ids: string[]; dx: number; dy: number }
+  | { type: 'renamePoi'; poiId: string; name: string }
+  | { type: 'setPoiIcon'; poiId: string; icon: string }
+  | { type: 'deletePoi'; poiId: string }
   | { type: 'renameGeoFeature'; geoFeatureId: string; name: string }
-  | { type: 'setSelection'; stationIds: string[]; lineIds: string[]; geoFeatureIds: string[] }
+  | { type: 'setSelection'; stationIds: string[]; lineIds: string[]; geoFeatureIds: string[]; poiIds: string[] }
   | { type: 'clearSelection' }
   | { type: 'selectWaypoint'; lineId: string; index: number }
   | { type: 'deleteWaypoint'; lineId: string; index: number }
@@ -132,6 +141,10 @@ const RECORDABLE_ACTIONS = new Set<Action['type']>([
   'finishDraftLine',
   'finishGeoFeature',
   'deleteGeoFeature',
+  'addPoi',
+  'renamePoi',
+  'setPoiIcon',
+  'deletePoi',
   'renameGeoFeature',
   'renameLine',
   'setLineNumber',
@@ -155,10 +168,13 @@ function snapshotOf(state: DataSnapshot): DataSnapshot {
     geoFeatureOrder: state.geoFeatureOrder,
     companies: state.companies,
     companyOrder: state.companyOrder,
+    pointsOfInterest: state.pointsOfInterest,
+    poiOrder: state.poiOrder,
     nextStationNumber: state.nextStationNumber,
     nextLineNumber: state.nextLineNumber,
     nextGeoFeatureNumber: state.nextGeoFeatureNumber,
     nextCompanyNumber: state.nextCompanyNumber,
+    nextPoiNumber: state.nextPoiNumber,
   }
 }
 
@@ -181,10 +197,13 @@ const emptyState: MapState = {
   geoFeatureOrder: [],
   companies: {},
   companyOrder: [],
+  pointsOfInterest: {},
+  poiOrder: [],
   tool: 'select',
   selectedStationIds: [],
   selectedLineIds: [],
   selectedGeoFeatureIds: [],
+  selectedPoiIds: [],
   selectedWaypoint: null,
   draftLineNodes: [],
   draftLineId: null,
@@ -196,6 +215,7 @@ const emptyState: MapState = {
   nextLineNumber: 1,
   nextGeoFeatureNumber: 1,
   nextCompanyNumber: 1,
+  nextPoiNumber: 1,
   past: [],
   future: [],
 }
@@ -249,6 +269,10 @@ function normalizeSnapshot(parsed: DataSnapshot): DataSnapshot {
   if (!parsed.geoFeatureOrder) parsed.geoFeatureOrder = Object.keys(parsed.geoFeatures)
   if (!parsed.companies) parsed.companies = {}
   if (!parsed.companyOrder) parsed.companyOrder = Object.keys(parsed.companies)
+  // Points of interest postdate every earlier save, so an older map simply has none.
+  parsed.pointsOfInterest = arrayToRecord<PointOfInterest>(parsed.pointsOfInterest) ?? parsed.pointsOfInterest
+  if (!parsed.pointsOfInterest) parsed.pointsOfInterest = {}
+  if (!parsed.poiOrder) parsed.poiOrder = Object.keys(parsed.pointsOfInterest)
 
   // Line numbers postdate the first saves, so backfill whichever are missing. Walks
   // lineOrder first so they number the way the map reads, then sweeps the record itself,
@@ -280,6 +304,7 @@ function normalizeSnapshot(parsed: DataSnapshot): DataSnapshot {
   parsed.lineOrder = parsed.lineOrder.filter(id => id in parsed.lines)
   parsed.geoFeatureOrder = parsed.geoFeatureOrder.filter(id => id in parsed.geoFeatures)
   parsed.companyOrder = parsed.companyOrder.filter(id => id in parsed.companies)
+  parsed.poiOrder = parsed.poiOrder.filter(id => id in parsed.pointsOfInterest)
 
   // Symbols postdate the first saves, and an imported file can carry anything at all in the
   // field — the renderer indexes a record by it, so only a known mark is allowed through.
@@ -291,6 +316,7 @@ function normalizeSnapshot(parsed: DataSnapshot): DataSnapshot {
   if (!parsed.nextLineNumber) parsed.nextLineNumber = deriveNextNumber(parsed.lineOrder, 'line')
   if (!parsed.nextGeoFeatureNumber) parsed.nextGeoFeatureNumber = deriveNextNumber(parsed.geoFeatureOrder, 'geo')
   if (!parsed.nextCompanyNumber) parsed.nextCompanyNumber = deriveNextNumber(parsed.companyOrder, 'company')
+  if (!parsed.nextPoiNumber) parsed.nextPoiNumber = deriveNextNumber(parsed.poiOrder, 'poi')
 
   // Older saves predate grid-snapping (or predate it applying unconditionally),
   // so a station or geo point from that era can sit a few px off-grid — invisible
@@ -306,6 +332,10 @@ function normalizeSnapshot(parsed: DataSnapshot): DataSnapshot {
   }
   for (const feature of Object.values(parsed.geoFeatures)) {
     feature.points = feature.points.map(p => ({ x: snapToGrid(p.x), y: snapToGrid(p.y) }))
+  }
+  for (const poi of Object.values(parsed.pointsOfInterest)) {
+    poi.x = snapToGrid(poi.x)
+    poi.y = snapToGrid(poi.y)
   }
 
   return parsed
@@ -831,6 +861,63 @@ function reducer(rawState: MapState, action: Action): MapState {
       }
     }
 
+    case 'addPoi': {
+      const id = `poi-${state.nextPoiNumber}`
+      const poi: PointOfInterest = { id, icon: action.icon, name: action.name, x: action.x, y: action.y }
+      return {
+        ...state,
+        pointsOfInterest: { ...state.pointsOfInterest, [id]: poi },
+        poiOrder: [...state.poiOrder, id],
+        nextPoiNumber: state.nextPoiNumber + 1,
+        // Selecting what was just dropped puts its properties one glance away, and
+        // matches what a fresh station does.
+        selectedStationIds: [],
+        selectedLineIds: [],
+        selectedGeoFeatureIds: [],
+        selectedPoiIds: [id],
+        selectedWaypoint: null,
+      }
+    }
+
+    case 'movePois': {
+      const pointsOfInterest = { ...state.pointsOfInterest }
+      for (const id of action.ids) {
+        const poi = pointsOfInterest[id]
+        if (!poi) continue
+        pointsOfInterest[id] = { ...poi, x: poi.x + action.dx, y: poi.y + action.dy }
+      }
+      return { ...state, pointsOfInterest }
+    }
+
+    case 'renamePoi': {
+      const poi = state.pointsOfInterest[action.poiId]
+      if (!poi) return state
+      return {
+        ...state,
+        pointsOfInterest: { ...state.pointsOfInterest, [action.poiId]: { ...poi, name: action.name } },
+      }
+    }
+
+    case 'setPoiIcon': {
+      const poi = state.pointsOfInterest[action.poiId]
+      if (!poi) return state
+      return {
+        ...state,
+        pointsOfInterest: { ...state.pointsOfInterest, [action.poiId]: { ...poi, icon: action.icon } },
+      }
+    }
+
+    case 'deletePoi': {
+      const pointsOfInterest = { ...state.pointsOfInterest }
+      delete pointsOfInterest[action.poiId]
+      return {
+        ...state,
+        pointsOfInterest,
+        poiOrder: state.poiOrder.filter(id => id !== action.poiId),
+        selectedPoiIds: state.selectedPoiIds.filter(id => id !== action.poiId),
+      }
+    }
+
     case 'renameGeoFeature': {
       const feature = state.geoFeatures[action.geoFeatureId]
       if (!feature) return state
@@ -846,11 +933,19 @@ function reducer(rawState: MapState, action: Action): MapState {
         selectedStationIds: action.stationIds,
         selectedLineIds: action.lineIds,
         selectedGeoFeatureIds: action.geoFeatureIds,
+        selectedPoiIds: action.poiIds,
         selectedWaypoint: null,
       }
 
     case 'clearSelection':
-      return { ...state, selectedStationIds: [], selectedLineIds: [], selectedGeoFeatureIds: [], selectedWaypoint: null }
+      return {
+        ...state,
+        selectedStationIds: [],
+        selectedLineIds: [],
+        selectedGeoFeatureIds: [],
+        selectedPoiIds: [],
+        selectedWaypoint: null,
+      }
 
     case 'selectWaypoint':
       return {
@@ -858,6 +953,7 @@ function reducer(rawState: MapState, action: Action): MapState {
         selectedStationIds: [],
         selectedLineIds: [action.lineId],
         selectedGeoFeatureIds: [],
+        selectedPoiIds: [],
         selectedWaypoint: { lineId: action.lineId, index: action.index },
       }
 
@@ -944,6 +1040,7 @@ function reducer(rawState: MapState, action: Action): MapState {
       const removedStationIds = new Set(state.selectedStationIds)
       const removedLineIds = new Set(state.selectedLineIds)
       const removedGeoFeatureIds = new Set(state.selectedGeoFeatureIds)
+      const removedPoiIds = new Set(state.selectedPoiIds)
 
       const stations = { ...state.stations }
       for (const id of removedStationIds) delete stations[id]
@@ -973,6 +1070,15 @@ function reducer(rawState: MapState, action: Action): MapState {
         return true
       })
 
+      const pointsOfInterest = { ...state.pointsOfInterest }
+      const poiOrder = state.poiOrder.filter(id => {
+        if (removedPoiIds.has(id)) {
+          delete pointsOfInterest[id]
+          return false
+        }
+        return true
+      })
+
       return {
         ...state,
         stations,
@@ -981,9 +1087,12 @@ function reducer(rawState: MapState, action: Action): MapState {
         lineOrder,
         geoFeatures,
         geoFeatureOrder,
+        pointsOfInterest,
+        poiOrder,
         selectedStationIds: [],
         selectedLineIds: [],
         selectedGeoFeatureIds: [],
+        selectedPoiIds: [],
         selectedWaypoint: null,
       }
     }
@@ -1008,10 +1117,13 @@ export function useMapState() {
       geoFeatureOrder: state.geoFeatureOrder,
       companies: state.companies,
       companyOrder: state.companyOrder,
+      pointsOfInterest: state.pointsOfInterest,
+      poiOrder: state.poiOrder,
       nextStationNumber: state.nextStationNumber,
       nextLineNumber: state.nextLineNumber,
       nextGeoFeatureNumber: state.nextGeoFeatureNumber,
       nextCompanyNumber: state.nextCompanyNumber,
+      nextPoiNumber: state.nextPoiNumber,
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot))
   }, [
@@ -1025,10 +1137,13 @@ export function useMapState() {
     state.geoFeatureOrder,
     state.companies,
     state.companyOrder,
+    state.pointsOfInterest,
+    state.poiOrder,
     state.nextStationNumber,
     state.nextLineNumber,
     state.nextGeoFeatureNumber,
     state.nextCompanyNumber,
+    state.nextPoiNumber,
   ])
 
   const setTool = useCallback((tool: Tool) => dispatch({ type: 'setTool', tool }), [])
@@ -1110,8 +1225,8 @@ export function useMapState() {
     [],
   )
   const setSelection = useCallback(
-    (stationIds: string[], lineIds: string[] = [], geoFeatureIds: string[] = []) =>
-      dispatch({ type: 'setSelection', stationIds, lineIds, geoFeatureIds }),
+    (stationIds: string[], lineIds: string[] = [], geoFeatureIds: string[] = [], poiIds: string[] = []) =>
+      dispatch({ type: 'setSelection', stationIds, lineIds, geoFeatureIds, poiIds }),
     [],
   )
   const clearSelection = useCallback(() => dispatch({ type: 'clearSelection' }), [])
@@ -1133,6 +1248,17 @@ export function useMapState() {
     (lineId: string) => dispatch({ type: 'toggleLineVisibility', lineId }),
     [],
   )
+  const addPoi = useCallback(
+    (x: number, y: number, icon: string, name: string) => dispatch({ type: 'addPoi', x, y, icon, name }),
+    [],
+  )
+  const movePois = useCallback(
+    (ids: string[], dx: number, dy: number) => dispatch({ type: 'movePois', ids, dx, dy }),
+    [],
+  )
+  const renamePoi = useCallback((poiId: string, name: string) => dispatch({ type: 'renamePoi', poiId, name }), [])
+  const setPoiIcon = useCallback((poiId: string, icon: string) => dispatch({ type: 'setPoiIcon', poiId, icon }), [])
+  const deletePoi = useCallback((poiId: string) => dispatch({ type: 'deletePoi', poiId }), [])
   const checkpoint = useCallback(() => dispatch({ type: 'checkpoint' }), [])
   const undo = useCallback(() => dispatch({ type: 'undo' }), [])
   const redo = useCallback(() => dispatch({ type: 'redo' }), [])
@@ -1153,6 +1279,10 @@ export function useMapState() {
     () => state.geoFeatureOrder.map(id => state.geoFeatures[id]).filter((f): f is GeoFeature => Boolean(f)),
     [state.geoFeatureOrder, state.geoFeatures],
   )
+  const poiList = useMemo(
+    () => state.poiOrder.map(id => state.pointsOfInterest[id]).filter((p): p is PointOfInterest => Boolean(p)),
+    [state.poiOrder, state.pointsOfInterest],
+  )
   const companyList = useMemo(
     () => state.companyOrder.map(id => state.companies[id]).filter((c): c is Company => Boolean(c)),
     [state.companyOrder, state.companies],
@@ -1169,10 +1299,13 @@ export function useMapState() {
       geoFeatureOrder: state.geoFeatureOrder,
       companies: state.companies,
       companyOrder: state.companyOrder,
+      pointsOfInterest: state.pointsOfInterest,
+      poiOrder: state.poiOrder,
       nextStationNumber: state.nextStationNumber,
       nextLineNumber: state.nextLineNumber,
       nextGeoFeatureNumber: state.nextGeoFeatureNumber,
       nextCompanyNumber: state.nextCompanyNumber,
+      nextPoiNumber: state.nextPoiNumber,
     }),
     [
       state.mapName,
@@ -1185,10 +1318,13 @@ export function useMapState() {
       state.geoFeatureOrder,
       state.companies,
       state.companyOrder,
+      state.pointsOfInterest,
+      state.poiOrder,
       state.nextStationNumber,
       state.nextLineNumber,
       state.nextGeoFeatureNumber,
       state.nextCompanyNumber,
+      state.nextPoiNumber,
     ],
   )
 
@@ -1198,6 +1334,7 @@ export function useMapState() {
     lineList,
     geoFeatureList,
     companyList,
+    poiList,
     snapshot,
     setTool,
     setMapName,
@@ -1228,6 +1365,11 @@ export function useMapState() {
     cancelGeoFeature,
     deleteGeoFeature,
     renameGeoFeature,
+    addPoi,
+    movePois,
+    renamePoi,
+    setPoiIcon,
+    deletePoi,
     setSelection,
     clearSelection,
     selectWaypoint,

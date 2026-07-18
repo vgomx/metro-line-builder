@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { IconButton, Toolbar, ToolbarSeparator } from 'metro-ds'
-import { CursorIcon, HandIcon, ParkIcon, PenIcon, RiverIcon, StationIcon } from '../icons'
+import { CursorIcon, HandIcon, ParkIcon, PenIcon, PoiIcon, RiverIcon, StationIcon } from '../icons'
 import type { Tool } from '../types'
 import type { Theme } from '../useTheme'
 import { MoreMenu } from './MoreMenu'
@@ -23,6 +23,7 @@ const TOOLS: { tool: Tool; label: string; icon: JSX.Element; key: string }[] = [
 const GEO_TOOLS: { tool: Tool; label: string; icon: JSX.Element; key: string }[] = [
   { tool: 'draw-river', label: 'Draw river (R)', icon: <RiverIcon />, key: 'r' },
   { tool: 'draw-park', label: 'Draw park (G)', icon: <ParkIcon />, key: 'g' },
+  { tool: 'add-poi', label: 'Point of interest (I)', icon: <PoiIcon />, key: 'i' },
 ]
 
 export function LeftToolbar({ tool, onSetTool, theme }: LeftToolbarProps) {

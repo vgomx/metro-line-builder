@@ -8,6 +8,11 @@ export interface LegalNotice {
 // License texts copied verbatim from the installed packages' own LICENSE
 // files. Only packages actually bundled into the shipped app are listed
 // (build-only tooling like Vite/TypeScript/oxlint never ships to end users).
+//
+// Shipped *artwork* belongs here too, not just code. The OpenMoji entry carries an
+// attribution notice rather than a full licence text: CC BY-SA 4.0 runs to some 20kB, and
+// the licence itself allows linking to it instead of reproducing it — but it does require
+// the attribution, so that notice is an obligation and not a courtesy.
 export const LEGAL_NOTICES: LegalNotice[] = [
   {
     name: 'React',
@@ -111,5 +116,21 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.`,
+  },
+  {
+    name: 'OpenMoji',
+    packages: 'travel-places icons (places & transport)',
+    license: 'CC-BY-SA-4.0',
+    text: `The point-of-interest icons are from OpenMoji — the open-source emoji and icon
+project — and are redistributed here unmodified.
+
+All emojis designed by OpenMoji – the open-source emoji and icon project.
+License: CC BY-SA 4.0
+
+Source:  https://openmoji.org/
+License: https://creativecommons.org/licenses/by-sa/4.0/
+
+This licence is reproduced by reference rather than in full, as it permits. Note the
+ShareAlike term: adaptations of these icons must be shared under the same licence.`,
   },
 ]
