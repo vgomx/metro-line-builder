@@ -67,6 +67,8 @@ interface MapCanvasProps {
   onAddGeoPoint: (x: number, y: number) => void
   /** A symbol has been dropped on the map — the icon comes from the drag itself. */
   onAddPoi: (x: number, y: number, icon: string) => void
+  /** A landmark has come to rest, whether newly dropped or moved. Fires once per landing. */
+  onPoiLand?: () => void
   /** The canvas has been clicked while the point-of-interest tool is up — put the tool down. */
   onExitPoiTool: () => void
   onMovePois: (ids: string[], dx: number, dy: number) => void
@@ -130,6 +132,10 @@ const DRAW_TOOLS: Tool[] = ['add-station', 'draw-line', 'draw-river', 'draw-park
 /** How long a deleted line spends coming apart, and how long its ghost is held for. The
  * hold outlasts the animation so the final frame isn't clipped. A line that's merely been
  * switched off keeps the old quick fade — see the ghost renderer. */
+/** How long the ground ripple under a dropped landmark lasts, and how long the marker takes
+ * to settle into it. */
+const IMPACT_MS = 520
+const SETTLE_MS = 340
 const LINE_SHATTER_MS = 620
 const LINE_EXIT_HOLD_MS = 700
 const RIVER_DRAFT_STROKE = '#60A5FA'
@@ -165,6 +171,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onAddPoi,
     onMovePois,
     onExitPoiTool,
+    onPoiLand,
     onFinishGeoFeature,
     onCancelGeoFeature,
     onSetSelection,
@@ -193,6 +200,33 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   /** Where a symbol dragged in from the palette would land, or null when nothing is over the
    * canvas. Doubles as the "a drop is in flight" flag. */
   const [dropPoint, setDropPoint] = useState<Point | null>(null)
+  /** The last landing, kept only long enough for the ripple to play out. Keyed so two drops in
+   * quick succession restart the animation rather than sharing one that's already running. */
+  const [impact, setImpact] = useState<{ key: number; points: Point[] } | null>(null)
+  const impactSeq = useRef(0)
+  /** Landmarks that have just been put down after a move, so their marker settles the way a
+   * freshly dropped one does. New arrivals come from useAppearance instead — they have no
+   * previous position to have been moved from. */
+  const [settlingPoiIds, setSettlingPoiIds] = useState<Set<string>>(() => new Set())
+
+  /**
+   * Ring out from every point something landed on, and say so once. Shared by the two ways a
+   * landmark arrives — dragged in from the palette, or picked up and put down again — because
+   * they're the same gesture as far as the map is concerned, and only the sound and the
+   * marker's own animation differ between them.
+   */
+  const announceLanding = (points: Point[], settled: string[] = []) => {
+    if (points.length === 0) return
+    impactSeq.current += 1
+    const key = impactSeq.current
+    setImpact({ key, points })
+    window.setTimeout(() => setImpact(prev => (prev?.key === key ? null : prev)), IMPACT_MS)
+    if (settled.length > 0) {
+      setSettlingPoiIds(new Set(settled))
+      window.setTimeout(() => setSettlingPoiIds(new Set()), SETTLE_MS)
+    }
+    onPoiLand?.()
+  }
   // One session per completed drag; the ghost re-derives each affected line's shape
   // per frame from the interpolated station positions, so it needs only the origins.
   const [snapSession, setSnapSession] = useState<{ key: string; originalPositions: Record<string, Point> } | null>(null)
@@ -531,6 +565,13 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       } else if (!drag.union) {
         onClearSelection()
       }
+    } else if (drag.kind === 'pois') {
+      // Only a landmark that actually shifted has landed anywhere. A pick-up that put it back
+      // where it started is a selection, and ringing the ground for it would be a lie.
+      if (drag.moved) {
+        const moved = drag.ids.map(id => poiList.find(poi => poi.id === id)).filter((p): p is PointOfInterest => Boolean(p))
+        announceLanding(moved.map(poi => ({ x: poi.x, y: poi.y })), moved.map(poi => poi.id))
+      }
     } else if (drag.kind === 'stations' && !drag.moved) {
       // plain click on an already-selected station: keep single selection
     } else if (drag.kind === 'stations' && drag.moved) {
@@ -588,7 +629,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     if (!icon) return
     e.preventDefault()
     const { x, y } = toWorld(e.clientX, e.clientY)
-    onAddPoi(snapToPoiGrid(x), snapToPoiGrid(y), icon)
+    const landed = { x: snapToPoiGrid(x), y: snapToPoiGrid(y) }
+    onAddPoi(landed.x, landed.y, icon)
+    announceLanding([landed])
   }
 
   const handleDoubleClick = () => {
@@ -673,6 +716,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   )
   const poppingStationIds = useAppearance(
     stationList.map(station => station.id),
+    340,
+    false,
+  )
+  const landingPoiIds = useAppearance(
+    poiList.map(poi => poi.id),
     340,
     false,
   )
@@ -972,12 +1020,36 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           />
         ))}
 
+        {/* The air a landing landmark shoves aside. Drawn before the markers so the rings
+            spread out from under the one that just arrived rather than over it. */}
+        {impact && (
+          <g key={impact.key} style={{ pointerEvents: 'none' }}>
+            {impact.points.map((point, index) => (
+              <g key={index} transform={`translate(${point.x}, ${point.y})`}>
+                {[0, 90].map(delay => (
+                  <g
+                    key={delay}
+                    style={{
+                      transformBox: 'fill-box',
+                      transformOrigin: 'center',
+                      animation: `mlb-poi-impact ${IMPACT_MS - delay}ms cubic-bezier(0.2, 0.6, 0.3, 1) ${delay}ms both`,
+                    }}
+                  >
+                    <circle r={13} fill="none" stroke="var(--text-primary)" strokeWidth={2} />
+                  </g>
+                ))}
+              </g>
+            ))}
+          </g>
+        )}
+
         {poiList.map(poi => (
           <PoiNode
             key={poi.id}
             poi={poi}
             selected={selectedPoiIds.includes(poi.id)}
             dragging={drag.kind === 'pois' && drag.ids.includes(poi.id)}
+            landing={landingPoiIds.has(poi.id) ? 'appear' : settlingPoiIds.has(poi.id) ? 'settle' : undefined}
             onPointerDown={handlePoiPointerDown}
           />
         ))}

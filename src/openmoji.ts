@@ -1,8 +1,12 @@
 import { OPENMOJI_ICONS } from './openmojiManifest'
 import type { OpenMojiIcon } from './openmojiManifest'
+import { CUSTOM_ICONS } from './customIcons'
 
 export type { OpenMojiIcon }
 export { OPENMOJI_ICONS }
+
+/** Everything the picker offers: OpenMoji's travel-places set plus the landmarks drawn here. */
+export const ALL_ICONS: OpenMojiIcon[] = [...OPENMOJI_ICONS, ...CUSTOM_ICONS]
 
 /**
  * Every shipped icon's URL, keyed by the path Vite globs it under.
@@ -18,22 +22,40 @@ const ICON_URLS = import.meta.glob('./assets/openmoji/*.svg', {
   import: 'default',
 }) as Record<string, string>
 
-/** The asset URL for an icon, or undefined if that codepoint isn't one we ship. */
+/** The same treatment for the landmarks drawn here. A separate directory, and so a separate
+ * glob, because the two sets have different authors and different provenance — see
+ * customIcons.ts. */
+const CUSTOM_ICON_URLS = import.meta.glob('./assets/landmarks/*.svg', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+}) as Record<string, string>
+
+/** The asset URL for an icon, or undefined if it isn't one we ship. */
 export function openMojiUrl(hexcode: string): string | undefined {
-  return ICON_URLS[`./assets/openmoji/${hexcode}.svg`]
+  return ICON_URLS[`./assets/openmoji/${hexcode}.svg`] ?? CUSTOM_ICON_URLS[`./assets/landmarks/${hexcode}.svg`]
 }
 
 /**
- * The icons sectioned by OpenMoji's own subgrouping, in the order the manifest lists them —
- * which is how a picker would naturally lay them out (all the buildings together, all the
- * ground transport together) rather than as one undifferentiated grid of 141.
+ * The icons sectioned by subgroup, each section in the order it first appears — which is how a
+ * picker would naturally lay them out (all the buildings together, all the ground transport
+ * together) rather than as one undifferentiated grid.
+ *
+ * Grouped by key rather than by consecutive run: the landmarks drawn here belong in a section
+ * the manifest has already been through, and a run-based grouping would open a second
+ * "Landmarks" further down the list instead of putting them where they belong.
  */
 export function openMojiBySubgroup(): { subgroup: string; icons: OpenMojiIcon[] }[] {
   const sections: { subgroup: string; icons: OpenMojiIcon[] }[] = []
-  for (const icon of OPENMOJI_ICONS) {
-    const last = sections[sections.length - 1]
-    if (last && last.subgroup === icon.subgroup) last.icons.push(icon)
-    else sections.push({ subgroup: icon.subgroup, icons: [icon] })
+  const bySubgroup = new Map<string, OpenMojiIcon[]>()
+  for (const icon of ALL_ICONS) {
+    let bucket = bySubgroup.get(icon.subgroup)
+    if (!bucket) {
+      bucket = []
+      bySubgroup.set(icon.subgroup, bucket)
+      sections.push({ subgroup: icon.subgroup, icons: bucket })
+    }
+    bucket.push(icon)
   }
   return sections
 }
@@ -62,7 +84,7 @@ export const DEFAULT_POI_ICON = '1F3DB'
 
 /** The icon's own name, title-cased — the default label for a landmark just dropped. */
 export function openMojiLabel(hexcode: string): string {
-  const entry = OPENMOJI_ICONS.find(i => i.hexcode === hexcode)
+  const entry = ALL_ICONS.find(i => i.hexcode === hexcode)
   if (!entry) return 'Point of interest'
   return entry.name.charAt(0).toUpperCase() + entry.name.slice(1)
 }
