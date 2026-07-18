@@ -13,7 +13,7 @@ import { TrainMarker } from './TrainMarker'
 import { SnapAnimation } from './SnapAnimation'
 import { RefanAnimation } from './RefanAnimation'
 import { routeOrthogonal } from './routing'
-import { GRID_SIZE, snapToGrid } from '../grid'
+import { GRID_SIZE, snapToGrid, snapToPoiGrid } from '../grid'
 import {
   buildLineTrack,
   buildNetworkGeometry,
@@ -459,8 +459,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       setDrag({ ...drag, x, y })
     } else if (drag.kind === 'pois') {
       const pointerWorld = toWorld(e.clientX, e.clientY)
-      const targetX = snapToGrid(drag.startAnchorX + (pointerWorld.x - drag.startPointerX))
-      const targetY = snapToGrid(drag.startAnchorY + (pointerWorld.y - drag.startPointerY))
+      const targetX = snapToPoiGrid(drag.startAnchorX + (pointerWorld.x - drag.startPointerX))
+      const targetY = snapToPoiGrid(drag.startAnchorY + (pointerWorld.y - drag.startPointerY))
       const anchor = poiList.find(p => p.id === drag.anchorId)
       if (anchor) {
         const dx = targetX - anchor.x
@@ -551,7 +551,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
     const w = toWorld(e.clientX, e.clientY)
-    const snapped = { x: snapToGrid(w.x), y: snapToGrid(w.y) }
+    const snapped = { x: snapToPoiGrid(w.x), y: snapToPoiGrid(w.y) }
     // dragover fires continuously; skipping the identical position keeps it from re-rendering
     // the whole canvas between one grid square and the next.
     setDropPoint(prev => (prev && prev.x === snapped.x && prev.y === snapped.y ? prev : snapped))
@@ -563,7 +563,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     if (!icon) return
     e.preventDefault()
     const { x, y } = toWorld(e.clientX, e.clientY)
-    onAddPoi(snapToGrid(x), snapToGrid(y), icon)
+    onAddPoi(snapToPoiGrid(x), snapToPoiGrid(y), icon)
   }
 
   const handleDoubleClick = () => {

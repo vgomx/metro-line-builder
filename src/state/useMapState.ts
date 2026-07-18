@@ -4,7 +4,7 @@ import { COMPANY_SYMBOLS } from '../types'
 import { DEFAULT_COMPANY_SYMBOL } from '../companySymbols'
 import { nextLineColor } from '../lineColors'
 import { isUsableLineNumber, nextFreeLineNumber } from '../lineNumber'
-import { snapToGrid } from '../grid'
+import { snapToGrid, snapToPoiGrid } from '../grid'
 import { pickLineName, pickMapName, pickStationName } from '../names'
 import { buildRandomMap } from '../generate'
 import { exactSegmentIndex, lineHasStation, resolveLineNodes, sameNode } from '../canvas/lineNodes'
@@ -333,9 +333,12 @@ function normalizeSnapshot(parsed: DataSnapshot): DataSnapshot {
   for (const feature of Object.values(parsed.geoFeatures)) {
     feature.points = feature.points.map(p => ({ x: snapToGrid(p.x), y: snapToGrid(p.y) }))
   }
+  // Landmarks re-snap to their own half-grid, not the station one — running them through
+  // snapToGrid here would haul every landmark placed in the middle of a square back onto the
+  // nearest crossing, once per load, with nothing in the UI to explain the drift.
   for (const poi of Object.values(parsed.pointsOfInterest)) {
-    poi.x = snapToGrid(poi.x)
-    poi.y = snapToGrid(poi.y)
+    poi.x = snapToPoiGrid(poi.x)
+    poi.y = snapToPoiGrid(poi.y)
   }
 
   return parsed

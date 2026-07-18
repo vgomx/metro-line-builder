@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { PointOfInterest } from '../types'
 import { openMojiUrl } from '../openmoji'
-import { LABEL_FONT_SIZE } from './labelPlacement'
+
 
 interface PoiNodeProps {
   poi: PointOfInterest
@@ -14,6 +14,10 @@ interface PoiNodeProps {
 
 /** Drawn size of the icon on the map, in world units. */
 const ICON_SIZE = 26
+/** Deliberately well under a station's 10: landmarks now sit half a square apart, so their
+ * names have to pass each other — and beside the network, a landmark is a footnote. Small
+ * enough that two adjacent ones don't fight, rather than adding a second placement solver. */
+const LABEL_FONT_SIZE = 6.5
 /** Matches StationNode's answer to the cursor, so every marker on the map swells alike. */
 const HOVER_GROWTH = 1.5
 const DRAG_GROWTH = 2
