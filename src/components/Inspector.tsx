@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Badge, Button, Divider, Input, Select, Tag, Toggle } from 'metro-ds'
-import { ParkIcon, PenIcon, RiverIcon, TrashIcon } from '../icons'
+import { ParkIcon, PenIcon, PoiIcon, RiverIcon, TrashIcon } from '../icons'
 import { LINE_COLORS } from '../lineColors'
 import { isUsableLineNumber, MAX_LINE_NUMBER } from '../lineNumber'
-import type { Company, GeoFeature, Line, Station } from '../types'
+import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
 import { COMPANY_SYMBOLS } from '../types'
 import { CompanySymbolIcon } from '../companySymbols'
+import { openMojiBySubgroup, openMojiUrl, SUBGROUP_LABELS } from '../openmoji'
 import { connectedLineCount, isTransferStation, lineHasStation, stationIdsOfLine } from '../canvas/lineNodes'
 
 /** Why `draft` can't be committed, or undefined if it can. One rule drives both the message
@@ -59,6 +60,7 @@ interface InspectorProps {
   selectedLine: Line | null
   selectedStation: Station | null
   selectedGeoFeature: GeoFeature | null
+  selectedPoi: PointOfInterest | null
   selectedCompany: Company | null
   stations: Record<string, Station>
   lines: Record<string, Line>
@@ -77,6 +79,9 @@ interface InspectorProps {
   onRenameGeoFeature: (geoFeatureId: string, name: string) => void
   onExtendGeoFeature: (geoFeatureId: string, end: 'start' | 'end') => void
   onDeleteGeoFeature: (geoFeatureId: string) => void
+  onRenamePoi: (poiId: string, name: string) => void
+  onSetPoiIcon: (poiId: string, icon: string) => void
+  onDeletePoi: (poiId: string) => void
   onRenameCompany: (companyId: string, name: string) => void
   onSetCompanyType: (companyId: string, type: Company['type']) => void
   onSetCompanySymbol: (companyId: string, symbol: Company['symbol']) => void
@@ -87,6 +92,7 @@ export function Inspector({
   selectedLine,
   selectedStation,
   selectedGeoFeature,
+  selectedPoi,
   selectedCompany,
   stations,
   lines,
@@ -105,12 +111,15 @@ export function Inspector({
   onRenameGeoFeature,
   onExtendGeoFeature,
   onDeleteGeoFeature,
+  onRenamePoi,
+  onSetPoiIcon,
+  onDeletePoi,
   onRenameCompany,
   onSetCompanyType,
   onSetCompanySymbol,
   onDeleteCompany,
 }: InspectorProps) {
-  if (!selectedLine && !selectedStation && !selectedGeoFeature && !selectedCompany) {
+  if (!selectedLine && !selectedStation && !selectedGeoFeature && !selectedCompany && !selectedPoi) {
     return (
       <div style={{ padding: 'var(--space-5)', color: 'var(--text-muted)', fontSize: 'var(--text-sm)', textAlign: 'center' }}>
         Select a line, station, company, or geography feature to inspect its properties.
@@ -194,6 +203,76 @@ export function Inspector({
         <Divider />
         <Button variant="destructive" size="sm" icon={<TrashIcon />} onClick={() => onDeleteCompany(company.id)}>
           Delete company
+        </Button>
+      </div>
+    )
+  }
+
+  if (selectedPoi) {
+    const poi = selectedPoi
+    const url = openMojiUrl(poi.icon)
+    return (
+      <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)' }}>
+          <span style={{ color: 'var(--text-muted)', display: 'flex' }}>
+            {url ? <img src={url} alt="" width={16} height={16} /> : <PoiIcon />}
+          </span>
+          <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-primary)' }}>
+            Point of interest
+          </span>
+        </div>
+        <Divider />
+
+        <Input label="Name" value={poi.name} onChange={e => onRenamePoi(poi.id, e.target.value)} />
+
+        {/* The same grid the placement picker offers, so changing a landmark's symbol after
+            the fact is the gesture that placed it. Kept scrollable rather than paged: the
+            sections are the map of the set, and hiding them behind a dropdown would cost
+            more than the height it saves. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+          <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--text-secondary)' }}>Symbol</label>
+          <div style={{ maxHeight: '260px', overflowY: 'auto' }}>
+            {openMojiBySubgroup().map(group => (
+              <div key={group.subgroup} style={{ marginBottom: 'var(--gap-sm)' }}>
+                <div
+                  style={{
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    color: 'var(--text-secondary)',
+                    marginBottom: 'var(--gap-xs)',
+                  }}
+                >
+                  {SUBGROUP_LABELS[group.subgroup] ?? group.subgroup}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
+                  {group.icons.map(entry => {
+                    const entryUrl = openMojiUrl(entry.hexcode)
+                    return (
+                      <button
+                        key={entry.hexcode}
+                        type="button"
+                        className="mlb-poi-swatch"
+                        data-selected={entry.hexcode === poi.icon}
+                        title={entry.name}
+                        aria-label={entry.name}
+                        aria-pressed={entry.hexcode === poi.icon}
+                        onClick={() => onSetPoiIcon(poi.id, entry.hexcode)}
+                      >
+                        {entryUrl && <img src={entryUrl} alt="" width={24} height={24} />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <Divider />
+        <Button variant="destructive" size="sm" icon={<TrashIcon />} onClick={() => onDeletePoi(poi.id)}>
+          Delete point of interest
         </Button>
       </div>
     )

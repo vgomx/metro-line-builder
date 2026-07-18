@@ -1,10 +1,11 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
+import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import type { ZoomTransform } from 'd3-zoom'
-import type { GeoFeature, Line, LineNode, Point, Station, Tool } from '../types'
+import type { GeoFeature, Line, LineNode, Point, PointOfInterest, Station, Tool } from '../types'
 import { useZoomPan } from './useZoomPan'
 import type { ViewportInsets } from './useZoomPan'
 import { StationNode } from './StationNode'
+import { PoiNode } from './PoiNode'
 import { WaypointNode } from './WaypointNode'
 import { LinePath } from './LinePath'
 import { GeoFeaturePath } from './GeoFeaturePath'
@@ -23,6 +24,7 @@ import {
 } from './lineNodes'
 import type { RefanLine } from './lineNodes'
 import { computeLabelPlacements } from './labelPlacement'
+import { POI_DRAG_MIME } from '../openmoji'
 import { useAppearance } from './useAppearance'
 import { useExit } from './useExit'
 import { buildLinePath } from './lineNodes'
@@ -41,10 +43,12 @@ interface MapCanvasProps {
   stationList: Station[]
   lineList: Line[]
   geoFeatureList: GeoFeature[]
+  poiList: PointOfInterest[]
   stations: Record<string, Station>
   selectedStationIds: string[]
   selectedLineIds: string[]
   selectedGeoFeatureIds: string[]
+  selectedPoiIds: string[]
   selectedWaypoint: { lineId: string; index: number } | null
   draftLineNodes: LineNode[]
   draftGeoPoints: Point[]
@@ -61,9 +65,12 @@ interface MapCanvasProps {
   onFinishDraftLine: () => void
   onCancelDraftLine: () => void
   onAddGeoPoint: (x: number, y: number) => void
+  /** A symbol has been dropped on the map — the icon comes from the drag itself. */
+  onAddPoi: (x: number, y: number, icon: string) => void
+  onMovePois: (ids: string[], dx: number, dy: number) => void
   onFinishGeoFeature: () => void
   onCancelGeoFeature: () => void
-  onSetSelection: (stationIds: string[], lineIds: string[], geoFeatureIds: string[]) => void
+  onSetSelection: (stationIds: string[], lineIds: string[], geoFeatureIds: string[], poiIds?: string[]) => void
   onClearSelection: () => void
   onSelectWaypoint: (lineId: string, index: number) => void
   onDeleteWaypoint: (lineId: string, index: number) => void
@@ -105,6 +112,16 @@ type DragState =
       moved: boolean
       originalPositions: Record<string, Point>
     }
+  | {
+      kind: 'pois'
+      ids: string[]
+      anchorId: string
+      startAnchorX: number
+      startAnchorY: number
+      startPointerX: number
+      startPointerY: number
+      moved: boolean
+    }
 
 const GRID_EXTENT = 4000
 const DRAW_TOOLS: Tool[] = ['add-station', 'draw-line', 'draw-river', 'draw-park']
@@ -117,10 +134,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     stationList,
     lineList,
     geoFeatureList,
+    poiList,
     stations,
     selectedStationIds,
     selectedLineIds,
     selectedGeoFeatureIds,
+    selectedPoiIds,
     selectedWaypoint,
     draftLineNodes,
     draftGeoPoints,
@@ -136,6 +155,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onFinishDraftLine,
     onCancelDraftLine,
     onAddGeoPoint,
+    onAddPoi,
+    onMovePois,
     onFinishGeoFeature,
     onCancelGeoFeature,
     onSetSelection,
@@ -161,6 +182,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   )
   const [drag, setDrag] = useState<DragState>({ kind: 'none' })
   const [cursorWorld, setCursorWorld] = useState<{ x: number; y: number } | null>(null)
+  /** Where a symbol dragged in from the palette would land, or null when nothing is over the
+   * canvas. Doubles as the "a drop is in flight" flag. */
+  const [dropPoint, setDropPoint] = useState<Point | null>(null)
   // One session per completed drag; the ghost re-derives each affected line's shape
   // per frame from the interpolated station positions, so it needs only the origins.
   const [snapSession, setSnapSession] = useState<{ key: string; originalPositions: Record<string, Point> } | null>(null)
@@ -358,6 +382,37 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     })
   }
 
+  const handlePoiPointerDown = (e: ReactPointerEvent<SVGGElement>, poi: PointOfInterest) => {
+    if (e.button !== 0) return
+    if (spaceHeld) return
+    if (tool !== 'select') return
+    e.stopPropagation()
+
+    if (e.shiftKey) {
+      const nextIds = selectedPoiIds.includes(poi.id)
+        ? selectedPoiIds.filter(id => id !== poi.id)
+        : [...selectedPoiIds, poi.id]
+      onSetSelection([], [], [], nextIds)
+      return
+    }
+
+    onStationGrab?.()
+    safeSetPointerCapture(e.target as Element, e.pointerId)
+    const ids = selectedPoiIds.includes(poi.id) ? selectedPoiIds : [poi.id]
+    if (!selectedPoiIds.includes(poi.id)) onSetSelection([], [], [], [poi.id])
+    const pointerWorld = toWorld(e.clientX, e.clientY)
+    setDrag({
+      kind: 'pois',
+      ids,
+      anchorId: poi.id,
+      startAnchorX: poi.x,
+      startAnchorY: poi.y,
+      startPointerX: pointerWorld.x,
+      startPointerY: pointerWorld.y,
+      moved: false,
+    })
+  }
+
   const handleStationClick = (station: Station) => {
     if (spaceHeld) return
     if (tool === 'draw-line') {
@@ -394,7 +449,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   }
 
   const handlePointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
-    if (tool === 'draw-line' || tool === 'draw-river' || tool === 'draw-park' || tool === 'add-station') {
+    if (DRAW_TOOLS.includes(tool)) {
       const w = toWorld(e.clientX, e.clientY)
       setCursorWorld({ x: snapToGrid(w.x), y: snapToGrid(w.y) })
     }
@@ -402,6 +457,22 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     if (drag.kind === 'marquee') {
       const { x, y } = toWorld(e.clientX, e.clientY)
       setDrag({ ...drag, x, y })
+    } else if (drag.kind === 'pois') {
+      const pointerWorld = toWorld(e.clientX, e.clientY)
+      const targetX = snapToGrid(drag.startAnchorX + (pointerWorld.x - drag.startPointerX))
+      const targetY = snapToGrid(drag.startAnchorY + (pointerWorld.y - drag.startPointerY))
+      const anchor = poiList.find(p => p.id === drag.anchorId)
+      if (anchor) {
+        const dx = targetX - anchor.x
+        const dy = targetY - anchor.y
+        if (dx !== 0 || dy !== 0) {
+          // A landmark shapes no route, so there's nothing to reroute or spring — but the
+          // move still has to be one undo, hence the checkpoint at the first budge.
+          if (!drag.moved) onCheckpoint()
+          onMovePois(drag.ids, dx, dy)
+          setDrag({ ...drag, moved: true })
+        }
+      }
     } else if (drag.kind === 'stations') {
       const pointerWorld = toWorld(e.clientX, e.clientY)
       const rawX = drag.startAnchorX + (pointerWorld.x - drag.startPointerX)
@@ -469,6 +540,30 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       }
     }
     setDrag({ kind: 'none' })
+  }
+
+  // Dragging a symbol in from the palette. dragover has to preventDefault on every event or
+  // the browser refuses the drop, and the payload itself is unreadable until drop — only the
+  // *types* are exposed mid-drag, which is exactly enough to tell our symbols from anything
+  // else the user might be dragging across the window.
+  const handleDragOver = (e: ReactDragEvent<SVGSVGElement>) => {
+    if (!e.dataTransfer.types.includes(POI_DRAG_MIME)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+    const w = toWorld(e.clientX, e.clientY)
+    const snapped = { x: snapToGrid(w.x), y: snapToGrid(w.y) }
+    // dragover fires continuously; skipping the identical position keeps it from re-rendering
+    // the whole canvas between one grid square and the next.
+    setDropPoint(prev => (prev && prev.x === snapped.x && prev.y === snapped.y ? prev : snapped))
+  }
+
+  const handleDrop = (e: ReactDragEvent<SVGSVGElement>) => {
+    const icon = e.dataTransfer.getData(POI_DRAG_MIME)
+    setDropPoint(null)
+    if (!icon) return
+    e.preventDefault()
+    const { x, y } = toWorld(e.clientX, e.clientY)
+    onAddPoi(snapToGrid(x), snapToGrid(y), icon)
   }
 
   const handleDoubleClick = () => {
@@ -592,7 +687,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   // quick drag outruns its own station — the pointer ends up over bare canvas, and without
   // this the cursor would flick back to an arrow while the station is still being carried.
   const cursor =
-    drag.kind === 'stations'
+    drag.kind === 'stations' || drag.kind === 'pois'
       ? 'grabbing'
       : spaceHeld || tool === 'pan'
         ? panning
@@ -621,6 +716,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={() => setCursorWorld(null)}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      onDragLeave={() => setDropPoint(null)}
       onDoubleClick={handleDoubleClick}
     >
       <defs>
@@ -834,6 +932,16 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           />
         ))}
 
+        {poiList.map(poi => (
+          <PoiNode
+            key={poi.id}
+            poi={poi}
+            selected={selectedPoiIds.includes(poi.id)}
+            dragging={drag.kind === 'pois' && drag.ids.includes(poi.id)}
+            onPointerDown={handlePoiPointerDown}
+          />
+        ))}
+
         {/* Deleted stations shrink and fade from where they were. */}
         {exitingStations.map(ghost => (
           <g key={ghost.key} transform={`translate(${ghost.data.x}, ${ghost.data.y})`} style={{ pointerEvents: 'none' }}>
@@ -864,8 +972,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
 
         {/* Hot-spot cue: highlights the grid intersection a draw tool will snap to,
             making precise placement easier to judge before clicking. */}
-        {DRAW_TOOLS.includes(tool) && cursorWorld && (
-          <g transform={`translate(${cursorWorld.x}, ${cursorWorld.y})`} style={{ pointerEvents: 'none' }}>
+        {(dropPoint ?? (DRAW_TOOLS.includes(tool) ? cursorWorld : null)) && (
+          <g
+            transform={`translate(${(dropPoint ?? cursorWorld)!.x}, ${(dropPoint ?? cursorWorld)!.y})`}
+            style={{ pointerEvents: 'none' }}
+          >
             <circle r={10 / transform.k} fill="none" stroke="var(--interactive-primary)" strokeWidth={1.5 / transform.k} opacity={0.9} />
             <circle r={2.5 / transform.k} fill="var(--interactive-primary)" />
           </g>

@@ -40,6 +40,24 @@
   }
 }
 
+/* Rows in the right panel's lists — lines, stations, geography, companies. The background
+   lives here rather than inline because an inline `transparent` would outrank any :hover
+   rule, which is why these rows had no hover state at all. The selected rule comes after
+   the hover one and matches it for specificity, so a selected row keeps its own colour
+   while the pointer is over it and the selection stays unambiguous. */
+.mlb-row {
+  background: transparent;
+  transition: background 100ms ease;
+}
+
+.mlb-row:hover {
+  background: var(--bg-subtle);
+}
+
+.mlb-row[data-selected='true'] {
+  background: var(--color-info-bg);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -103,4 +121,38 @@ body {
   to {
     opacity: 0;
   }
+}
+
+/* Icon tiles, shared by the picker's palette and the Inspector's symbol grid. The artwork
+   carries the meaning, so the chrome stays out of its way until hover or selection. */
+.mlb-poi-swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 100ms ease, border-color 100ms ease;
+}
+/* The picker's swatches are dragged rather than clicked, so they say so. The Inspector
+   reuses this class for its symbol grid, where the tiles *are* buttons — hence keying the
+   open hand off draggable rather than putting it on the class itself. */
+.mlb-poi-swatch[draggable='true'] {
+  cursor: grab;
+}
+.mlb-poi-swatch[draggable='true']:active {
+  cursor: grabbing;
+}
+.mlb-poi-swatch:hover {
+  background: var(--bg-subtle);
+}
+.mlb-poi-swatch[data-selected='true'] {
+  background: var(--color-info-bg);
+  border-color: var(--brand-500);
+}
+.mlb-poi-swatch:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 1px;
 }

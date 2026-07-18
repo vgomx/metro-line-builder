@@ -11,6 +11,21 @@ export interface Station {
   main: boolean
 }
 
+/**
+ * A landmark dropped anywhere on the map — a museum, an airport, a park gate. Unlike a
+ * station it belongs to no line and shapes no route; it's pure annotation, free to sit
+ * wherever it makes sense.
+ */
+export interface PointOfInterest {
+  id: string
+  /** OpenMoji codepoint: both the icon's identity and its filename in src/assets/openmoji. */
+  icon: string
+  /** Shown beside the icon. Defaults to the icon's own name, and can be anything after that. */
+  name: string
+  x: number
+  y: number
+}
+
 export interface Point {
   x: number
   y: number
@@ -72,4 +87,4 @@ export interface GeoFeature {
   points: Point[]
 }
 
-export type Tool = 'select' | 'add-station' | 'draw-line' | 'draw-river' | 'draw-park' | 'pan'
+export type Tool = 'select' | 'add-station' | 'draw-line' | 'draw-river' | 'draw-park' | 'add-poi' | 'pan'
