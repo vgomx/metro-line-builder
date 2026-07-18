@@ -48,6 +48,19 @@ const PATCHES = {
   /** Finishing a line — the one two-note sound, a door chime's falling third. pitchJump is
    * negative so it settles rather than asks a question. */
   lineDone: [0.55, 0.02, 784, 0.004, 0.12, 0.16, 0, 1, 0, 0, -196, 0.09, 0, 0, 0, 0, 0, 0.6, 0.1],
+  /** Taking hold of a station: the lowest, softest thing in the set. A grab isn't an edit —
+   * nothing has changed yet — so it reads as a muted thunk under the pips rather than
+   * alongside them, and it fires on every pick-up including ones that go nowhere. */
+  grab: [0.4, 0.02, 190, 0.001, 0.02, 0.05, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.3, 0.03],
+  /** A drag pulling a line into a new shape. A slide rather than a fixed pitch — the one
+   * sound in the set that bends, because it's the only one standing for something still in
+   * motion. Fires once per drag, when the route first gives, not per frame. */
+  reroute: [0.4, 0.03, 300, 0.005, 0.06, 0.1, 0, 1, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0.4, 0.06],
+  /** The elastic snap when a dropped line springs into its new shape. Answers `reroute` — that
+   * one bends upward as the route gives, this one dips and comes back (slide down, deltaSlide
+   * up) the way the easing overshoots and settles. Released on the drop, so the pair brackets
+   * the drag: a stretch, then the sling. */
+  snap: [0.45, 0.02, 440, 0.002, 0.05, 0.12, 0, 1, -4, 6, 0, 0, 0, 0, 0, 0, 0, 0.4, 0.08],
   /** Deleting: the only descending patch, so it can't be mistaken for placing something. */
   remove: [0.5, 0.02, 460, 0.002, 0.04, 0.11, 0, 1, -3, 0, 0, 0, 0, 0, 0, 0, 0, 0.4, 0.06],
   /** A whole city arriving at once, so it earns a little more than a tick. */

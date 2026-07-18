@@ -247,6 +247,9 @@ function App() {
             onDeleteWaypoint={withSound('remove', deleteWaypoint)}
             onDeleteSelected={withSound('remove', deleteSelected)}
             onCheckpoint={checkpoint}
+            onStationGrab={() => playSound('grab')}
+            onLineReroute={() => playSound('reroute')}
+            onLineSnap={() => playSound('snap')}
             onUndo={undo}
             onRedo={redo}
             onTransformChange={t => setZoom(t.k)}
