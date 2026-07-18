@@ -283,12 +283,16 @@ export function Inspector({
         <Input label="Name" value={poi.name} onChange={e => onRenamePoi(poi.id, e.target.value)} />
 
         {/* The same grid the placement picker offers, so changing a landmark's symbol after
-            the fact is the gesture that placed it. Kept scrollable rather than paged: the
-            sections are the map of the set, and hiding them behind a dropdown would cost
-            more than the height it saves. */}
+            the fact is the gesture that placed it.
+
+            It runs its full length rather than sitting in a scroll box of its own. The panel
+            already scrolls, and a scroll inside a scroll means a wheel gesture goes to
+            whichever of the two the pointer happens to be over — the fault the licence
+            notices had. The cost is that Delete now sits below the whole set; the panel's
+            scrollbar is at least honest about there being that much to pass. */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
           <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--text-secondary)' }}>Symbol</label>
-          <div style={{ maxHeight: '260px', overflowY: 'auto' }}>
+          <div>
             {openMojiBySubgroup().map(group => (
               <div key={group.subgroup} style={{ marginBottom: 'var(--gap-sm)' }}>
                 <div
@@ -303,7 +307,7 @@ export function Inspector({
                 >
                   {SUBGROUP_LABELS[group.subgroup] ?? group.subgroup}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
                   {group.icons.map(entry => {
                     const entryUrl = openMojiUrl(entry.hexcode)
                     return (
@@ -317,7 +321,7 @@ export function Inspector({
                         aria-pressed={entry.hexcode === poi.icon}
                         onClick={() => onSetPoiIcon(poi.id, entry.hexcode)}
                       >
-                        {entryUrl && <img src={entryUrl} alt="" width={24} height={24} />}
+                        {entryUrl && <img src={entryUrl} alt="" width={34} height={34} />}
                       </button>
                     )
                   })}
