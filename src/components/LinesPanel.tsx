@@ -25,15 +25,15 @@ export function LinesPanel({ lines, selectedLineId, onSelect, onToggleVisibility
           <div
             key={line.id}
             onClick={() => onSelect(line.id)}
+            className="mlb-row"
+            data-selected={isSelected}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: 'var(--gap-sm)',
               padding: '8px 12px',
               cursor: 'pointer',
-              background: isSelected ? 'var(--color-info-bg)' : 'transparent',
               borderLeft: `3px solid ${isSelected ? 'var(--interactive-primary)' : 'transparent'}`,
-              transition: 'background 100ms ease',
             }}
           >
             {/* Carries the line's number rather than a bare swatch, so the list identifies a

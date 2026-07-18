@@ -40,6 +40,24 @@
   }
 }
 
+/* Rows in the right panel's lists — lines, stations, geography, companies. The background
+   lives here rather than inline because an inline `transparent` would outrank any :hover
+   rule, which is why these rows had no hover state at all. The selected rule comes after
+   the hover one and matches it for specificity, so a selected row keeps its own colour
+   while the pointer is over it and the selection stays unambiguous. */
+.mlb-row {
+  background: transparent;
+  transition: background 100ms ease;
+}
+
+.mlb-row:hover {
+  background: var(--bg-subtle);
+}
+
+.mlb-row[data-selected='true'] {
+  background: var(--color-info-bg);
+}
+
 * {
   box-sizing: border-box;
 }

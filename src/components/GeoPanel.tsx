@@ -25,13 +25,14 @@ export function GeoPanel({ geoFeatureList, selectedGeoFeatureId, onSelect, onAdd
           <div
             key={feature.id}
             onClick={() => onSelect(feature.id)}
+            className="mlb-row"
+            data-selected={isSelected}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: 'var(--gap-sm)',
               padding: '8px 12px',
               cursor: 'pointer',
-              background: isSelected ? 'var(--color-info-bg)' : 'transparent',
               borderLeft: `3px solid ${isSelected ? 'var(--interactive-primary)' : 'transparent'}`,
               color: feature.type === 'river' ? '#3B82F6' : '#16A34A',
             }}
