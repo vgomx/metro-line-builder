@@ -285,14 +285,13 @@ export function Inspector({
         {/* The same grid the placement picker offers, so changing a landmark's symbol after
             the fact is the gesture that placed it.
 
-            It runs its full length rather than sitting in a scroll box of its own. The panel
-            already scrolls, and a scroll inside a scroll means a wheel gesture goes to
-            whichever of the two the pointer happens to be over — the fault the licence
-            notices had. The cost is that Delete now sits below the whole set; the panel's
-            scrollbar is at least honest about there being that much to pass. */}
+            Capped and scrolling, despite that being a scroll inside the panel's own — run at
+            full length it puts the whole set, some 1900px of it, between the name field and
+            Delete, and burying the destructive action is the worse of the two faults. The
+            palette is where symbols are browsed; this is where one is corrected. */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
           <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--text-secondary)' }}>Symbol</label>
-          <div>
+          <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
             {openMojiBySubgroup().map(group => (
               <div key={group.subgroup} style={{ marginBottom: 'var(--gap-sm)' }}>
                 <div
