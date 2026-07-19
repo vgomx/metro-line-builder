@@ -64,6 +64,8 @@ interface MapCanvasProps {
   onInsertDraftLineStation: (x: number, y: number, index: number) => void
   onInsertLineStation: (lineId: string, x: number, y: number, index: number) => void
   onFinishDraftLine: () => void
+  /** Take back the last point of whichever draft is in progress. */
+  onPopDraftPoint: () => void
   onCancelDraftLine: () => void
   onAddGeoPoint: (x: number, y: number) => void
   /** A symbol has been dropped on the map — the icon comes from the drag itself. */
@@ -173,6 +175,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onInsertDraftLineStation,
     onInsertLineStation,
     onFinishDraftLine,
+    onPopDraftPoint,
     onCancelDraftLine,
     onAddGeoPoint,
     onAddPoi,
@@ -325,6 +328,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         // same trap as a draft you can't finish.
         else if (DRAW_TOOLS.includes(tool) || tool === 'add-poi') onReturnToSelect()
         else onClearSelection()
+      } else if (e.key === 'Backspace' && (draftLineNodes.length > 0 || draftGeoPoints.length > 0)) {
+        // While something is being drawn, Backspace walks it back a point at a time. It's the
+        // pen-tool gesture from every drawing app, and until now the only way out of a
+        // misplaced point was Escape and starting the whole route again.
+        e.preventDefault()
+        onPopDraftPoint()
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedWaypoint) {
           e.preventDefault()
@@ -371,6 +380,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onDeleteWaypoint,
     onDeleteSelected,
     onFinishDraftLine,
+    onPopDraftPoint,
     onFinishGeoFeature,
     onUndo,
     onRedo,
