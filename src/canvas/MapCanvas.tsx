@@ -1026,7 +1026,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
               stroke="var(--brand-400)"
               strokeWidth={3}
               strokeDasharray="6 4"
-              style={{ pointerEvents: 'none' }}
+              style={{ pointerEvents: 'none', animation: 'mlb-draft-flow 600ms linear infinite' }}
             />
           </>
         )}
@@ -1039,7 +1039,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             strokeWidth={3}
             strokeDasharray="2 5"
             opacity={0.55}
-            style={{ pointerEvents: 'none' }}
+            style={{ pointerEvents: 'none', animation: 'mlb-draft-tip-flow 420ms linear infinite' }}
           />
         )}
 
