@@ -287,25 +287,33 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         frameBounds({ x: box.x, y: box.y, width: box.width, height: box.height })
       },
       fitContent: () => {
-        const paths = svgRef.current?.querySelectorAll<SVGGraphicsElement>('path[id^="line-"]')
-        if (!paths || paths.length === 0) return
-        let minX = Infinity
-        let minY = Infinity
-        let maxX = -Infinity
-        let maxY = -Infinity
-        for (const path of paths) {
-          const b = path.getBBox()
-          if (b.width === 0 && b.height === 0) continue
-          minX = Math.min(minX, b.x)
-          minY = Math.min(minY, b.y)
-          maxX = Math.max(maxX, b.x + b.width)
-          maxY = Math.max(maxY, b.y + b.height)
+        // Measured from the data rather than from the rendered paths. The paths are only the
+        // routes: they know nothing of the station names hanging off them, the river running
+        // past, the parks, or the landmarks — so framing on them alone left a generated map's
+        // scenery outside the view. Reading the map itself also takes the DOM's timing out of
+        // it, which is the other thing that made this occasionally frame the wrong rectangle.
+        const xs: number[] = []
+        const ys: number[] = []
+        const note = (p: Point) => {
+          xs.push(p.x)
+          ys.push(p.y)
         }
-        if (minX === Infinity) return
-        frameBounds({ x: minX, y: minY, width: maxX - minX, height: maxY - minY })
+        stationList.forEach(note)
+        poiList.forEach(note)
+        // Parks count; rivers don't. A river is drawn to run off the edge of the map the way
+        // geography does, so framing it whole pushes the network small into the middle of a
+        // lot of water. Letting it bleed is what it's for.
+        for (const feature of geoFeatureList) if (feature.type !== 'river') feature.points.forEach(note)
+        for (const line of lineList) resolveLineNodes(line.nodes, stations).forEach(note)
+        if (xs.length === 0) return
+        // Room for what hangs off a point: a station's name card, a landmark's label.
+        const margin = 52
+        const minX = Math.min(...xs) - margin
+        const minY = Math.min(...ys) - margin
+        frameBounds({ x: minX, y: minY, width: Math.max(...xs) + margin - minX, height: Math.max(...ys) + margin - minY })
       },
     }),
-    [zoomIn, zoomOut, frameBounds],
+    [zoomIn, zoomOut, frameBounds, stationList, poiList, geoFeatureList, lineList, stations],
   )
 
   useEffect(() => {
