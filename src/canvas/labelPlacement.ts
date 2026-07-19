@@ -55,6 +55,62 @@ export function measureLabelWidth(text: string): number {
   return ctx.measureText(text).width
 }
 
+
+/**
+ * Breaks a label into lines that each fit `maxWidth`, at most `maxLines` of them.
+ *
+ * SVG text does not wrap, so a long name is a single run that grows until it collides with
+ * whatever is beside it — a landmark called "Classical building" is wider than the marker it
+ * belongs to, and a park's name can outgrow the park. Wrapping keeps a label roughly as wide
+ * as the thing it names, at the cost of it being taller.
+ *
+ * Greedy: words go on the current line while they fit. A single word wider than the line is
+ * broken mid-word rather than allowed to overflow, and anything past the last line is cut with
+ * an ellipsis — a name that runs off the map is worse than one visibly shortened.
+ */
+export function wrapLabel(text: string, maxWidth: number, fontSize: number, maxLines = 2): string[] {
+  const trimmed = text.trim()
+  if (!trimmed) return []
+  // measureLabelWidth measures at LABEL_FONT_SIZE; text scales linearly with the font size.
+  const scale = fontSize / LABEL_FONT_SIZE
+  const widthOf = (s: string) => measureLabelWidth(s) * scale
+  if (widthOf(trimmed) <= maxWidth) return [trimmed]
+
+  const lines: string[] = []
+  let current = ''
+  const flush = () => {
+    if (current) lines.push(current)
+    current = ''
+  }
+
+  for (const word of trimmed.split(/\s+/)) {
+    const candidate = current ? `${current} ${word}` : word
+    if (widthOf(candidate) <= maxWidth) {
+      current = candidate
+      continue
+    }
+    flush()
+    if (lines.length >= maxLines) break
+    // A word too wide even on its own line: break it where it stops fitting.
+    let rest = word
+    while (widthOf(rest) > maxWidth && lines.length < maxLines) {
+      let cut = rest.length
+      while (cut > 1 && widthOf(rest.slice(0, cut)) > maxWidth) cut--
+      lines.push(rest.slice(0, cut))
+      rest = rest.slice(cut)
+    }
+    current = rest
+  }
+  flush()
+
+  if (lines.length <= maxLines) return lines
+  const kept = lines.slice(0, maxLines)
+  let last = kept[maxLines - 1]
+  while (last.length > 1 && widthOf(`${last}…`) > maxWidth) last = last.slice(0, -1)
+  kept[maxLines - 1] = `${last}…`
+  return kept
+}
+
 export interface LabelGeometry {
   /** Text anchor point, relative to the station. */
   labelX: number
@@ -65,7 +121,13 @@ export interface LabelGeometry {
   cardW: number
   cardH: number
   textWidth: number
+  /** The name broken into the lines the card is sized for. */
+  lines: string[]
 }
+
+/** A station name wraps past this, so one long name can't drive a card across its
+ * neighbours. Wide enough that the names in the generator's own pool stay on one line. */
+const STATION_LABEL_MAX_WIDTH = 84
 
 /**
  * Where a station's name and its backing card sit, in station-local coordinates.
@@ -85,10 +147,11 @@ export function labelGeometry(station: Station, placement: LabelPlacement, isInt
   const labelY = Math.sin(placement.angle) * distance
 
   const padX = station.main ? MAIN_PAD_X : CARD_PAD_X
-  const name = station.name.trim()
-  const textWidth = name ? measureLabelWidth(name) : 0
+  const lines = wrapLabel(station.name, STATION_LABEL_MAX_WIDTH, LABEL_FONT_SIZE, 2)
+  // The widest line sets the card, and every line has to fit inside it.
+  const textWidth = lines.length > 0 ? Math.max(...lines.map(measureLabelWidth)) : 0
   const cardW = textWidth + padX * 2
-  const cardH = LABEL_FONT_SIZE + CARD_PAD_Y * 2
+  const cardH = LABEL_FONT_SIZE * lines.length + CARD_PAD_Y * 2
   const cardX =
     placement.anchor === 'start'
       ? labelX - padX
@@ -96,7 +159,7 @@ export function labelGeometry(station: Station, placement: LabelPlacement, isInt
         ? labelX - textWidth - padX
         : labelX - cardW / 2
 
-  return { labelX, labelY, cardX, cardY: labelY - cardH / 2, cardW, cardH, textWidth }
+  return { labelX, labelY, cardX, cardY: labelY - cardH / 2, cardW, cardH, textWidth, lines }
 }
 
 interface Box {
@@ -109,6 +172,14 @@ interface Box {
 function labelBox(station: Station, placement: LabelPlacement, isInterchange: boolean): Box {
   const g = labelGeometry(station, placement, isInterchange)
   return { x: station.x + g.cardX, y: station.y + g.cardY, width: g.cardW, height: g.cardH }
+}
+
+/** How much two boxes actually overlap, in square units — 0 when they don't. Used to choose
+ * the least-bad placement when a crowded corner leaves no clear one at all. */
+function overlapArea(a: Box, b: Box, gap = 0): number {
+  const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x - gap, b.x)
+  const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y - gap, b.y)
+  return w > 0 && h > 0 ? w * h : 0
 }
 
 function overlaps(a: Box, b: Box, gap = 0): boolean {
@@ -203,6 +274,13 @@ export function computeLabelPlacements(
     let bestScore = -Infinity
     let bestFree: LabelPlacement | null = null
     let bestFreeScore = -Infinity
+    // Where to go when nowhere is clear. Wrapping made this matter: a two-line card is half
+    // again as tall, so crowded corners run out of free placements more often, and the old
+    // fallback — best clearance from the lines, label collisions ignored — could drop a card
+    // squarely across its neighbour. Least overlap is the honest answer to "no good options".
+    let bestBusy: LabelPlacement | null = null
+    let bestBusyOverlap = Infinity
+    let bestBusyScore = -Infinity
 
     for (const direction of LABEL_DIRECTIONS) {
       const score = clearanceScore(direction, incident)
@@ -217,14 +295,24 @@ export function computeLabelPlacements(
       // A station's own marker never reaches its label — the offset guarantees it — so the
       // only markers worth testing are everyone else's.
       const hitsMarker = [...markers].some(([id, marker]) => id !== station.id && overlaps(box, marker))
-      if (hitsLabel || hitsMarker) continue
+      if (hitsLabel || hitsMarker) {
+        let spilled = 0
+        for (const other of placed) spilled += overlapArea(box, other, LABEL_GAP)
+        for (const [id, marker] of markers) if (id !== station.id) spilled += overlapArea(box, marker)
+        if (spilled < bestBusyOverlap - 1e-6 || (Math.abs(spilled - bestBusyOverlap) < 1e-6 && score > bestBusyScore)) {
+          bestBusyOverlap = spilled
+          bestBusyScore = score
+          bestBusy = direction
+        }
+        continue
+      }
       if (score > bestFreeScore + 1e-6) {
         bestFreeScore = score
         bestFree = direction
       }
     }
 
-    const chosen = bestFree ?? best
+    const chosen = bestFree ?? (named ? (bestBusy ?? best) : best)
     result[station.id] = chosen
     if (named) placed.push(labelBox(station, chosen, interchange))
   }

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { PointOfInterest } from '../types'
 import { openMojiUrl } from '../openmoji'
+import { wrapLabel } from './labelPlacement'
 
 
 interface PoiNodeProps {
@@ -23,6 +24,11 @@ export const POI_ICON_SIZE = 26
  * names have to pass each other — and beside the network, a landmark is a footnote. Small
  * enough that two adjacent ones don't fight, rather than adding a second placement solver. */
 const LABEL_FONT_SIZE = 6.5
+/** How wide a landmark's name may run before it wraps. A little under twice the tile, so the
+ * label stays roughly as wide as the thing it names instead of reaching across its
+ * neighbours — "Classical building" on one line is wider than the marker by half again. */
+const LABEL_MAX_WIDTH = 46
+const LABEL_LINE_HEIGHT = 7.5
 /** Matches StationNode's answer to the cursor, so every marker on the map swells alike. */
 const HOVER_GROWTH = 1.5
 const DRAG_GROWTH = 2
@@ -35,7 +41,7 @@ export function PoiNode({ poi, selected, dragging, landing, onPointerDown }: Poi
   const grown = dragging ? DRAG_GROWTH : hovered ? HOVER_GROWTH : 0
   const size = POI_ICON_SIZE + grown * 2
   const half = size / 2
-  const name = poi.name.trim()
+  const nameLines = wrapLabel(poi.name, LABEL_MAX_WIDTH, LABEL_FONT_SIZE, 2)
 
   return (
     <g
@@ -92,7 +98,7 @@ export function PoiNode({ poi, selected, dragging, landing, onPointerDown }: Poi
           // still has to be visible and draggable, or it becomes an invisible obstacle.
           <rect x={-half} y={-half} width={size} height={size} rx={5} fill="var(--bg-subtle)" />
         )}
-        {name && (
+        {nameLines.length > 0 && (
           <text
             y={half + 4}
             textAnchor="middle"
@@ -106,7 +112,11 @@ export function PoiNode({ poi, selected, dragging, landing, onPointerDown }: Poi
             paintOrder="stroke"
             style={{ userSelect: 'none', pointerEvents: 'none' }}
           >
-            {name}
+            {nameLines.map((line, index) => (
+              <tspan key={index} x={0} dy={index === 0 ? 0 : LABEL_LINE_HEIGHT}>
+                {line}
+              </tspan>
+            ))}
           </text>
         )}
       </g>

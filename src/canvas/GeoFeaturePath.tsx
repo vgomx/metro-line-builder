@@ -1,6 +1,7 @@
 import type { MouseEvent } from 'react'
 import type { GeoFeature, Point } from '../types'
 import { buildVertices, routeOrthogonal } from './routing'
+import { wrapLabel } from './labelPlacement'
 
 interface GeoFeaturePathProps {
   feature: GeoFeature
@@ -19,6 +20,14 @@ const PARK_LABEL = '#15803D'
 // Wide enough for the italic name to sit inside the water band rather than perched above it.
 const RIVER_STROKE_WIDTH = 20
 const LABEL_WEIGHT = 400
+const PARK_LABEL_SIZE = 12
+const PARK_LINE_HEIGHT = 13
+/** A park's name wraps to its own width, less a margin so the text doesn't touch the outline.
+ * Narrow parks get a floor — below it the name would break to one word per line — and every
+ * park gets a ceiling, so a long name wraps even when there is room to run: a single line
+ * stretching the width of a large park reads as a banner laid over it, not as its name. */
+const PARK_LABEL_MIN_WIDTH = 70
+const PARK_LABEL_MAX_WIDTH = 140
 
 /** Centroid of a polygon's vertices — good enough to seat a park's name near its middle. */
 function verticesCentroid(points: Point[]): Point {
@@ -106,6 +115,13 @@ export function GeoFeaturePath({ feature, selected, onClick }: GeoFeaturePathPro
   }
 
   const centre = verticesCentroid(feature.points)
+  const parkWidth = Math.max(...feature.points.map(p => p.x)) - Math.min(...feature.points.map(p => p.x))
+  const parkLines = wrapLabel(
+    name.toUpperCase(),
+    Math.min(PARK_LABEL_MAX_WIDTH, Math.max(PARK_LABEL_MIN_WIDTH, parkWidth - PARK_LABEL_SIZE * 2)),
+    PARK_LABEL_SIZE,
+    2,
+  )
   return (
     <>
       <path
@@ -117,20 +133,28 @@ export function GeoFeaturePath({ feature, selected, onClick }: GeoFeaturePathPro
         onClick={handleClick}
         style={{ cursor: 'pointer' }}
       />
-      {name && (
+      {/* Wrapped against the park's own width rather than run as one line: a park is as wide
+          as it is, and a name that overruns it stops reading as the park's name and starts
+          reading as something lying on top of it. Centred as a block, so two lines sit either
+          side of the middle rather than hanging below it. */}
+      {parkLines.length > 0 && (
         <text
           x={centre.x}
-          y={centre.y}
+          y={centre.y - ((parkLines.length - 1) * PARK_LINE_HEIGHT) / 2}
           textAnchor="middle"
           dominantBaseline="middle"
-          fontSize={12}
+          fontSize={PARK_LABEL_SIZE}
           fontFamily="'Barlow Condensed', system-ui, sans-serif"
           fontWeight={LABEL_WEIGHT}
           letterSpacing={0.5}
           fill={PARK_LABEL}
-          style={{ userSelect: 'none', pointerEvents: 'none', textTransform: 'uppercase' }}
+          style={{ userSelect: 'none', pointerEvents: 'none' }}
         >
-          {name.toUpperCase()}
+          {parkLines.map((line, index) => (
+            <tspan key={index} x={centre.x} dy={index === 0 ? 0 : PARK_LINE_HEIGHT}>
+              {line}
+            </tspan>
+          ))}
         </text>
       )}
     </>
