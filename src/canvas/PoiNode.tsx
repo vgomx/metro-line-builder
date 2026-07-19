@@ -52,7 +52,7 @@ export function PoiNode({ poi, selected, dragging, landing, onPointerDown }: Poi
             ? {
                 transformBox: 'fill-box',
                 transformOrigin: 'center',
-                animation: `${landing === 'appear' ? 'mlb-poi-land' : 'mlb-poi-settle'} ${LAND_MS}ms cubic-bezier(0.3, 1.4, 0.5, 1) both`,
+                animation: `${landing === 'appear' ? 'mlb-marker-land' : 'mlb-marker-settle'} ${LAND_MS}ms cubic-bezier(0.3, 1.4, 0.5, 1) both`,
               }
             : undefined
         }

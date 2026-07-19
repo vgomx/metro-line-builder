@@ -84,23 +84,6 @@ body {
   }
 }
 
-/* A newly added station pops in with a small overshoot. transform-box:fill-box
-   keeps the scale centred on the marker (its bounding box is symmetric about 0,0). */
-@keyframes mlb-station-pop {
-  0% {
-    opacity: 0;
-    transform: scale(0.2);
-  }
-  70% {
-    opacity: 1;
-    transform: scale(1.12);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
 /* A faint highlight streams along the selected line, so the active route reads as
    "live" without shouting. Slow and sparse on purpose. */
 @keyframes mlb-line-flow {
@@ -244,13 +227,14 @@ body {
   }
 }
 
-/* The marker itself arriving: dropped from slightly above and overshooting into the ground
-   before settling, which is what sells the weight the rings imply.
+/* A marker arriving: dropped from slightly above and overshooting into the ground before
+   settling, which is what sells the weight the rings imply. Shared by landmarks and stations,
+   so everything the map puts down lands the same way.
 
    Two variants because the two arrivals differ: a landmark coming off the palette is new to
    the map and fades in as it falls, while one being moved is already there — fading it would
    read as a delete and a re-create rather than as putting something down. */
-@keyframes mlb-poi-land {
+@keyframes mlb-marker-land {
   0% {
     transform: translateY(-7px) scale(1.25);
     opacity: 0;
@@ -265,7 +249,7 @@ body {
   }
 }
 
-@keyframes mlb-poi-settle {
+@keyframes mlb-marker-settle {
   0% {
     transform: translateY(-7px) scale(1.25);
   }

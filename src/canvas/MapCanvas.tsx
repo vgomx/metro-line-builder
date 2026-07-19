@@ -215,6 +215,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
    * freshly dropped one does. New arrivals come from useAppearance instead — they have no
    * previous position to have been moved from. */
   const [settlingPoiIds, setSettlingPoiIds] = useState<Set<string>>(() => new Set())
+  /** Stations that have just been put down after a drag, so the marker settles the way a
+   * landmark does. Added stations come from useAppearance instead — they have no previous
+   * position to have been moved from. */
+  const [settlingStationIds, setSettlingStationIds] = useState<Set<string>>(() => new Set())
 
   /**
    * Ring out from every point something landed on, and say so once. Shared by the two ways a
@@ -614,6 +618,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         drag.ids.map(id => stations[id]).filter((s): s is Station => Boolean(s)).map(s => ({ x: s.x, y: s.y })),
         true,
       )
+      setSettlingStationIds(new Set(drag.ids))
+      window.setTimeout(() => setSettlingStationIds(new Set()), SETTLE_MS)
 
       snapSessionRef.current += 1
       setSnapSession({ key: String(snapSessionRef.current), originalPositions: drag.originalPositions })
@@ -1048,7 +1054,13 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             inDraftLine={draftLineStationIdSet.has(station.id)}
             interchange={(lineCountByStation[station.id] ?? 0) >= 2}
             dragging={draggingStationIdSet.has(station.id)}
-            entering={poppingStationIds.has(station.id)}
+            landing={
+              poppingStationIds.has(station.id)
+                ? 'appear'
+                : settlingStationIds.has(station.id)
+                  ? 'settle'
+                  : undefined
+            }
             labelPlacement={labelPlacementByStation[station.id]}
             onPointerDown={handleStationPointerDown}
             onClick={handleStationClick}
