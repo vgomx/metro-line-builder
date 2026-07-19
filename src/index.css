@@ -459,3 +459,25 @@ body {
     stroke-dashoffset: -7;
   }
 }
+
+/* The swell under the point a new station would join a line at. It breathes outward, which
+   is the promise being made: something is about to grow here. Paired with the placement
+   marker's own breath, at the same tempo, so hovering a line reads as a change of what will
+   happen rather than as a different tool taking over. */
+@keyframes mlb-station-preview {
+  0%,
+  100% {
+    transform: scale(0.86);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scale(1.16);
+    opacity: 0.2;
+  }
+}
+
+.mlb-station-preview {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mlb-station-preview 2200ms ease-in-out infinite;
+}

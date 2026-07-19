@@ -18,6 +18,7 @@ import { minGeoPointsForTool } from '../geoDraft'
 import {
   buildLineTrack,
   buildNetworkGeometry,
+  distanceToPolyline,
   buildRefanFrames,
   closestSegmentIndex,
   resolveLineNodes,
@@ -151,6 +152,10 @@ const LINE_EXIT_HOLD_MS = 700
  * decision already made, and rounding it says the shape is still being felt out. It's also
  * clamped to half the shorter neighbouring segment, so on tight zig-zags it quietly gives way
  * rather than distorting the route. */
+/** How near the snapped point has to be to a route before the station tool offers to join it.
+ * Under half a cell: any further and the station would be created beside the line rather than
+ * on it, and promising a junction there would be a lie. */
+const STATION_JOIN_REACH = 14
 const DRAFT_CORNER_RADIUS = 18
 const RIVER_DRAFT_STROKE = '#60A5FA'
 const PARK_DRAFT_STROKE = '#4ADE80'
@@ -850,6 +855,25 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             ? 'crosshair'
             : 'default'
 
+  /**
+   * The line the station tool would join, if the pointer is over one.
+   *
+   * Clicking a line with this tool inserts a stop into it rather than dropping a loose
+   * station, and nothing said so — the marker looked identical over bare canvas and over a
+   * route. Where it would join, the marker becomes a swell in the line's own colour: the shape
+   * a station makes, in the colour of the line about to gain one.
+   */
+  const joinTarget = (() => {
+    if (tool !== 'add-station' || !cursorWorld) return null
+    for (const line of lineList) {
+      if (!line.visible) continue
+      const geometry = network.byLine.get(line.id)
+      if (!geometry) continue
+      if (distanceToPolyline(geometry.vertices, cursorWorld) <= STATION_JOIN_REACH) return line
+    }
+    return null
+  })()
+
   const gridLines = []
   if (showGrid) {
     for (let x = -GRID_EXTENT; x <= GRID_EXTENT; x += GRID_SIZE) {
@@ -1231,14 +1255,29 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             style={{ pointerEvents: 'none' }}
           >
             <g className="mlb-snap-in">
-              <circle
-                className="mlb-snap-ring"
-                r={10 / transform.k}
-                fill="none"
-                stroke="var(--interactive-primary)"
-                strokeWidth={1.5 / transform.k}
-              />
-              <circle className="mlb-snap-dot" r={2.5 / transform.k} fill="var(--interactive-primary)" />
+              {joinTarget ? (
+                <>
+                  <circle className="mlb-station-preview" r={13 / transform.k} fill={joinTarget.color} />
+                  <circle
+                    r={6.5 / transform.k}
+                    fill="var(--bg-page)"
+                    stroke="var(--text-primary)"
+                    strokeWidth={2.5 / transform.k}
+                    opacity={0.85}
+                  />
+                </>
+              ) : (
+                <>
+                  <circle
+                    className="mlb-snap-ring"
+                    r={10 / transform.k}
+                    fill="none"
+                    stroke="var(--interactive-primary)"
+                    strokeWidth={1.5 / transform.k}
+                  />
+                  <circle className="mlb-snap-dot" r={2.5 / transform.k} fill="var(--interactive-primary)" />
+                </>
+              )}
             </g>
           </g>
         )}

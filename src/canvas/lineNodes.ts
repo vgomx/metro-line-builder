@@ -63,6 +63,15 @@ function distanceToSegment(a: Point, b: Point, p: Point): number {
   return Math.hypot(p.x - projX, p.y - projY)
 }
 
+/** How far a point lies from a polyline — the drawn route, not the chord between stops. */
+export function distanceToPolyline(points: Point[], p: Point): number {
+  let best = Infinity
+  for (let i = 0; i < points.length - 1; i++) {
+    best = Math.min(best, distanceToSegment(points[i], points[i + 1], p))
+  }
+  return best
+}
+
 /** Index i such that inserting a new node between points[i] and points[i+1] is closest to `click`. */
 export function closestSegmentIndex(points: Point[], click: Point): number {
   let bestIndex = 0
