@@ -147,6 +147,11 @@ const CRUMBLE_MS = 380
 const POI_EXIT_HOLD_MS = 440
 const LINE_SHATTER_MS = 620
 const LINE_EXIT_HOLD_MS = 700
+/** Softer than the 10 a committed route gets. A draft is a sketch — the hard elbow reads as a
+ * decision already made, and rounding it says the shape is still being felt out. It's also
+ * clamped to half the shorter neighbouring segment, so on tight zig-zags it quietly gives way
+ * rather than distorting the route. */
+const DRAFT_CORNER_RADIUS = 18
 const RIVER_DRAFT_STROKE = '#60A5FA'
 const PARK_DRAFT_STROKE = '#4ADE80'
 
@@ -709,12 +714,15 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   // Split into the already-committed portion (clickable to insert a station mid-route)
   // and a separate rubber-band segment to the live cursor (preview only, not clickable).
   const draftPoints = resolveLineNodes(draftLineNodes, stations)
-  const draftCommittedPath = draftPoints.length >= 2 ? routeOrthogonal(draftPoints) : ''
+  const draftCommittedPath = draftPoints.length >= 2 ? routeOrthogonal(draftPoints, false, DRAFT_CORNER_RADIUS) : ''
   const draftCursorPath =
-    cursorWorld && draftPoints.length >= 1 ? routeOrthogonal([draftPoints[draftPoints.length - 1], cursorWorld]) : ''
+    cursorWorld && draftPoints.length >= 1
+      ? routeOrthogonal([draftPoints[draftPoints.length - 1], cursorWorld], false, DRAFT_CORNER_RADIUS)
+      : ''
 
   const draftGeoPreviewPoints = cursorWorld ? [...draftGeoPoints, cursorWorld] : draftGeoPoints
-  const draftGeoPath = draftGeoPreviewPoints.length > 1 ? routeOrthogonal(draftGeoPreviewPoints) : ''
+  const draftGeoPath =
+    draftGeoPreviewPoints.length > 1 ? routeOrthogonal(draftGeoPreviewPoints, false, DRAFT_CORNER_RADIUS) : ''
 
   const snapLines = snapSession
     ? lineList.filter(
@@ -1026,6 +1034,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
               stroke="var(--brand-400)"
               strokeWidth={3}
               strokeDasharray="6 4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
               style={{ pointerEvents: 'none', animation: 'mlb-draft-flow 600ms linear infinite' }}
             />
           </>
@@ -1038,6 +1048,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             stroke="var(--brand-400)"
             strokeWidth={3}
             strokeDasharray="2 5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
             opacity={0.55}
             style={{ pointerEvents: 'none', animation: 'mlb-draft-tip-flow 420ms linear infinite' }}
           />
