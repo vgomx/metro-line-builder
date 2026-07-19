@@ -159,6 +159,39 @@ const RECORDABLE_ACTIONS = new Set<Action['type']>([
   'deleteSelected',
 ])
 
+/**
+ * Lets go of the stations a draft brought into being, for every way a draft can end without
+ * becoming a line: cancelled, abandoned by picking up another tool, or finished too short to
+ * be a route.
+ *
+ * They were scaffolding. A station placed by clicking bare canvas mid-draw exists only to
+ * hold the line up, so when the line never arrives the stop shouldn't stay behind for the
+ * user to find and clear by hand. Any the map has since taken up — a committed line drawn
+ * through one — are the map's now and stay.
+ */
+function releaseDraftStations(state: MapState): Pick<MapState, 'stations' | 'stationOrder' | 'selectedStationIds' | 'draftCreatedStationIds'> {
+  const abandoned = state.draftCreatedStationIds.filter(
+    id => !Object.values(state.lines).some(line => lineHasStation(line, id)),
+  )
+  if (abandoned.length === 0) {
+    return {
+      stations: state.stations,
+      stationOrder: state.stationOrder,
+      selectedStationIds: state.selectedStationIds,
+      draftCreatedStationIds: [],
+    }
+  }
+  const abandonedSet = new Set(abandoned)
+  const stations = { ...state.stations }
+  for (const id of abandoned) delete stations[id]
+  return {
+    stations,
+    stationOrder: state.stationOrder.filter(id => !abandonedSet.has(id)),
+    selectedStationIds: state.selectedStationIds.filter(id => !abandonedSet.has(id)),
+    draftCreatedStationIds: [],
+  }
+}
+
 function snapshotOf(state: DataSnapshot): DataSnapshot {
   return {
     mapName: state.mapName,
@@ -525,6 +558,7 @@ function reducer(rawState: MapState, action: Action): MapState {
     case 'setTool':
       return {
         ...state,
+        ...releaseDraftStations(state),
         tool: action.tool,
         draftLineNodes: [],
         draftLineId: null,
@@ -766,6 +800,7 @@ function reducer(rawState: MapState, action: Action): MapState {
       const reversed = action.end === 'start'
       return {
         ...state,
+        ...releaseDraftStations(state),
         tool: 'draw-line',
         draftLineNodes: reversed ? [...line.nodes].reverse() : [...line.nodes],
         draftLineId: action.lineId,
@@ -779,7 +814,13 @@ function reducer(rawState: MapState, action: Action): MapState {
 
     case 'finishDraftLine': {
       if (state.draftLineNodes.length < 2) {
-        return { ...state, draftLineNodes: [], draftLineId: null, draftLineReversed: false, draftCreatedStationIds: [] }
+        return {
+          ...state,
+          ...releaseDraftStations(state),
+          draftLineNodes: [],
+          draftLineId: null,
+          draftLineReversed: false,
+        }
       }
       if (state.draftLineId) {
         const line = state.lines[state.draftLineId]
@@ -855,27 +896,14 @@ function reducer(rawState: MapState, action: Action): MapState {
       if (state.draftGeoPoints.length === 0) return state
       return { ...state, draftGeoPoints: state.draftGeoPoints.slice(0, -1) }
 
-    case 'cancelDraftLine': {
-      // Abandoning a draft takes its scaffolding with it. The stations only existed to hold
-      // the line up, and leaving them behind after Escape meant every cancelled attempt
-      // silently littered the map with stops the user then had to find and remove.
-      const stations = { ...state.stations }
-      const abandoned = state.draftCreatedStationIds.filter(
-        id => !Object.values(state.lines).some(line => lineHasStation(line, id)),
-      )
-      for (const id of abandoned) delete stations[id]
-      const abandonedSet = new Set(abandoned)
+    case 'cancelDraftLine':
       return {
         ...state,
-        stations,
-        stationOrder: state.stationOrder.filter(id => !abandonedSet.has(id)),
-        selectedStationIds: state.selectedStationIds.filter(id => !abandonedSet.has(id)),
+        ...releaseDraftStations(state),
         draftLineNodes: [],
         draftLineId: null,
         draftLineReversed: false,
-        draftCreatedStationIds: [],
       }
-    }
 
     case 'addGeoPoint':
       return { ...state, draftGeoPoints: [...state.draftGeoPoints, { x: action.x, y: action.y }] }
