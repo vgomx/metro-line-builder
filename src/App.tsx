@@ -70,6 +70,8 @@ function App() {
     insertLineStation,
     startExtendLine,
     finishDraftLine,
+    popDraftLineNode,
+    popDraftGeoPoint,
     cancelDraftLine,
     addGeoPoint,
     startExtendGeoFeature,
@@ -333,6 +335,7 @@ function App() {
             onInsertDraftLineStation={withSound('station', insertDraftLineStation)}
             onInsertLineStation={withSound('station', insertLineStation)}
             onFinishDraftLine={withSound('lineDone', finishDraftLine)}
+            onPopDraftPoint={withSound('remove', () => (state.draftLineNodes.length > 0 ? popDraftLineNode() : popDraftGeoPoint()))}
             onCancelDraftLine={cancelDraftLine}
             onAddGeoPoint={withSound('node', addGeoPoint)}
             onAddPoi={(x: number, y: number, icon: string) => addPoi(x, y, icon, openMojiLabel(icon))}

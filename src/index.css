@@ -373,3 +373,13 @@ body {
   line-height: 1.4;
   color: var(--text-secondary);
 }
+
+/* With a draw tool in hand the snap marker is the pointer, so the system cursor goes away —
+   over the canvas and over everything on it. The descendant rule is what makes that hold:
+   stations and lines set their own cursor inline, and an inline style outranks any class, so
+   without this the cursor would blink back into existence every time the pointer crossed a
+   station on its way somewhere. */
+.mlb-drawing,
+.mlb-drawing * {
+  cursor: none !important;
+}

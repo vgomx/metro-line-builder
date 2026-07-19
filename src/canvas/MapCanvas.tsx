@@ -64,6 +64,8 @@ interface MapCanvasProps {
   onInsertDraftLineStation: (x: number, y: number, index: number) => void
   onInsertLineStation: (lineId: string, x: number, y: number, index: number) => void
   onFinishDraftLine: () => void
+  /** Take back the last point of whichever draft is in progress. */
+  onPopDraftPoint: () => void
   onCancelDraftLine: () => void
   onAddGeoPoint: (x: number, y: number) => void
   /** A symbol has been dropped on the map — the icon comes from the drag itself. */
@@ -173,6 +175,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onInsertDraftLineStation,
     onInsertLineStation,
     onFinishDraftLine,
+    onPopDraftPoint,
     onCancelDraftLine,
     onAddGeoPoint,
     onAddPoi,
@@ -325,6 +328,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         // same trap as a draft you can't finish.
         else if (DRAW_TOOLS.includes(tool) || tool === 'add-poi') onReturnToSelect()
         else onClearSelection()
+      } else if (e.key === 'Backspace' && (draftLineNodes.length > 0 || draftGeoPoints.length > 0)) {
+        // While something is being drawn, Backspace walks it back a point at a time. It's the
+        // pen-tool gesture from every drawing app, and until now the only way out of a
+        // misplaced point was Escape and starting the whole route again.
+        e.preventDefault()
+        onPopDraftPoint()
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedWaypoint) {
           e.preventDefault()
@@ -371,6 +380,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onDeleteWaypoint,
     onDeleteSelected,
     onFinishDraftLine,
+    onPopDraftPoint,
     onFinishGeoFeature,
     onUndo,
     onRedo,
@@ -800,6 +810,18 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   // hand has to hold for the whole drag. Set on the svg as well as the marker because a
   // quick drag outruns its own station — the pointer ends up over bare canvas, and without
   // this the cursor would flick back to an arrow while the station is still being carried.
+  /**
+   * While a draw tool is up, the snap marker *is* the pointer.
+   *
+   * A crosshair promises precision the tool doesn't want: every click lands on the nearest
+   * grid point whatever the pixel under the cursor, so showing both left the user lining up
+   * two things when only one of them decided anything. Hiding the system cursor leaves the
+   * marker alone on the grid point that will actually be used.
+   *
+   * Only once the marker exists, though — before the first pointermove there's nothing on the
+   * canvas to aim with, and a pointer that is simply gone would be worse than a wrong one.
+   */
+  const drawingWithMarker = DRAW_TOOLS.includes(tool) && cursorWorld !== null && !spaceHeld
   const cursor =
     drag.kind === 'stations' || drag.kind === 'pois'
       ? 'grabbing'
@@ -807,9 +829,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         ? panning
           ? 'grabbing'
           : 'grab'
-        : DRAW_TOOLS.includes(tool)
-          ? 'crosshair'
-          : 'default'
+        : drawingWithMarker
+          ? 'none'
+          : DRAW_TOOLS.includes(tool)
+            ? 'crosshair'
+            : 'default'
 
   const gridLines = []
   if (showGrid) {
@@ -826,6 +850,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       ref={svgRef}
       width="100%"
       height="100%"
+      className={drawingWithMarker ? 'mlb-drawing' : undefined}
       style={{ display: 'block', background: 'var(--bg-page)', cursor, userSelect: 'none', WebkitUserSelect: 'none' }}
       onPointerDown={handleRootPointerDown}
       onPointerMove={handlePointerMove}
@@ -1175,8 +1200,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           />
         )}
 
-        {/* Hot-spot cue: highlights the grid intersection a draw tool will snap to,
-            making precise placement easier to judge before clicking. */}
+        {/* The marker standing in for the pointer: the grid point a click will actually use.
+            Sized against the zoom so it stays the same size on screen however far the map is
+            scaled, which is what a cursor does. */}
         {(dropPoint ?? (DRAW_TOOLS.includes(tool) ? cursorWorld : null)) && (
           <g
             transform={`translate(${(dropPoint ?? cursorWorld)!.x}, ${(dropPoint ?? cursorWorld)!.y})`}

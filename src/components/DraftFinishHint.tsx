@@ -51,7 +51,8 @@ export function DraftFinishHint({ active }: DraftFinishHintProps) {
         animation: 'mlb-hint-in 160ms ease both',
       }}
     >
-      Press <strong style={{ fontWeight: 700 }}>Enter</strong> or double-click to finish ·{' '}
+      <strong style={{ fontWeight: 700 }}>Enter</strong> to finish ·{' '}
+      <strong style={{ fontWeight: 700 }}>Backspace</strong> to take back a point ·{' '}
       <strong style={{ fontWeight: 700 }}>Esc</strong> to cancel
     </div>
   )

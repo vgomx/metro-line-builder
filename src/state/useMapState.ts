@@ -47,6 +47,11 @@ interface MapState extends DataSnapshot {
   draftLineId: string | null
   /** True when extending from the line's start — draftLineNodes is reversed so appends still land at its end. */
   draftLineReversed: boolean
+  /** Stations this draft brought into being, in the order it did. Clicking bare canvas while
+   * drawing creates a station as a side effect, so undoing that click has to take the station
+   * with it — but only if the draft is what made it. A station that was already on the map and
+   * merely got drawn through belongs to the map, not to the draft. */
+  draftCreatedStationIds: string[]
   draftGeoPoints: Point[]
   /** Set while the draft geo feature is extending an existing river/park (vs. drafting a new one). */
   draftGeoFeatureId: string | null
@@ -73,6 +78,8 @@ type Action =
   | { type: 'toggleStationTransfer'; stationId: string }
   | { type: 'toggleStationMain'; stationId: string }
   | { type: 'appendDraftLineNode'; node: LineNode }
+  | { type: 'popDraftLineNode' }
+  | { type: 'popDraftGeoPoint' }
   | { type: 'insertDraftLineStation'; x: number; y: number; index: number }
   | { type: 'insertLineStation'; lineId: string; x: number; y: number; index: number }
   | { type: 'startExtendLine'; lineId: string; end: 'start' | 'end' }
@@ -152,6 +159,39 @@ const RECORDABLE_ACTIONS = new Set<Action['type']>([
   'deleteSelected',
 ])
 
+/**
+ * Lets go of the stations a draft brought into being, for every way a draft can end without
+ * becoming a line: cancelled, abandoned by picking up another tool, or finished too short to
+ * be a route.
+ *
+ * They were scaffolding. A station placed by clicking bare canvas mid-draw exists only to
+ * hold the line up, so when the line never arrives the stop shouldn't stay behind for the
+ * user to find and clear by hand. Any the map has since taken up — a committed line drawn
+ * through one — are the map's now and stay.
+ */
+function releaseDraftStations(state: MapState): Pick<MapState, 'stations' | 'stationOrder' | 'selectedStationIds' | 'draftCreatedStationIds'> {
+  const abandoned = state.draftCreatedStationIds.filter(
+    id => !Object.values(state.lines).some(line => lineHasStation(line, id)),
+  )
+  if (abandoned.length === 0) {
+    return {
+      stations: state.stations,
+      stationOrder: state.stationOrder,
+      selectedStationIds: state.selectedStationIds,
+      draftCreatedStationIds: [],
+    }
+  }
+  const abandonedSet = new Set(abandoned)
+  const stations = { ...state.stations }
+  for (const id of abandoned) delete stations[id]
+  return {
+    stations,
+    stationOrder: state.stationOrder.filter(id => !abandonedSet.has(id)),
+    selectedStationIds: state.selectedStationIds.filter(id => !abandonedSet.has(id)),
+    draftCreatedStationIds: [],
+  }
+}
+
 function snapshotOf(state: DataSnapshot): DataSnapshot {
   return {
     mapName: state.mapName,
@@ -204,6 +244,7 @@ const emptyState: MapState = {
   draftLineNodes: [],
   draftLineId: null,
   draftLineReversed: false,
+  draftCreatedStationIds: [],
   draftGeoPoints: [],
   draftGeoFeatureId: null,
   draftGeoReversed: false,
@@ -517,6 +558,7 @@ function reducer(rawState: MapState, action: Action): MapState {
     case 'setTool':
       return {
         ...state,
+        ...releaseDraftStations(state),
         tool: action.tool,
         draftLineNodes: [],
         draftLineId: null,
@@ -711,6 +753,7 @@ function reducer(rawState: MapState, action: Action): MapState {
       nodes.splice(action.index, 0, { kind: 'station', stationId: id })
       return {
         ...state,
+        draftCreatedStationIds: [...state.draftCreatedStationIds, id],
         stations: { ...state.stations, [id]: station },
         stationOrder: [...state.stationOrder, id],
         nextStationNumber: state.nextStationNumber + 1,
@@ -757,6 +800,7 @@ function reducer(rawState: MapState, action: Action): MapState {
       const reversed = action.end === 'start'
       return {
         ...state,
+        ...releaseDraftStations(state),
         tool: 'draw-line',
         draftLineNodes: reversed ? [...line.nodes].reverse() : [...line.nodes],
         draftLineId: action.lineId,
@@ -770,11 +814,17 @@ function reducer(rawState: MapState, action: Action): MapState {
 
     case 'finishDraftLine': {
       if (state.draftLineNodes.length < 2) {
-        return { ...state, draftLineNodes: [], draftLineId: null, draftLineReversed: false }
+        return {
+          ...state,
+          ...releaseDraftStations(state),
+          draftLineNodes: [],
+          draftLineId: null,
+          draftLineReversed: false,
+        }
       }
       if (state.draftLineId) {
         const line = state.lines[state.draftLineId]
-        if (!line) return { ...state, draftLineNodes: [], draftLineId: null, draftLineReversed: false }
+        if (!line) return { ...state, draftLineNodes: [], draftLineId: null, draftLineReversed: false, draftCreatedStationIds: [] }
         const nodes = state.draftLineReversed ? [...state.draftLineNodes].reverse() : state.draftLineNodes
         return {
           ...state,
@@ -782,6 +832,7 @@ function reducer(rawState: MapState, action: Action): MapState {
           draftLineNodes: [],
           draftLineId: null,
           draftLineReversed: false,
+          draftCreatedStationIds: [],
         }
       }
       const id = `line-${state.nextLineNumber}`
@@ -800,11 +851,59 @@ function reducer(rawState: MapState, action: Action): MapState {
         lineOrder: [...state.lineOrder, id],
         nextLineNumber: state.nextLineNumber + 1,
         draftLineNodes: [],
+        // The line owns these stations now, so the draft stops claiming them. Left set, the
+        // next draft would inherit a list of stations it never created and could take one
+        // away with a Backspace it had no business honouring.
+        draftCreatedStationIds: [],
       }
     }
 
+    /**
+     * Take back the last point of the line being drawn. Where that point put a station on the
+     * map, the station goes too — a click while drawing does two things at once, so undoing it
+     * has to undo both, or the map fills with stops nobody placed on purpose.
+     *
+     * Only stations this draft created, and only if nothing else has come to depend on them
+     * meanwhile: still referenced further back in the same draft, or picked up by a committed
+     * line (drawing a second line through it, say). Either makes it the map's station now.
+     */
+    case 'popDraftLineNode': {
+      if (state.draftLineNodes.length === 0) return state
+      const nodes = state.draftLineNodes.slice(0, -1)
+      const dropped = state.draftLineNodes[state.draftLineNodes.length - 1]
+      if (dropped.kind !== 'station' || !state.draftCreatedStationIds.includes(dropped.stationId)) {
+        return { ...state, draftLineNodes: nodes }
+      }
+      const id = dropped.stationId
+      const stillDrafted = nodes.some(node => node.kind === 'station' && node.stationId === id)
+      const onACommittedLine = Object.values(state.lines).some(line => lineHasStation(line, id))
+      if (stillDrafted || onACommittedLine) {
+        return { ...state, draftLineNodes: nodes }
+      }
+      const stations = { ...state.stations }
+      delete stations[id]
+      return {
+        ...state,
+        draftLineNodes: nodes,
+        draftCreatedStationIds: state.draftCreatedStationIds.filter(other => other !== id),
+        stations,
+        stationOrder: state.stationOrder.filter(other => other !== id),
+        selectedStationIds: state.selectedStationIds.filter(other => other !== id),
+      }
+    }
+
+    case 'popDraftGeoPoint':
+      if (state.draftGeoPoints.length === 0) return state
+      return { ...state, draftGeoPoints: state.draftGeoPoints.slice(0, -1) }
+
     case 'cancelDraftLine':
-      return { ...state, draftLineNodes: [], draftLineId: null, draftLineReversed: false }
+      return {
+        ...state,
+        ...releaseDraftStations(state),
+        draftLineNodes: [],
+        draftLineId: null,
+        draftLineReversed: false,
+      }
 
     case 'addGeoPoint':
       return { ...state, draftGeoPoints: [...state.draftGeoPoints, { x: action.x, y: action.y }] }
@@ -1260,6 +1359,8 @@ export function useMapState() {
     [],
   )
   const finishDraftLine = useCallback(() => dispatch({ type: 'finishDraftLine' }), [])
+  const popDraftLineNode = useCallback(() => dispatch({ type: 'popDraftLineNode' }), [])
+  const popDraftGeoPoint = useCallback(() => dispatch({ type: 'popDraftGeoPoint' }), [])
   const cancelDraftLine = useCallback(() => dispatch({ type: 'cancelDraftLine' }), [])
   const addGeoPoint = useCallback((x: number, y: number) => dispatch({ type: 'addGeoPoint', x, y }), [])
   const startExtendGeoFeature = useCallback(
@@ -1416,6 +1517,8 @@ export function useMapState() {
     insertLineStation,
     startExtendLine,
     finishDraftLine,
+    popDraftLineNode,
+    popDraftGeoPoint,
     cancelDraftLine,
     addGeoPoint,
     startExtendGeoFeature,
