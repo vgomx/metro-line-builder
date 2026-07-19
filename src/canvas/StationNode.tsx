@@ -53,8 +53,7 @@ export function StationNode({ station, selected, inDraftLine, interchange, dragg
   // Nothing about the marker changes: a principal station is one the eye should find by name,
   // and the map already spends its marker vocabulary on what the lines are doing.
   const isMain = station.main
-  const name = station.name.trim()
-  const { labelX, labelY, cardX, cardY, cardW, cardH } = labelGeometry(station, labelPlacement, isInterchange)
+  const { labelX, labelY, cardX, cardY, cardW, cardH, lines } = labelGeometry(station, labelPlacement, isInterchange)
 
   return (
     <g
@@ -122,7 +121,7 @@ export function StationNode({ station, selected, inDraftLine, interchange, dragg
             />
           )}
         </g>
-        {name && (
+        {lines.length > 0 && (
           <rect
             x={cardX}
             y={cardY}
@@ -136,9 +135,11 @@ export function StationNode({ station, selected, inDraftLine, interchange, dragg
             style={{ pointerEvents: 'none' }}
           />
         )}
+        {/* One tspan per wrapped line, the block centred on the card the placement search
+            sized for exactly these lines. */}
         <text
           x={labelX}
-          y={labelY}
+          y={labelY - ((lines.length - 1) * LABEL_FONT_SIZE) / 2}
           textAnchor={labelPlacement.anchor}
           dominantBaseline="middle"
           fontSize={LABEL_FONT_SIZE}
@@ -147,7 +148,11 @@ export function StationNode({ station, selected, inDraftLine, interchange, dragg
           fill={isMain ? 'var(--text-inverse)' : 'var(--text-primary)'}
           style={{ userSelect: 'none', pointerEvents: 'none' }}
         >
-          {station.name}
+          {lines.map((line, index) => (
+            <tspan key={index} x={labelX} dy={index === 0 ? 0 : LABEL_FONT_SIZE}>
+              {line}
+            </tspan>
+          ))}
         </text>
       </g>
     </g>
