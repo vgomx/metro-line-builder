@@ -1,5 +1,5 @@
 import type { Line, LineNode, Point, Station } from '../types'
-import { buildVerticesTagged, routeOrthogonal } from './routing'
+import { buildVertices, buildVerticesTagged, routeOrthogonal } from './routing'
 
 export function resolveNodePoint(node: LineNode, stations: Record<string, Station>): Point | null {
   if (node.kind === 'point') return { x: node.x, y: node.y }
@@ -86,6 +86,32 @@ export function closestSegmentIndex(points: Point[], click: Point): number {
 export function exactSegmentIndex(points: Point[], point: Point): number {
   for (let i = 0; i < points.length - 1; i++) {
     if (distanceToSegment(points[i], points[i + 1], point) < 0.5) return i
+  }
+  return -1
+}
+
+
+/**
+ * Where a station sits on a line that doesn't stop there — the node index it would be inserted
+ * at — or -1 if the line's route doesn't pass through it at all.
+ *
+ * Two crossing lines don't know about each other: a crossing is a place where two routes
+ * happen to overlap, not a shared node. So a station placed on that crossing afterwards joins
+ * whichever line put it there and merely sits underneath the other. This is what lets it be
+ * offered to the other one.
+ *
+ * The test walks the routed geometry rather than the chord between nodes, because the route
+ * between two stops bends: an orthogonal run with a 45° elbow passes through points the chord
+ * never touches. Each pair of stops is routed on its own and the station tested against the
+ * vertices that come back, so the answer matches the path actually drawn.
+ */
+export function lineRouteIndexThrough(line: Line, stations: Record<string, Station>, station: Station): number {
+  if (lineHasStation(line, station.id)) return -1
+  const points = resolveLineNodes(line.nodes, stations)
+  const point = { x: station.x, y: station.y }
+  for (let i = 0; i < points.length - 1; i++) {
+    const vertices = buildVertices([points[i], points[i + 1]], false)
+    if (exactSegmentIndex(vertices, point) >= 0) return i + 1
   }
   return -1
 }

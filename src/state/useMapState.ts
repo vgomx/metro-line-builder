@@ -8,7 +8,7 @@ import { snapToGrid, snapToPoiGrid } from '../grid'
 import { MIN_GEO_POINTS } from '../geoDraft'
 import { pickLineName, pickMapName, pickStationName } from '../names'
 import { buildRandomMap } from '../generate'
-import { exactSegmentIndex, exclusiveStationIds, lineHasStation, resolveLineNodes, sameNode } from '../canvas/lineNodes'
+import { exactSegmentIndex, exclusiveStationIds, lineHasStation, lineRouteIndexThrough, resolveLineNodes, sameNode } from '../canvas/lineNodes'
 
 export interface DataSnapshot {
   mapName: string
@@ -82,6 +82,7 @@ type Action =
   | { type: 'popDraftGeoPoint' }
   | { type: 'insertDraftLineStation'; x: number; y: number; index: number }
   | { type: 'insertLineStation'; lineId: string; x: number; y: number; index: number }
+  | { type: 'addStationToLine'; lineId: string; stationId: string }
   | { type: 'startExtendLine'; lineId: string; end: 'start' | 'end' }
   | { type: 'finishDraftLine' }
   | { type: 'cancelDraftLine' }
@@ -138,6 +139,7 @@ const RECORDABLE_ACTIONS = new Set<Action['type']>([
   'addStation',
   'insertDraftLineStation',
   'insertLineStation',
+  'addStationToLine',
   'renameStation',
   'toggleStationTransfer',
   'toggleStationMain',
@@ -670,6 +672,25 @@ function reducer(rawState: MapState, action: Action): MapState {
     // drag-start, so a single undo reverts the move and the merge together.
     case 'mergeStations':
       return mergeStationsInState(state, action.survivorId, action.mergedId)
+
+    /**
+     * Make a line stop at a station its route already passes through — the crossing case, where
+     * two lines share a point on the map but not a node, and the station arrived after both.
+     *
+     * The insertion point is worked out from the geometry rather than passed in, so the node
+     * lands between the two stops it actually sits between and the drawn route doesn't move.
+     * A station the line already calls at, or one it merely passes near, is left alone.
+     */
+    case 'addStationToLine': {
+      const line = state.lines[action.lineId]
+      const station = state.stations[action.stationId]
+      if (!line || !station) return state
+      const index = lineRouteIndexThrough(line, state.stations, station)
+      if (index < 0) return state
+      const nodes = [...line.nodes]
+      nodes.splice(index, 0, { kind: 'station', stationId: station.id })
+      return { ...state, lines: { ...state.lines, [action.lineId]: { ...line, nodes } } }
+    }
 
     case 'renameStation': {
       const station = state.stations[action.stationId]
@@ -1333,6 +1354,10 @@ export function useMapState() {
     (survivorId: string, mergedId: string) => dispatch({ type: 'mergeStations', survivorId, mergedId }),
     [],
   )
+  const addStationToLine = useCallback(
+    (lineId: string, stationId: string) => dispatch({ type: 'addStationToLine', lineId, stationId }),
+    [],
+  )
   const renameStation = useCallback(
     (stationId: string, name: string) => dispatch({ type: 'renameStation', stationId, name }),
     [],
@@ -1509,6 +1534,7 @@ export function useMapState() {
     addStation,
     moveStations,
     mergeStations,
+    addStationToLine,
     renameStation,
     toggleStationTransfer,
     toggleStationMain,
