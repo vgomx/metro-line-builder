@@ -8,7 +8,7 @@ import { COMPANY_SYMBOLS } from '../types'
 import { CompanySymbolIcon } from '../companySymbols'
 import { DeleteStationsDialog } from './DeleteStationsDialog'
 import { openMojiBySubgroup, openMojiUrl, SUBGROUP_LABELS } from '../openmoji'
-import { connectedLineCount, exclusiveStationIds, isTransferStation, lineHasStation, stationIdsOfLine } from '../canvas/lineNodes'
+import { connectedLineCount, exclusiveStationIds, isTransferStation, lineHasStation, lineRouteIndexThrough, stationIdsOfLine } from '../canvas/lineNodes'
 
 /** Why `draft` can't be committed, or undefined if it can. One rule drives both the message
  * and whether the edit lands, so the field can never show an error while having applied the
@@ -130,6 +130,7 @@ interface InspectorProps {
   onExtendLine: (lineId: string, end: 'start' | 'end') => void
   onDeleteLine: (lineId: string, withStations: boolean) => void
   onRenameStation: (stationId: string, name: string) => void
+  onAddStationToLine: (lineId: string, stationId: string) => void
   onToggleTransfer: (stationId: string) => void
   onToggleMain: (stationId: string) => void
   onDeleteStation: (stationId: string) => void
@@ -162,6 +163,7 @@ export function Inspector({
   onExtendLine,
   onDeleteLine,
   onRenameStation,
+  onAddStationToLine,
   onToggleTransfer,
   onToggleMain,
   onDeleteStation,
@@ -520,6 +522,8 @@ export function Inspector({
     const stationLines = lineValues.filter(l => lineHasStation(l, station.id))
     const lineCount = connectedLineCount(station.id, lineValues)
     const autoTransfer = lineCount >= 2
+    // Lines drawn through this exact point that don't stop at it.
+    const crossingLines = lineValues.filter(l => lineRouteIndexThrough(l, stations, station) >= 0)
     const transfer = station.transfer || autoTransfer
 
     return (
@@ -554,6 +558,40 @@ export function Inspector({
             ))}
           </div>
         </div>
+
+        {/* Lines whose route runs through this station without stopping at it. Two lines
+            crossing share a point on the map but not a node, so a station placed on the
+            crossing afterwards belongs to whichever line put it there and merely sits under
+            the other — with no way, until now, to say that it serves both. Adding it makes the
+            station an interchange, which the transfer toggle below then reports on its own. */}
+        {crossingLines.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
+            <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--text-secondary)' }}>
+              Also passes through
+            </label>
+            {crossingLines.map(l => (
+              <Button
+                key={l.id}
+                variant="secondary"
+                size="sm"
+                onClick={() => onAddStationToLine(l.id, station.id)}
+                style={{ width: '100%', justifyContent: 'flex-start' }}
+              >
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: 'var(--radius-full)',
+                    background: l.color,
+                    marginRight: 'var(--gap-sm)',
+                  }}
+                />
+                Stop here too — {l.name.trim() || `Line ${l.number}`}
+              </Button>
+            ))}
+          </div>
+        )}
 
         <Toggle
           checked={transfer}

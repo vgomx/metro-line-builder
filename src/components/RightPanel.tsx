@@ -43,6 +43,7 @@ interface RightPanelProps {
   onExtendLine: (lineId: string, end: 'start' | 'end') => void
   onDeleteLine: (lineId: string, withStations: boolean) => void
   onRenameStation: (stationId: string, name: string) => void
+  onAddStationToLine: (lineId: string, stationId: string) => void
   onToggleTransfer: (stationId: string) => void
   onToggleMain: (stationId: string) => void
   onDeleteStation: (stationId: string) => void
@@ -97,6 +98,7 @@ export function RightPanel({
   onExtendLine,
   onDeleteLine,
   onRenameStation,
+  onAddStationToLine,
   onToggleTransfer,
   onToggleMain,
   onDeleteStation,
@@ -272,6 +274,7 @@ export function RightPanel({
             onExtendLine={onExtendLine}
             onDeleteLine={onDeleteLine}
             onRenameStation={onRenameStation}
+            onAddStationToLine={onAddStationToLine}
             onToggleTransfer={onToggleTransfer}
             onToggleMain={onToggleMain}
             onDeleteStation={onDeleteStation}

@@ -62,6 +62,7 @@ function App() {
     addStation,
     moveStations,
     mergeStations,
+    addStationToLine,
     renameStation,
     toggleStationTransfer,
     toggleStationMain,
@@ -539,6 +540,7 @@ function App() {
               onExtendLine={startExtendLine}
               onDeleteLine={withSound('remove', (lineId: string, withStations: boolean) => deleteLine(lineId, withStations))}
               onRenameStation={renameStation}
+            onAddStationToLine={withSound('lineDone', addStationToLine)}
               onToggleTransfer={withSound('toggle', toggleStationTransfer)}
               onToggleMain={withSound('toggle', toggleStationMain)}
               onDeleteStation={withSound('remove', deleteStation)}
