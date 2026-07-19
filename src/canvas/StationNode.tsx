@@ -12,15 +12,19 @@ interface StationNodeProps {
   interchange: boolean
   /** True while this station is being actively repositioned by a drag. */
   dragging: boolean
-  /** True for one animation cycle right after the station first appears — pops the marker in. */
-  entering?: boolean
+  /** A landing to play, or undefined for none. 'appear' is a station being added, which fades
+   * in as it drops; 'settle' is one that was already on the map being put down somewhere else,
+   * which must not blink out and back on the way. The same two a landmark uses — everything
+   * the map puts down should land the same way. */
+  landing?: 'appear' | 'settle'
   /** Compass direction (away from every line touching this station) to place the name in. */
   labelPlacement: LabelPlacement
   onPointerDown: (e: ReactPointerEvent<SVGGElement>, station: Station) => void
   onClick: (station: Station) => void
 }
 
-const POP_MS = 300
+/** Matches the landmark's landing exactly — the two are the same gesture. */
+const LAND_MS = 320
 
 /** How much a marker swells while it's picked up, and while it's merely under the pointer —
  * the latter matching the line's own hover growth, so a station and the line through it
@@ -28,7 +32,7 @@ const POP_MS = 300
 const DRAG_GROWTH = 2
 const HOVER_GROWTH = 1.5
 
-export function StationNode({ station, selected, inDraftLine, interchange, dragging, entering, labelPlacement, onPointerDown, onClick }: StationNodeProps) {
+export function StationNode({ station, selected, inDraftLine, interchange, dragging, landing, labelPlacement, onPointerDown, onClick }: StationNodeProps) {
   const [hovered, setHovered] = useState(false)
   const isInterchange = interchange || station.transfer
   const baseRadius = isInterchange ? 10 : 6.5
@@ -78,12 +82,16 @@ export function StationNode({ station, selected, inDraftLine, interchange, dragg
             style={{ transition: 'r 150ms ease' }}
           />
         )}
-        {/* Marker circles pop in on first appearance. The group's bounding box is symmetric
-            about the origin, so fill-box + centre origin scales it around the station. */}
+        {/* The marker lands rather than appearing. The group's bounding box is symmetric about
+            the origin, so fill-box + centre origin scales and drops it around the station. */}
         <g
           style={
-            entering
-              ? { transformBox: 'fill-box', transformOrigin: 'center', animation: `mlb-station-pop ${POP_MS}ms cubic-bezier(0.34, 1.56, 0.64, 1) both` }
+            landing
+              ? {
+                  transformBox: 'fill-box',
+                  transformOrigin: 'center',
+                  animation: `${landing === 'appear' ? 'mlb-marker-land' : 'mlb-marker-settle'} ${LAND_MS}ms cubic-bezier(0.3, 1.4, 0.5, 1) both`,
+                }
               : undefined
           }
         >
