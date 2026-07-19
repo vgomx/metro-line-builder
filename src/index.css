@@ -383,3 +383,59 @@ body {
 .mlb-drawing * {
   cursor: none !important;
 }
+
+/* The placement marker arriving on a grid point. It only ever moves by snapping, so the
+   motion is the snap: the ring drops in from larger and settles, which turns a teleport into
+   something you can see being pulled onto the intersection. */
+@keyframes mlb-snap-in {
+  from {
+    transform: scale(1.5);
+    opacity: 0.35;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ...and a slow breath while it rests, so the tool reads as live with the pointer held
+   still. On the ring alone, nested inside the settle above — two animations fighting over
+   one element's transform would cancel each other out. */
+@keyframes mlb-snap-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.95;
+  }
+  50% {
+    transform: scale(1.14);
+    opacity: 0.6;
+  }
+}
+
+@keyframes mlb-snap-dot {
+  from {
+    transform: scale(0.2);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.mlb-snap-in {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mlb-snap-in 150ms cubic-bezier(0.2, 1.4, 0.5, 1) both;
+}
+
+.mlb-snap-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mlb-snap-breathe 2200ms ease-in-out infinite;
+}
+
+.mlb-snap-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mlb-snap-dot 150ms cubic-bezier(0.2, 1.4, 0.5, 1) both;
+}

@@ -539,7 +539,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const handlePointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (DRAW_TOOLS.includes(tool)) {
       const w = toWorld(e.clientX, e.clientY)
-      setCursorWorld({ x: snapToGrid(w.x), y: snapToGrid(w.y) })
+      const snapped = { x: snapToGrid(w.x), y: snapToGrid(w.y) }
+      // Only when the grid point itself changes. A fresh object every pointermove would
+      // re-render the canvas on every pixel of travel, and — now that the marker is keyed by
+      // its position — could restart the settle animation while standing still.
+      setCursorWorld(prev => (prev && prev.x === snapped.x && prev.y === snapped.y ? prev : snapped))
     }
 
     if (drag.kind === 'marquee') {
@@ -1206,9 +1210,24 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             Sized against the zoom so it stays the same size on screen however far the map is
             scaled, which is what a cursor does. */}
         {DRAW_TOOLS.includes(tool) && cursorWorld && (
-          <g transform={`translate(${cursorWorld.x}, ${cursorWorld.y})`} style={{ pointerEvents: 'none' }}>
-            <circle r={10 / transform.k} fill="none" stroke="var(--interactive-primary)" strokeWidth={1.5 / transform.k} opacity={0.9} />
-            <circle r={2.5 / transform.k} fill="var(--interactive-primary)" />
+          // Keyed by the grid point, so arriving somewhere new remounts the marker and replays
+          // the settle. Moving the pointer within one cell changes nothing and animates
+          // nothing — the motion belongs to the snap, not to the mouse.
+          <g
+            key={`${cursorWorld.x},${cursorWorld.y}`}
+            transform={`translate(${cursorWorld.x}, ${cursorWorld.y})`}
+            style={{ pointerEvents: 'none' }}
+          >
+            <g className="mlb-snap-in">
+              <circle
+                className="mlb-snap-ring"
+                r={10 / transform.k}
+                fill="none"
+                stroke="var(--interactive-primary)"
+                strokeWidth={1.5 / transform.k}
+              />
+              <circle className="mlb-snap-dot" r={2.5 / transform.k} fill="var(--interactive-primary)" />
+            </g>
           </g>
         )}
       </g>
