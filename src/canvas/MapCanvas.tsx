@@ -207,9 +207,6 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   )
   const [drag, setDrag] = useState<DragState>({ kind: 'none' })
   const [cursorWorld, setCursorWorld] = useState<{ x: number; y: number } | null>(null)
-  /** Where a symbol dragged in from the palette would land, or null when nothing is over the
-   * canvas. Doubles as the "a drop is in flight" flag. */
-  const [dropPoint, setDropPoint] = useState<Point | null>(null)
   /** The last landing, kept only long enough for the ripple to play out. Keyed so two drops in
    * quick succession restart the animation rather than sharing one that's already running. */
   const [impact, setImpact] = useState<{ key: number; points: Point[]; soft: boolean } | null>(null)
@@ -659,18 +656,16 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   // else the user might be dragging across the window.
   const handleDragOver = (e: ReactDragEvent<SVGSVGElement>) => {
     if (!e.dataTransfer.types.includes(POI_DRAG_MIME)) return
+    // Only to accept the drop: without preventDefault on every dragover the browser refuses it.
+    // Nothing is drawn under the pointer while a symbol is in flight — the tile the drag
+    // carries is already the landmark at its real size, and a marker behind it was a second
+    // opinion about a position the tile was giving anyway.
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
-    const w = toWorld(e.clientX, e.clientY)
-    const snapped = { x: snapToPoiGrid(w.x), y: snapToPoiGrid(w.y) }
-    // dragover fires continuously; skipping the identical position keeps it from re-rendering
-    // the whole canvas between one grid square and the next.
-    setDropPoint(prev => (prev && prev.x === snapped.x && prev.y === snapped.y ? prev : snapped))
   }
 
   const handleDrop = (e: ReactDragEvent<SVGSVGElement>) => {
     const icon = e.dataTransfer.getData(POI_DRAG_MIME)
-    setDropPoint(null)
     if (!icon) return
     e.preventDefault()
     const { x, y } = toWorld(e.clientX, e.clientY)
@@ -858,7 +853,6 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       onPointerLeave={() => setCursorWorld(null)}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      onDragLeave={() => setDropPoint(null)}
       onDoubleClick={handleDoubleClick}
     >
       <defs>
@@ -1203,11 +1197,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         {/* The marker standing in for the pointer: the grid point a click will actually use.
             Sized against the zoom so it stays the same size on screen however far the map is
             scaled, which is what a cursor does. */}
-        {(dropPoint ?? (DRAW_TOOLS.includes(tool) ? cursorWorld : null)) && (
-          <g
-            transform={`translate(${(dropPoint ?? cursorWorld)!.x}, ${(dropPoint ?? cursorWorld)!.y})`}
-            style={{ pointerEvents: 'none' }}
-          >
+        {DRAW_TOOLS.includes(tool) && cursorWorld && (
+          <g transform={`translate(${cursorWorld.x}, ${cursorWorld.y})`} style={{ pointerEvents: 'none' }}>
             <circle r={10 / transform.k} fill="none" stroke="var(--interactive-primary)" strokeWidth={1.5 / transform.k} opacity={0.9} />
             <circle r={2.5 / transform.k} fill="var(--interactive-primary)" />
           </g>
