@@ -1,7 +1,8 @@
 import type { DataSnapshot } from './state/useMapState'
-import type { Line, LineNode, Point, Station } from './types'
+import type { GeoFeature, Line, LineNode, Point, PointOfInterest, Station } from './types'
 import { nextLineColor } from './lineColors'
-import { GRID_SIZE } from './grid'
+import { GRID_SIZE, POI_GRID_SIZE } from './grid'
+import { buildVertices } from './canvas/routing'
 import { pickLineName, pickMapName, pickStationName } from './names'
 
 const MIN_X = 200
@@ -47,6 +48,96 @@ function arm(start: Point, dir: [number, number], steps: number): Point[] {
     points.push({ x, y })
   }
   return points
+}
+
+
+/**
+ * What a generated city can have standing in it, beyond its network. A short curated list
+ * rather than the whole palette: these are the things a transit map actually bothers to mark,
+ * and picking from 141 symbols at random would put a scooter and a canoe in the civic centre.
+ */
+const POI_KINDS: { icon: string; name: string }[] = [
+  { icon: '1F3DB', name: 'Museum' },
+  { icon: '1F3DF', name: 'Stadium' },
+  { icon: '1F3E5', name: 'Hospital' },
+  { icon: '1F3EB', name: 'University' },
+  { icon: '26EA', name: 'Cathedral' },
+  { icon: '26F2', name: 'Fountain' },
+  { icon: '1F3AA', name: 'Fairground' },
+  { icon: '1F3E2', name: 'Exchange' },
+  { icon: 'mlb-obelisk', name: 'Obelisk' },
+  { icon: 'mlb-monument', name: 'Monument' },
+  { icon: 'mlb-old-tower', name: 'Old tower' },
+  { icon: 'mlb-statue', name: 'Statue' },
+]
+
+/**
+ * Clearances, in world units, and the reason each one is the size it is.
+ *
+ * A station is a 13-unit marker wearing a name card that reaches further, so a landmark needs
+ * more room from a station than its own 26-unit tile suggests. Two landmarks need less, having
+ * only their own labels to keep apart. A line needs enough that the symbol reads as standing
+ * beside the route rather than blocking it.
+ */
+const POI_CLEAR_OF_STATION = 58
+const POI_CLEAR_OF_POI = 70
+const POI_CLEAR_OF_LINE = 26
+/** ...and no further than this from one. Clearances alone push landmarks into the empty
+ * quarters of the map, where a hospital sitting by itself in a field reads as a mistake
+ * rather than as a city. A landmark belongs near the network it is reached from — within a
+ * couple of blocks of a platform, not a hike. */
+const POI_NEAR_STATION_MAX = 110
+/** Landmarks stay out of the parks too. A monument standing in a green field looks placed by
+ * accident, and its label has to fight the park's own. */
+const POI_CLEAR_OF_PARK = 20
+const PARK_CLEAR_OF_STATION = 30
+/** A park belongs to the city, so it stays within reach of the network rather than sitting
+ * out in the margins where nothing else is. */
+const PARK_NEAR_STATION_MAX = 130
+/** Parks that share an edge read as one bigger park, so they're kept a cell apart. */
+const PARK_CLEAR_OF_PARK = GRID_SIZE
+/** A river is drawn wide, and a station standing in one looks like a mistake rather than a
+ * bridge. Half the river's width plus the station's marker, plus room to read between them. */
+const RIVER_CLEAR_OF_STATION = 26
+
+function distanceToSegment(a: Point, b: Point, p: Point): number {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  if (dx === 0 && dy === 0) return Math.hypot(p.x - a.x, p.y - a.y)
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)))
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
+}
+
+/** Ray casting: is the point inside this polygon? Used against a park's own outline rather
+ * than its bounding box — an irregular shape fills maybe half its box, so testing the box
+ * rejected placements that were nowhere near the green and left a third of maps parkless. */
+function insidePolygon(polygon: Point[], p: Point): boolean {
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const a = polygon[i]
+    const b = polygon[j]
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside
+  }
+  return inside
+}
+
+/** How far a point is from a polygon's outline, ignoring which side it's on. */
+function distanceToOutline(polygon: Point[], p: Point): number {
+  let best = Infinity
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    best = Math.min(best, distanceToSegment(polygon[j], polygon[i], p))
+  }
+  return best
+}
+
+/** How far a point is from the nearest of a line's routed segments — the drawn path, elbows
+ * and all, not the straight chord between stops. */
+function distanceToRoute(route: Point[], p: Point): number {
+  let best = Infinity
+  for (let i = 0; i < route.length - 1; i++) {
+    best = Math.min(best, distanceToSegment(route[i], route[i + 1], p))
+  }
+  return best
 }
 
 /**
@@ -169,6 +260,159 @@ export function buildRandomMap(): DataSnapshot {
     lines[id].name = name
   }
 
+
+  // Everything above is the network. What follows is the city it runs through: a river, a
+  // park or two, and a handful of landmarks — placed by proposing spots and rejecting the
+  // ones that would crowd something, because a generated map is only convincing while it
+  // still reads at a glance.
+  const routes = lineOrder.map(id =>
+    buildVertices(
+      lines[id].nodes
+        .map(node => (node.kind === 'station' ? byCoord.get(`${stations[node.stationId].x},${stations[node.stationId].y}`) : null))
+        .filter((st): st is Station => Boolean(st))
+        .map(st => ({ x: st.x, y: st.y })),
+      false,
+    ),
+  )
+  const placedStations = Object.values(stations)
+
+  const geoFeatures: Record<string, GeoFeature> = {}
+  const geoFeatureOrder: string[] = []
+  let nextGeo = 1
+
+  // One river, crossing the whole map so it reads as geography rather than a puddle. It runs
+  // corner to corner on the long axis with the middle points wandering, and it is allowed to
+  // cross the network freely — a line bridging a river is what transit maps look like.
+  //
+  // Its course is chosen rather than drawn once: a river laid down blind runs straight through
+  // stations often enough to matter — measured at roughly two and a half per map — and a stop
+  // standing in the water reads as a bug, not as a waterfront. Several courses are proposed
+  // and the one that keeps furthest from the network wins, which costs nothing and turns a
+  // frequent embarrassment into a rarity.
+  const proposeRiver = (): Point[] => {
+    const vertical = Math.random() < 0.5
+    // Where the river enters and where it leaves, as fractions across the perpendicular axis.
+    // Both are drawn from nearly the whole width rather than a fixed middle band: the network
+    // sits in the centre, so a course that is always made to cross the middle has nowhere to
+    // go, and the search had no room to find a clear one.
+    const entry = 0.1 + Math.random() * 0.8
+    const exit = 0.1 + Math.random() * 0.8
+    const points: Point[] = []
+    const steps = 4
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps
+      const across = entry + (exit - entry) * t
+      const wobble = rand(-1, 1) * GRID_SIZE
+      if (vertical) {
+        points.push({
+          x: clamp(snap(MIN_X + (MAX_X - MIN_X) * across + wobble), MIN_X - GRID_SIZE * 2, MAX_X + GRID_SIZE * 2),
+          y: snap(MIN_Y - GRID_SIZE * 2 + (MAX_Y - MIN_Y + GRID_SIZE * 4) * t),
+        })
+      } else {
+        points.push({
+          x: snap(MIN_X - GRID_SIZE * 2 + (MAX_X - MIN_X + GRID_SIZE * 4) * t),
+          y: clamp(snap(MIN_Y + (MAX_Y - MIN_Y) * across + wobble), MIN_Y - GRID_SIZE * 2, MAX_Y + GRID_SIZE * 2),
+        })
+      }
+    }
+    return points
+  }
+
+  let riverPoints = proposeRiver()
+  let riverClearance = Math.min(...placedStations.map(st => distanceToRoute(riverPoints, st)))
+  for (let attempt = 0; attempt < 60 && riverClearance < RIVER_CLEAR_OF_STATION; attempt++) {
+    const candidate = proposeRiver()
+    const clearance = Math.min(...placedStations.map(st => distanceToRoute(candidate, st)))
+    if (clearance > riverClearance) {
+      riverPoints = candidate
+      riverClearance = clearance
+    }
+  }
+  const riverId = `geo-${nextGeo++}`
+  geoFeatures[riverId] = { id: riverId, type: 'river', name: `River ${geoFeatureOrder.length + 1}`, points: riverPoints }
+  geoFeatureOrder.push(riverId)
+
+  // Parks go where no station stands. They sit under the network, so a line crossing one is
+  // fine — a stop inside one would put a name card on a green field and read as a mistake.
+  //
+  // Parks are grown from a centre rather than stamped as rectangles: five to seven points
+  // around it at varying distances, which the closed orthogonal router turns into a stepped,
+  // irregular green — a park with a shape, instead of the lawn-shaped box a rectangle gives.
+  // The centre is taken from a station's neighbourhood so the park belongs to the city.
+  const parkCount = rand(1, 2)
+  const parkBoxes: { x0: number; y0: number; x1: number; y1: number }[] = []
+  const parkOutlines: Point[][] = []
+  for (let attempt = 0, made = 0; attempt < 150 && made < parkCount; attempt++) {
+    const anchorStation = placedStations[rand(0, placedStations.length - 1)]
+    if (!anchorStation) break
+    const centre = {
+      x: snap(anchorStation.x + rand(-4, 4) * GRID_SIZE),
+      y: snap(anchorStation.y + rand(-4, 4) * GRID_SIZE),
+    }
+    const corners = rand(5, 7)
+    const points: Point[] = []
+    for (let i = 0; i < corners; i++) {
+      // Angles in order around the centre, so the outline never crosses itself, with the
+      // reach varying corner to corner — that variation is the whole shape.
+      const angle = (i / corners) * Math.PI * 2 + (Math.random() - 0.5) * 0.35
+      const reach = (1.6 + Math.random() * 1.6) * GRID_SIZE
+      points.push({ x: snap(centre.x + Math.cos(angle) * reach), y: snap(centre.y + Math.sin(angle) * reach) })
+    }
+    const box = {
+      x0: Math.min(...points.map(p => p.x)),
+      y0: Math.min(...points.map(p => p.y)),
+      x1: Math.max(...points.map(p => p.x)),
+      y1: Math.max(...points.map(p => p.y)),
+    }
+    if (box.x1 - box.x0 < GRID_SIZE * 2 || box.y1 - box.y0 < GRID_SIZE * 2) continue
+    const nearestStation = Math.min(...placedStations.map(st => Math.hypot(st.x - centre.x, st.y - centre.y)))
+    if (nearestStation > PARK_NEAR_STATION_MAX) continue
+    const crowded = placedStations.some(
+      st => insidePolygon(points, st) || distanceToOutline(points, st) < PARK_CLEAR_OF_STATION,
+    )
+    const overlapsPark = parkBoxes.some(
+      p =>
+        box.x0 < p.x1 + PARK_CLEAR_OF_PARK &&
+        box.x1 + PARK_CLEAR_OF_PARK > p.x0 &&
+        box.y0 < p.y1 + PARK_CLEAR_OF_PARK &&
+        box.y1 + PARK_CLEAR_OF_PARK > p.y0,
+    )
+    if (crowded || overlapsPark) continue
+    parkBoxes.push(box)
+    parkOutlines.push(points)
+    const id = `geo-${nextGeo++}`
+    geoFeatures[id] = { id, type: 'park', name: `Park ${parkBoxes.length}`, points }
+    geoFeatureOrder.push(id)
+    made++
+  }
+
+  // Landmarks: proposed on the landmark half-grid and kept only where they crowd nothing.
+  // Rejection sampling rather than a formula, because "not too near a station, another
+  // landmark, or a route" is easy to check and hard to solve.
+  const pointsOfInterest: Record<string, PointOfInterest> = {}
+  const poiOrder: string[] = []
+  const kinds = shuffle(POI_KINDS)
+  const poiTarget = rand(3, 5)
+  const placedPois: Point[] = []
+  for (let attempt = 0; attempt < 300 && poiOrder.length < poiTarget; attempt++) {
+    const p = {
+      x: Math.round(rand(MIN_X - GRID_SIZE, MAX_X + GRID_SIZE) / POI_GRID_SIZE) * POI_GRID_SIZE,
+      y: Math.round(rand(MIN_Y - GRID_SIZE, MAX_Y + GRID_SIZE) / POI_GRID_SIZE) * POI_GRID_SIZE,
+    }
+    const toNearestStation = Math.min(...placedStations.map(st => Math.hypot(st.x - p.x, st.y - p.y)))
+    if (toNearestStation < POI_CLEAR_OF_STATION) continue
+    if (toNearestStation > POI_NEAR_STATION_MAX) continue
+    if (placedPois.some(other => Math.hypot(other.x - p.x, other.y - p.y) < POI_CLEAR_OF_POI)) continue
+    if (routes.some(route => distanceToRoute(route, p) < POI_CLEAR_OF_LINE)) continue
+    if (distanceToRoute(riverPoints, p) < POI_CLEAR_OF_LINE) continue
+    if (parkOutlines.some(park => insidePolygon(park, p) || distanceToOutline(park, p) < POI_CLEAR_OF_PARK)) continue
+    const kind = kinds[poiOrder.length % kinds.length]
+    const id = `poi-${poiOrder.length + 1}`
+    pointsOfInterest[id] = { id, icon: kind.icon, name: kind.name, x: p.x, y: p.y }
+    poiOrder.push(id)
+    placedPois.push(p)
+  }
+
   return {
     mapName: pickMapName(),
     authorityName: '',
@@ -176,16 +420,16 @@ export function buildRandomMap(): DataSnapshot {
     stationOrder,
     lines,
     lineOrder,
-    geoFeatures: {},
-    geoFeatureOrder: [],
-    pointsOfInterest: {},
-    poiOrder: [],
+    geoFeatures,
+    geoFeatureOrder,
+    pointsOfInterest,
+    poiOrder,
     companies: {},
     companyOrder: [],
     nextStationNumber: nextStation,
     nextLineNumber: lineOrder.length + 1,
-    nextGeoFeatureNumber: 1,
+    nextGeoFeatureNumber: nextGeo,
     nextCompanyNumber: 1,
-    nextPoiNumber: 1,
+    nextPoiNumber: poiOrder.length + 1,
   }
 }
