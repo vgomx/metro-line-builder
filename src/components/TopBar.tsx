@@ -146,28 +146,34 @@ export function TopBar({
 
       <div style={{ width: '1px', height: '24px', background: 'var(--border-subtle)', margin: '0 var(--space-2)' }} />
 
-      <IconButton icon={<GridIcon />} label="Toggle grid" size="sm" active={showGrid} onClick={onToggleGrid} />
-      <IconButton icon={<TrainIcon />} label="Toggle trains" size="sm" active={showTrains} onClick={onToggleTrains} />
-      <IconButton
-        icon={<PanelIcon />}
-        label={showPanel ? 'Hide side panel' : 'Show side panel'}
-        size="sm"
-        active={showPanel}
-        onClick={onTogglePanel}
-      />
-      <IconButton
-        icon={soundEnabled ? <SoundOnIcon /> : <SoundOffIcon />}
-        label={soundEnabled ? 'Mute interface sounds' : 'Unmute interface sounds'}
-        size="sm"
-        active={soundEnabled}
-        onClick={onToggleSound}
-      />
-      <IconButton
-        icon={theme === 'dark' ? <SunIcon /> : <MoonIcon />}
-        label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-        size="sm"
-        onClick={onToggleTheme}
-      />
+      {/* The toggles get the same 4px between them as the undo/redo and zoom clusters. Flush
+          against each other, their active backgrounds met and read as one long pressed slab
+          rather than as three switches, two of which happened to be on. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-tight)' }}>
+        <IconButton icon={<GridIcon />} label="Toggle grid" size="sm" active={showGrid} onClick={onToggleGrid} />
+        <IconButton icon={<TrainIcon />} label="Toggle trains" size="sm" active={showTrains} onClick={onToggleTrains} />
+        <IconButton
+          icon={<PanelIcon />}
+          label={showPanel ? 'Hide side panel' : 'Show side panel'}
+          size="sm"
+          active={showPanel}
+          onClick={onTogglePanel}
+        />
+        <IconButton
+          icon={soundEnabled ? <SoundOnIcon /> : <SoundOffIcon />}
+          label={soundEnabled ? 'Mute interface sounds' : 'Unmute interface sounds'}
+          size="sm"
+          active={soundEnabled}
+          onClick={onToggleSound}
+        />
+        <IconButton
+          icon={theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+          label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          size="sm"
+          onClick={onToggleTheme}
+        />
+      </div>
+
       <div style={{ width: 'var(--space-2)' }} />
       <Button size="sm" variant="ghost" icon={<SparkleIcon />} onClick={onSurprise}>
         Surprise me
