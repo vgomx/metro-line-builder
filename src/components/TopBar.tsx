@@ -4,7 +4,6 @@ import { Button, IconButton } from 'metro-ds'
 import logoLightUrl from 'metro-ds/assets/logo.svg'
 import logoDarkUrl from 'metro-ds/assets/logo-horizontal-white.svg'
 import {
-  DownloadIcon,
   FolderOpenIcon,
   GridIcon,
   MoonIcon,
@@ -20,6 +19,8 @@ import {
   ZoomOutIcon,
 } from '../icons'
 import type { Theme } from '../useTheme'
+import type { ImageFormat } from '../exportImage'
+import { ExportMenu } from './ExportMenu'
 import { HoverTip } from './HoverTip'
 
 /**
@@ -63,6 +64,9 @@ interface TopBarProps {
   onToggleTheme: () => void
   onOpen: () => void
   onExport: () => void
+  onExportImage: (format: ImageFormat) => void
+  /** True while an image is being produced — the menu says so and won't start a second. */
+  exporting: boolean
   onSurprise: () => void
   onUndo: () => void
   onRedo: () => void
@@ -88,6 +92,8 @@ export function TopBar({
   onToggleTheme,
   onOpen,
   onExport,
+  onExportImage,
+  exporting,
   onSurprise,
   onUndo,
   onRedo,
@@ -260,9 +266,7 @@ export function TopBar({
       </span>
       <div style={{ width: 'var(--gap-tight)' }} />
       <span className="mlb-bar-action">
-        <Button size="sm" variant="ghost" icon={<DownloadIcon />} onClick={onExport}>
-          <span className="mlb-btn-label">Export</span>
-        </Button>
+        <ExportMenu onExportImage={onExportImage} onExportJson={onExport} busy={exporting} />
       </span>
     </div>
   )

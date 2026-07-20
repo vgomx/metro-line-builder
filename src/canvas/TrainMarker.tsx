@@ -192,6 +192,7 @@ export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths
       {segmentPaths.map((_, i) => (
         <path
           key={i}
+          data-export="exclude"
           ref={el => {
             segmentRefs.current[i] = el
           }}
@@ -201,7 +202,7 @@ export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths
           opacity={0}
         />
       ))}
-      <g ref={groupRef} style={{ pointerEvents: 'none' }}>
+      <g ref={groupRef} data-export="exclude" style={{ pointerEvents: 'none' }}>
         {/* Capsule body with a colored outline (line color), echoing a real train-car
             silhouette — trim lines and portholes instead of a solid-fill blob.
 
