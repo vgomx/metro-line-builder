@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import type { ChangeEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { ChangeEvent, ReactNode } from 'react'
 import { Button, IconButton } from 'metro-ds'
 import logoLightUrl from 'metro-ds/assets/logo.svg'
 import logoDarkUrl from 'metro-ds/assets/logo-horizontal-white.svg'
@@ -20,6 +20,29 @@ import {
   ZoomOutIcon,
 } from '../icons'
 import type { Theme } from '../useTheme'
+
+/**
+ * Slides a toggle's icon into place when its state changes: up when it comes on, down when it
+ * goes off, so the direction of travel matches the direction of the change.
+ *
+ * Keyed by the state, which is what remounts the icon and replays the animation — and for the
+ * two toggles whose icon actually changes (sound, theme), that remount is the swap, so the new
+ * icon arrives sliding rather than blinking into place.
+ *
+ * Silent on first render. Five icons sliding in every time the app loads would announce
+ * nothing, since nothing has changed yet.
+ */
+function ToggleIcon({ on, children }: { on: boolean; children: ReactNode }) {
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+  }, [])
+  return (
+    <span key={String(on)} className={mounted.current ? (on ? 'mlb-toggle-on' : 'mlb-toggle-off') : undefined} style={{ display: 'flex' }}>
+      {children}
+    </span>
+  )
+}
 
 interface TopBarProps {
   mapName: string
@@ -150,24 +173,48 @@ export function TopBar({
           against each other, their active backgrounds met and read as one long pressed slab
           rather than as three switches, two of which happened to be on. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-tight)' }}>
-        <IconButton icon={<GridIcon />} label="Toggle grid" size="sm" active={showGrid} onClick={onToggleGrid} />
-        <IconButton icon={<TrainIcon />} label="Toggle trains" size="sm" active={showTrains} onClick={onToggleTrains} />
         <IconButton
-          icon={<PanelIcon />}
+          icon={
+            <ToggleIcon on={showGrid}>
+              <GridIcon />
+            </ToggleIcon>
+          }
+          label="Toggle grid"
+          size="sm"
+          active={showGrid}
+          onClick={onToggleGrid}
+        />
+        <IconButton
+          icon={
+            <ToggleIcon on={showTrains}>
+              <TrainIcon />
+            </ToggleIcon>
+          }
+          label="Toggle trains"
+          size="sm"
+          active={showTrains}
+          onClick={onToggleTrains}
+        />
+        <IconButton
+          icon={
+            <ToggleIcon on={showPanel}>
+              <PanelIcon />
+            </ToggleIcon>
+          }
           label={showPanel ? 'Hide side panel' : 'Show side panel'}
           size="sm"
           active={showPanel}
           onClick={onTogglePanel}
         />
         <IconButton
-          icon={soundEnabled ? <SoundOnIcon /> : <SoundOffIcon />}
+          icon={<ToggleIcon on={soundEnabled}>{soundEnabled ? <SoundOnIcon /> : <SoundOffIcon />}</ToggleIcon>}
           label={soundEnabled ? 'Mute interface sounds' : 'Unmute interface sounds'}
           size="sm"
           active={soundEnabled}
           onClick={onToggleSound}
         />
         <IconButton
-          icon={theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+          icon={<ToggleIcon on={theme === 'dark'}>{theme === 'dark' ? <SunIcon /> : <MoonIcon />}</ToggleIcon>}
           label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
           size="sm"
           onClick={onToggleTheme}
