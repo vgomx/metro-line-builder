@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button, Toast } from 'metro-ds'
 import { hasSavedMap, useMapState } from './state/useMapState'
 import { MapCanvas } from './canvas/MapCanvas'
@@ -10,6 +10,17 @@ import { CanvasStats, SelectionLabel } from './components/CanvasOverlay'
 import { PoiPicker } from './components/PoiPicker'
 import { DraftFinishHint } from './components/DraftFinishHint'
 import { WelcomeDialog } from './components/WelcomeDialog'
+import { OpenMapDialog } from './components/OpenMapDialog'
+import type { LibrarySummary } from './state/mapLibrary'
+import {
+  adoptMapId,
+  currentMapId,
+  forgetMap,
+  loadFromLibrary,
+  rememberMap,
+  startNewMapId,
+  summarizeLibrary,
+} from './state/mapLibrary'
 import { DeleteStationsDialog } from './components/DeleteStationsDialog'
 import { CanvasLegend } from './components/CanvasLegend'
 import { LineAnnouncer } from './components/LineAnnouncer'
@@ -118,6 +129,17 @@ function App() {
   // The palette symbol a finger is carrying. Cleared whenever the tool is put down, so it
   // can't survive into a later visit to the palette and place something unasked.
   const [armedPoi, setArmedPoi] = useState<string | null>(null)
+  const [openDialog, setOpenDialog] = useState(false)
+  // Read fresh each time the dialog opens rather than kept in step continuously: it's a
+  // dozen deserialised maps, and nothing outside the dialog looks at it.
+  const [library, setLibrary] = useState<LibrarySummary[]>([])
+  // Which map is on the canvas. A ref rather than state because nothing renders from it —
+  // it's the key the autosave files under, and re-rendering the app to change a filing label
+  // would be work for nothing.
+  // Lazily, once: useRef evaluates its argument on every render, and currentMapId reads
+  // localStorage — a synchronous disk read per render to answer a question that can't change.
+  const mapId = useRef<string | null>(null)
+  if (mapId.current === null) mapId.current = currentMapId()
   // Bumped each time a rename is asked for. A counter rather than a boolean because asking
   // twice for the same station has to focus the field twice.
   const [renameToken, setRenameToken] = useState(0)
@@ -132,9 +154,12 @@ function App() {
   // Set while the Delete key is waiting on an answer about the stations its lines alone serve.
   const [pendingDelete, setPendingDelete] = useState<{ title: string; total: number; atRisk: string[] } | null>(null)
 
-  const handleOpen = () => {
+  const handleImportFile = () => {
+    setOpenDialog(false)
     pickMapFile(
       data => {
+        // A file is a different map from the one it replaces, whatever it's called.
+        mapId.current = startNewMapId()
         const ok = loadMap(data)
         setToast(
           ok
@@ -155,14 +180,25 @@ function App() {
   const handleWelcomeGenerate = () => {
     setShowWelcome(false)
     playSound('generate')
+    mapId.current = startNewMapId()
     generateMap()
     // Same two frames the Surprise button waits: React has to commit the new line paths and
     // the browser has to lay out the fresh SVG before there's anything to frame.
     requestAnimationFrame(() => requestAnimationFrame(() => mapCanvasRef.current?.fitContent()))
   }
 
+  // The library entry follows the map as it's worked on. Debounced, because this serialises
+  // and re-writes the whole list, and the alternative is doing that on every dragged station.
+  useEffect(() => {
+    const timer = window.setTimeout(() => rememberMap(mapId.current!, snapshot), 800)
+    return () => window.clearTimeout(timer)
+  }, [snapshot])
+
   const handleSurprise = () => {
     playSound('generate')
+    // The city about to be replaced keeps its place in the library under its own id; the new
+    // one gets a new identity, so the two are two maps rather than one map that changed.
+    mapId.current = startNewMapId()
     generateMap()
     setToast({ message: SURPRISE_LINES[Math.floor(Math.random() * SURPRISE_LINES.length)], variant: 'success' })
     // Frame the new city once React has committed the fresh line paths (two frames is
@@ -316,7 +352,10 @@ function App() {
         onToggleSound={toggleSound}
         theme={theme}
         onToggleTheme={withSound('toggle', toggleTheme)}
-        onOpen={handleOpen}
+        onOpen={() => {
+          setLibrary(summarizeLibrary())
+          setOpenDialog(true)
+        }}
         onExport={() => exportMapAsJson(snapshot)}
         onSurprise={handleSurprise}
         onUndo={undo}
@@ -484,6 +523,32 @@ function App() {
             onDeleteAll={() => resolvePendingDelete(true)}
           />
         )}
+
+        <OpenMapDialog
+          open={openDialog}
+          onClose={() => setOpenDialog(false)}
+          maps={library}
+          currentId={mapId.current}
+          onOpenMap={id => {
+            const saved = loadFromLibrary(id)
+            if (!saved) {
+              setToast({ message: "That map isn't on this device any more.", variant: 'error' })
+              return
+            }
+            setOpenDialog(false)
+            // The map being left is already filed under its own id by the effect above, so
+            // switching is only a matter of adopting the other one's.
+            adoptMapId(id)
+            mapId.current = id
+            loadMap(saved)
+            requestAnimationFrame(() => requestAnimationFrame(() => mapCanvasRef.current?.fitContent()))
+          }}
+          onForgetMap={id => {
+            forgetMap(id)
+            setLibrary(summarizeLibrary())
+          }}
+          onImportFile={handleImportFile}
+        />
 
         <WelcomeDialog
           open={showWelcome}

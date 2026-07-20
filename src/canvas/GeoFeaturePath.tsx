@@ -2,6 +2,7 @@ import type { MouseEvent } from 'react'
 import type { GeoFeature, Point } from '../types'
 import { buildVertices, routeOrthogonal } from './routing'
 import { wrapLabel } from './labelPlacement'
+import { polygonLabelAnchor } from './polygon'
 
 interface GeoFeaturePathProps {
   feature: GeoFeature
@@ -33,11 +34,6 @@ const PARK_LABEL_MIN_WIDTH = 70
 const PARK_LABEL_MAX_WIDTH = 140
 
 /** Centroid of a polygon's vertices — good enough to seat a park's name near its middle. */
-function verticesCentroid(points: Point[]): Point {
-  const sum = points.reduce((acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }), { x: 0, y: 0 })
-  return { x: sum.x / points.length, y: sum.y / points.length }
-}
-
 /**
  * Point at the halfway mark along the river's *routed* centreline — the same
  * elbow-inserted path routeOrthogonal draws, not the raw drawn segments. Sampling
@@ -102,7 +98,7 @@ export function GeoFeaturePath({ feature, selected, onClick }: GeoFeaturePathPro
             x={anchor.x}
             y={anchor.y}
             textAnchor="middle"
-            dominantBaseline="middle"
+            dominantBaseline="central"
             fontSize={12}
             fontFamily="'Barlow Condensed', system-ui, sans-serif"
             fontStyle="italic"
@@ -117,7 +113,7 @@ export function GeoFeaturePath({ feature, selected, onClick }: GeoFeaturePathPro
     )
   }
 
-  const centre = verticesCentroid(feature.points)
+  const centre = polygonLabelAnchor(feature.points)
   const parkWidth = Math.max(...feature.points.map(p => p.x)) - Math.min(...feature.points.map(p => p.x))
   const parkLines = wrapLabel(
     name.toUpperCase(),
@@ -145,7 +141,7 @@ export function GeoFeaturePath({ feature, selected, onClick }: GeoFeaturePathPro
           x={centre.x}
           y={centre.y - ((parkLines.length - 1) * PARK_LINE_HEIGHT) / 2}
           textAnchor="middle"
-          dominantBaseline="middle"
+          dominantBaseline="central"
           fontSize={PARK_LABEL_SIZE}
           fontFamily="'Barlow Condensed', system-ui, sans-serif"
           fontWeight={LABEL_WEIGHT}
