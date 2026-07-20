@@ -4,7 +4,48 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
     <title>Metro Line Builder</title>
+    <meta
+      name="description"
+      content="Draw a transit map for a city that doesn't exist yet. A schematic metro map editor in the browser — lines, stations, interchanges, rivers, parks and landmarks."
+    />
+
+    <!-- Installable web app. Every URL inside the manifest is relative, because this is served
+         from the domain root in development and from /metro-line-builder/ on GitHub Pages —
+         relative URLs resolve against the manifest's own location and are right in both. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="Metro" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- Two, so the browser's own chrome follows the app into dark mode instead of leaving a
+         white bar above a dark canvas. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FFFFFF" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1C1C20" />
+
+    <!-- Open Graph. Absolute URLs on purpose: a crawler resolves these against nothing, so a
+         root-relative path would point at the wrong host or at nothing at all. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Metro Line Builder" />
+    <meta property="og:title" content="Metro Line Builder" />
+    <meta
+      property="og:description"
+      content="Draw a transit map for a city that doesn't exist yet. Lines, stations, interchanges, rivers, parks and landmarks — in the browser."
+    />
+    <meta property="og:url" content="https://vgomx.github.io/metro-line-builder/" />
+    <meta property="og:image" content="https://vgomx.github.io/metro-line-builder/social-card.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A schematic metro map with coloured lines, interchange stations and a river." />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Metro Line Builder" />
+    <meta
+      name="twitter:description"
+      content="Draw a transit map for a city that doesn't exist yet. Lines, stations, interchanges, rivers, parks and landmarks — in the browser."
+    />
+    <meta name="twitter:image" content="https://vgomx.github.io/metro-line-builder/social-card.png" />
   </head>
   <body>
     <div id="root"></div>
