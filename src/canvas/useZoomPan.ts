@@ -5,6 +5,7 @@ import type { Selection } from 'd3-selection'
 import { zoom, zoomIdentity, zoomTransform } from 'd3-zoom'
 import type { D3ZoomEvent, ZoomBehavior, ZoomTransform } from 'd3-zoom'
 import 'd3-transition'
+import { prefersReducedMotion } from '../useReducedMotion'
 
 const ZOOM_STEP = 1.2
 
@@ -147,7 +148,7 @@ export function useZoomPan(
     const behavior = behaviorRef.current
     const selection = selectionRef.current
     if (!behavior || !selection) return
-    behavior.scaleBy(selection.transition().duration(150), factor)
+    behavior.scaleBy(selection.transition().duration(prefersReducedMotion() ? 0 : 150), factor)
   }, [])
 
   const zoomIn = useCallback(() => zoomBy(ZOOM_STEP), [zoomBy])
@@ -178,7 +179,12 @@ export function useZoomPan(
       const scale = Math.max(0.25, Math.min(2, fit))
       const tx = left + visibleWidth / 2 - scale * (bounds.x + bounds.width / 2)
       const ty = top + visibleHeight / 2 - scale * (bounds.y + bounds.height / 2)
-      behavior.transform(selection.transition().duration(480), zoomIdentity.translate(tx, ty).scale(scale))
+      // Framing a line eases the entire map across the viewport, which is the largest single
+      // movement the app makes and the one most worth cutting for someone who asked for less.
+      behavior.transform(
+        selection.transition().duration(prefersReducedMotion() ? 0 : 480),
+        zoomIdentity.translate(tx, ty).scale(scale),
+      )
     },
     [svgRef],
   )
