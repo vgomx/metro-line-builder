@@ -46,9 +46,109 @@
       content="Draw a transit map for a city that doesn't exist yet. Lines, stations, interchanges, rivers, parks and landmarks — in the browser."
     />
     <meta name="twitter:image" content="https://vgomx.github.io/metro-line-builder/social-card.png" />
+
+    <!-- The splash lives here rather than in a component, and its styles are inline rather
+         than in the stylesheet, for the same reason: both have to be on screen before the
+         bundle is parsed. A React splash can only appear once React is running, which is
+         after the cost it exists to cover.
+
+         The colours are literals, not the design system's tokens, because those arrive with
+         the stylesheet. It follows the system theme rather than the saved one — the app's own
+         preference is in localStorage and can't be read until script runs, and guessing with
+         the OS setting is right far more often than assuming light. -->
+    <style>
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f7f7f7;
+        opacity: 1;
+        transition: opacity 320ms ease;
+      }
+      #splash[data-ready='true'] {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #splash svg {
+        width: 92px;
+        height: 92px;
+      }
+      #splash .mark {
+        stroke: #111111;
+      }
+      /* The ring is six arcs, one per line colour, evenly spaced and chasing each other
+         around — a loop of services rather than a spinner. Each is a single dash on an
+         otherwise empty circle, rotated into its own sixth of the circumference (150.8 units
+         at r=24), and the whole group turns. */
+      #splash .ring circle {
+        fill: none;
+        stroke-width: 4;
+        stroke-linecap: round;
+        stroke-dasharray: 15 135.8;
+        transform-origin: 26px 26px;
+        animation: splash-trace 900ms cubic-bezier(0.4, 0, 0.2, 1) both;
+      }
+      #splash .ring {
+        transform-origin: 26px 26px;
+        animation: splash-spin 1900ms linear infinite;
+      }
+      /* Drawn on from nothing, each a beat after the last, so the ring assembles rather than
+         simply being there. */
+      @keyframes splash-trace {
+        from {
+          stroke-dasharray: 0 150.8;
+        }
+      }
+      @keyframes splash-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-color-scheme: dark) {
+        #splash {
+          background: #131316;
+        }
+        #splash .mark {
+          stroke: #ffffff;
+        }
+      }
+      /* Same ring, standing still. The point of the splash is that something is on screen,
+         which a static mark does as well as a turning one. */
+      @media (prefers-reduced-motion: reduce) {
+        #splash .ring,
+        #splash .ring circle {
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+
+    <div id="splash" data-ready="false">
+      <svg viewBox="0 0 52 52" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Metro Line Builder is loading">
+        <g class="ring">
+          <circle cx="26" cy="26" r="24" stroke="#C62828" style="transform: rotate(0deg)"></circle>
+          <circle cx="26" cy="26" r="24" stroke="#1565C0" style="transform: rotate(60deg); animation-delay: 70ms"></circle>
+          <circle cx="26" cy="26" r="24" stroke="#2E7D32" style="transform: rotate(120deg); animation-delay: 140ms"></circle>
+          <circle cx="26" cy="26" r="24" stroke="#F9A825" style="transform: rotate(180deg); animation-delay: 210ms"></circle>
+          <circle cx="26" cy="26" r="24" stroke="#6A1B9A" style="transform: rotate(240deg); animation-delay: 280ms"></circle>
+          <circle cx="26" cy="26" r="24" stroke="#00695C" style="transform: rotate(300deg); animation-delay: 350ms"></circle>
+        </g>
+        <path
+          class="mark"
+          d="M17 34 L17 18 L26 28 L35 18 L35 34"
+          fill="none"
+          stroke-width="5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        ></path>
+      </svg>
+    </div>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
