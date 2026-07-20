@@ -440,8 +440,10 @@ function App() {
             onSelectWaypoint={selectWaypoint}
             onDeleteWaypoint={withSound('remove', deleteWaypoint)}
             onDeleteSelected={handleDeleteSelected}
-            onRenameStationRequest={id => {
-              handleSetSelection([id], [], [])
+            onRenameRequest={(kind, id) => {
+              if (kind === 'station') handleSetSelection([id], [], [])
+              else if (kind === 'poi') handleSetSelection([], [], [], [id])
+              else handleSetSelection([], [], [id])
               // The field can't be typed into behind a closed panel, so asking to rename
               // opens it.
               setShowPanel(true)

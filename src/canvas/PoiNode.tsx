@@ -15,6 +15,8 @@ interface PoiNodeProps {
    * put down somewhere else, which must not blink out and back on the way. */
   landing?: 'appear' | 'settle'
   onPointerDown: (e: ReactPointerEvent<SVGGElement>, poi: PointOfInterest) => void
+  /** Double-clicking a landmark is a request to rename it, as it is for a stop. */
+  onDoubleClick: (poi: PointOfInterest) => void
 }
 
 /** Drawn size of the icon on the map, in world units. Exported because the palette sizes the
@@ -35,7 +37,7 @@ const DRAG_GROWTH = 2
 /** How long the marker takes to land. Paired with the ripple MapCanvas draws under it. */
 const LAND_MS = 320
 
-export function PoiNode({ poi, selected, dragging, landing, onPointerDown }: PoiNodeProps) {
+export function PoiNode({ poi, selected, dragging, landing, onPointerDown, onDoubleClick }: PoiNodeProps) {
   const [hovered, setHovered] = useState(false)
   const href = openMojiUrl(poi.icon)
   const grown = dragging ? DRAG_GROWTH : hovered ? HOVER_GROWTH : 0
@@ -47,6 +49,10 @@ export function PoiNode({ poi, selected, dragging, landing, onPointerDown }: Poi
     <g
       transform={`translate(${poi.x}, ${poi.y})`}
       onPointerDown={e => onPointerDown(e, poi)}
+      onDoubleClick={e => {
+        e.stopPropagation()
+        onDoubleClick(poi)
+      }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{ cursor: dragging ? 'grabbing' : 'pointer' }}

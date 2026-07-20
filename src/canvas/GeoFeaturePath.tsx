@@ -8,6 +8,8 @@ interface GeoFeaturePathProps {
   feature: GeoFeature
   selected: boolean
   onClick?: (feature: GeoFeature) => void
+  /** Double-clicking a river or a park is a request to rename it. */
+  onDoubleClick?: (feature: GeoFeature) => void
 }
 
 const RIVER_COLOR = '#BFDBFE'
@@ -68,8 +70,13 @@ function riverLabelAnchor(points: Point[]): Point {
  * (if any) is drawn as a map label — seated at the park's centre or along the
  * river — in the same condensed face the station labels use.
  */
-export function GeoFeaturePath({ feature, selected, onClick }: GeoFeaturePathProps) {
+export function GeoFeaturePath({ feature, selected, onClick, onDoubleClick }: GeoFeaturePathProps) {
   if (feature.points.length < 2) return null
+
+  const handleDoubleClick = (e: MouseEvent<SVGPathElement>) => {
+    e.stopPropagation()
+    onDoubleClick?.(feature)
+  }
 
   const handleClick = (e: MouseEvent<SVGPathElement>) => {
     e.stopPropagation()
@@ -91,6 +98,7 @@ export function GeoFeaturePath({ feature, selected, onClick }: GeoFeaturePathPro
           strokeLinejoin="round"
           opacity={selected ? 0.9 : 0.7}
           onClick={handleClick}
+          onDoubleClick={handleDoubleClick}
           style={{ cursor: 'pointer' }}
         />
         {name && (
@@ -130,6 +138,7 @@ export function GeoFeaturePath({ feature, selected, onClick }: GeoFeaturePathPro
         strokeWidth={selected ? 2 : 1.5}
         opacity={selected ? 0.9 : 0.7}
         onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
         style={{ cursor: 'pointer' }}
       />
       {/* Wrapped against the park's own width rather than run as one line: a park is as wide

@@ -92,8 +92,9 @@ interface MapCanvasProps {
   onSelectWaypoint: (lineId: string, index: number) => void
   onDeleteWaypoint: (lineId: string, index: number) => void
   onDeleteSelected: () => void
-  /** A stop was double-clicked — the caller selects it and opens its name for editing. */
-  onRenameStationRequest: (stationId: string) => void
+  /** Something on the map was double-clicked — the caller selects it and opens its name for
+   * editing. One prop for all three kinds, since the response is identical for each. */
+  onRenameRequest: (kind: 'station' | 'poi' | 'geo', id: string) => void
   onCheckpoint: () => void
   /** A station has been picked up — fires on every grab, before anything moves. */
   onStationGrab?: () => void
@@ -213,7 +214,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onSelectWaypoint,
     onDeleteWaypoint,
     onDeleteSelected,
-    onRenameStationRequest,
+    onRenameRequest,
     onCheckpoint,
     onStationGrab,
     onLineReroute,
@@ -1009,6 +1010,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             feature={feature}
             selected={selectedGeoFeatureIds.includes(feature.id)}
             onClick={handleGeoFeatureClick}
+            onDoubleClick={f => tool === 'select' && onRenameRequest('geo', f.id)}
           />
         ))}
 
@@ -1213,7 +1215,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             labelPlacement={labelPlacementByStation[station.id]}
             onPointerDown={handleStationPointerDown}
             onClick={handleStationClick}
-            onDoubleClick={s => tool === 'select' && onRenameStationRequest(s.id)}
+            onDoubleClick={s => tool === 'select' && onRenameRequest('station', s.id)}
           />
         ))}
 
@@ -1255,6 +1257,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             dragging={drag.kind === 'pois' && drag.ids.includes(poi.id)}
             landing={landingPoiIds.has(poi.id) ? 'appear' : settlingPoiIds.has(poi.id) ? 'settle' : undefined}
             onPointerDown={handlePoiPointerDown}
+            onDoubleClick={p => tool === 'select' && onRenameRequest('poi', p.id)}
           />
         ))}
 

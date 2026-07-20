@@ -57,6 +57,10 @@ interface MapState extends DataSnapshot {
   draftGeoFeatureId: string | null
   /** True when extending from the feature's start — draftGeoPoints is reversed so appends still land at its end. */
   draftGeoReversed: boolean
+  /** Which run of text edits is in progress, so consecutive keystrokes undo as one. Null
+   * between runs. Not part of DataSnapshot — it's editing bookkeeping, not map data, so it
+   * never reaches a save or a history entry. */
+  editRunKey: string | null
   past: DataSnapshot[]
   future: DataSnapshot[]
 }
@@ -218,6 +222,39 @@ function snapshotOf(state: DataSnapshot): DataSnapshot {
   }
 }
 
+/**
+ * A key identifying a run of edits that should undo as one.
+ *
+ * Text fields dispatch on every keystroke, so each character was its own history entry:
+ * renaming a station to "Vesper Halt" cost five presses of undo to take back, and a long
+ * enough name pushed everything else in the map's history off the end of the buffer. A run of
+ * edits to the same field on the same thing is one decision and undoes as one.
+ *
+ * Returns null for everything else, which is what breaks a run — including selecting
+ * something else or picking up a tool, since those go through the reducer too. Come back to
+ * a field later and you start a fresh entry.
+ */
+function editRunKey(action: Action): string | null {
+  switch (action.type) {
+    case 'renameStation':
+      return `renameStation:${action.stationId}`
+    case 'renameLine':
+      return `renameLine:${action.lineId}`
+    case 'renamePoi':
+      return `renamePoi:${action.poiId}`
+    case 'renameGeoFeature':
+      return `renameGeoFeature:${action.geoFeatureId}`
+    case 'renameCompany':
+      return `renameCompany:${action.companyId}`
+    case 'setMapName':
+      return 'setMapName'
+    case 'setAuthorityName':
+      return 'setAuthorityName'
+    default:
+      return null
+  }
+}
+
 function pushHistory(state: MapState): MapState {
   return {
     ...state,
@@ -257,6 +294,7 @@ const emptyState: MapState = {
   nextGeoFeatureNumber: 1,
   nextCompanyNumber: 1,
   nextPoiNumber: 1,
+  editRunKey: null,
   past: [],
   future: [],
 }
@@ -530,7 +568,13 @@ function removeStationsFromLines(
 }
 
 function reducer(rawState: MapState, action: Action): MapState {
-  const state = RECORDABLE_ACTIONS.has(action.type) ? pushHistory(rawState) : rawState
+  // A keystroke in the middle of a rename joins the entry the run already pushed rather than
+  // starting another one.
+  const runKey = editRunKey(action)
+  const continuingRun = runKey !== null && runKey === rawState.editRunKey
+  const shouldRecord = RECORDABLE_ACTIONS.has(action.type) && !continuingRun
+  const recorded = shouldRecord ? pushHistory(rawState) : rawState
+  const state = recorded.editRunKey === runKey ? recorded : { ...recorded, editRunKey: runKey }
 
   switch (action.type) {
     case 'checkpoint':
