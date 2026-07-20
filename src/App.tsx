@@ -53,6 +53,7 @@ function App() {
     setAuthorityName,
     loadMap,
     generateMap,
+    clearMap,
     addCompany,
     renameCompany,
     setCompanyType,
@@ -109,13 +110,23 @@ function App() {
   const [zoom, setZoom] = useState(1)
   const [showGrid, setShowGrid] = useState(true)
   const [showTrains, setShowTrains] = useState(false)
-  const [showPanel, setShowPanel] = useState(true)
+  // Open by default, except where it would cover half the map: the rail and the panel come
+  // to 372px, which is most of a 768px tablet held in portrait. The toggle in the top bar is
+  // the way back. The threshold is the same 900px the tablet styles use — a laptop window at
+  // 1000px has room for both and shouldn't be treated as a tablet.
+  const [showPanel, setShowPanel] = useState(() => typeof window === 'undefined' || window.innerWidth >= 900)
+  // The palette symbol a finger is carrying. Cleared whenever the tool is put down, so it
+  // can't survive into a later visit to the palette and place something unasked.
+  const [armedPoi, setArmedPoi] = useState<string | null>(null)
   // Bumped each time a rename is asked for. A counter rather than a boolean because asking
   // twice for the same station has to focus the field twice.
   const [renameToken, setRenameToken] = useState(0)
   // Asked once, on the first visit this browser has ever had. Read at mount, before the
   // persistence effect writes anything — a beat later there would be a saved map either way.
   const [showWelcome, setShowWelcome] = useState(() => !hasSavedMap())
+  // Whether there's anything on the canvas worth warning about before replacing it.
+  const hasContent =
+    state.stationOrder.length > 0 || state.lineOrder.length > 0 || state.geoFeatureOrder.length > 0 || state.poiOrder.length > 0
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
   // Set while the Delete key is waiting on an answer about the stations its lines alone serve.
@@ -223,6 +234,8 @@ function App() {
     (tool: Tool) => {
       playSound('tool')
       setTool(tool)
+      // Putting the landmark tool down puts the symbol down with it.
+      if (tool !== 'add-poi') setArmedPoi(null)
     },
     [setTool],
   )
@@ -343,6 +356,7 @@ function App() {
             onCancelDraftLine={cancelDraftLine}
             onAddGeoPoint={withSound('node', addGeoPoint)}
             onAddPoi={(x: number, y: number, icon: string) => addPoi(x, y, icon, openMojiLabel(icon))}
+            armedPoiIcon={armedPoi}
             onPoiLand={() => playSound('drop')}
             onMovePois={movePois}
             onReturnToSelect={() => handleSetTool('select')}
@@ -474,15 +488,25 @@ function App() {
         <WelcomeDialog
           open={showWelcome}
           theme={theme}
+          // On first run the canvas underneath is already blank, so "blank canvas" only has
+          // to get out of the way. Reopened over a finished map it has to mean it — otherwise
+          // the slot that says "empty grid" would quietly do nothing.
+          returning={hasContent}
+          onDismiss={() => setShowWelcome(false)}
           onGenerate={handleWelcomeGenerate}
-          onBlank={() => setShowWelcome(false)}
+          onBlank={() => {
+            setShowWelcome(false)
+            if (hasContent) clearMap()
+          }}
         />
 
-        <LeftToolbar tool={state.tool} onSetTool={handleSetTool} theme={theme} />
+        <LeftToolbar tool={state.tool} onSetTool={handleSetTool} theme={theme} onStartOver={() => setShowWelcome(true)} />
 
         {state.tool === 'add-poi' && (
           <PoiPicker
             scale={zoom}
+            armedIcon={armedPoi}
+            onArm={setArmedPoi}
             onPlaceByKeyboard={icon => {
               const centre = mapCanvasRef.current?.viewportCentre()
               if (!centre) return

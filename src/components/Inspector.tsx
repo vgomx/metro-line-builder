@@ -437,6 +437,7 @@ export function Inspector({
               <button
                 key={color}
                 type="button"
+                className="mlb-swatch"
                 aria-label={`Set line color ${color}`}
                 onClick={() => onRecolorLine(line.id, color)}
                 style={{
@@ -453,6 +454,7 @@ export function Inspector({
               />
             ))}
             <label
+              className="mlb-swatch"
               style={{
                 width: '22px',
                 height: '22px',

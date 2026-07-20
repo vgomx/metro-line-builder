@@ -74,6 +74,9 @@ interface MapCanvasProps {
   onAddGeoPoint: (x: number, y: number) => void
   /** A symbol has been dropped on the map — the icon comes from the drag itself. */
   onAddPoi: (x: number, y: number, icon: string) => void
+  /** A palette symbol waiting to be put down by tapping the map, or null. Touch only: a
+   * finger can't drag one in, so it picks first and places second. */
+  armedPoiIcon: string | null
   /** A landmark has come to rest, whether newly dropped or moved. Fires once per landing. */
   onPoiLand?: () => void
   /** Put the drawing tool down and go back to select — a click on the canvas with the
@@ -197,6 +200,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onCancelDraftLine,
     onAddGeoPoint,
     onAddPoi,
+    armedPoiIcon,
     onMovePois,
     onReturnToSelect,
     onPoiLand,
@@ -624,7 +628,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     }
   }
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e?: ReactPointerEvent<SVGSVGElement>) => {
+    // A finger has no hover, so pointerleave never comes and the placement marker stayed
+    // parked wherever it was last tapped — a marker sitting on the map with nothing under it.
+    if (e?.pointerType === 'touch') setCursorWorld(null)
+
     if (drag.kind === 'marquee') {
       const minX = Math.min(drag.startX, drag.x)
       const maxX = Math.max(drag.startX, drag.x)
@@ -691,7 +699,20 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   // navigation, and it would be a poor reward for looking around.
   const handleRootPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (e.button !== 0 || spaceHeld) return
-    if (tool === 'add-poi') onReturnToSelect()
+    if (tool !== 'add-poi') return
+
+    // A symbol picked out of the palette is waiting for somewhere to go, so the tap is that
+    // answer rather than a dismissal. The symbol stays armed afterwards: landmarks arrive in
+    // groups, and re-picking the same one from a scrolled palette between every placement
+    // would be the slowest part of the tool.
+    if (armedPoiIcon) {
+      const { x, y } = toWorld(e.clientX, e.clientY)
+      const landed = { x: snapToPoiGrid(x), y: snapToPoiGrid(y) }
+      onAddPoi(landed.x, landed.y, armedPoiIcon)
+      announceLanding([landed])
+      return
+    }
+    onReturnToSelect()
   }
 
   // Dragging a symbol in from the palette. dragover has to preventDefault on every event or
@@ -927,10 +948,22 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   return (
     <svg
       ref={svgRef}
+      // Marks this element as the map for the window-level gesture blocker in main.tsx,
+      // which has to let Safari's pinch through here and nowhere else.
+      data-map-canvas=""
       width="100%"
       height="100%"
       className={drawingWithMarker ? 'mlb-drawing' : undefined}
-      style={{ display: 'block', background: 'var(--bg-page)', cursor, userSelect: 'none', WebkitUserSelect: 'none' }}
+      style={{
+        display: 'block',
+        background: 'var(--bg-page)',
+        cursor,
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        // Without this the browser claims touch gestures for its own scroll and zoom before
+        // d3 or the tool handlers see them, so on a tablet the canvas mostly moved the page.
+        touchAction: 'none',
+      }}
       onPointerDown={handleRootPointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

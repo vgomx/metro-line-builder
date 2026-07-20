@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useCoarsePointer } from '../useCoarsePointer'
 import type { CSSProperties, ReactNode } from 'react'
 
 interface HoverTipProps {
@@ -15,6 +16,11 @@ interface HoverTipProps {
  * hover doesn't feel like waiting. The platform's own is around a second, which is most of
  * why it feels unresponsive. */
 const SHOW_DELAY_MS = 320
+
+/** How long a touch-triggered tip stays. There's no "pointer left" on a finger, so it has to
+ * leave on its own — long enough to read three words, short enough not to sit on top of the
+ * thing that was just tapped. */
+const TOUCH_VISIBLE_MS = 1600
 
 /** Splits "Draw line (P)" into its name and its shortcut key. */
 function splitShortcut(label: string): { name: string; key: string | null } {
@@ -41,6 +47,7 @@ export function HoverTip({ label, placement = 'right', style, children }: HoverT
   const [visible, setVisible] = useState(false)
   const wrapper = useRef<HTMLSpanElement>(null)
   const timer = useRef<number | undefined>(undefined)
+  const coarse = useCoarsePointer()
   const { name, key } = splitShortcut(label)
 
   useEffect(() => {
@@ -58,15 +65,31 @@ export function HoverTip({ label, placement = 'right', style, children }: HoverT
     setVisible(false)
   }
 
+  /**
+   * On a touchscreen the tip shows on the tap itself and then leaves.
+   *
+   * It arrives a moment after the control has already acted, which is not how a tooltip is
+   * supposed to work — but the alternative on a tablet was seven unlabelled glyphs in the
+   * toolbar and no way at all to find out what any of them did. Naming the tool as it turns
+   * on teaches the palette in seven taps, which is the best available trade.
+   */
+  const showForTouch = () => {
+    window.clearTimeout(timer.current)
+    setVisible(true)
+    timer.current = window.setTimeout(() => setVisible(false), TOUCH_VISIBLE_MS)
+  }
+
   return (
     <span
       ref={wrapper}
       style={{ position: 'relative', display: 'inline-flex', ...style }}
-      onMouseEnter={show}
-      onMouseLeave={hide}
+      onMouseEnter={coarse ? undefined : show}
+      onMouseLeave={coarse ? undefined : hide}
       // Pressing the control is an answer in itself: the tip has done its job and gets out of
-      // the way rather than hanging over what was just clicked.
-      onMouseDown={hide}
+      // the way rather than hanging over what was just clicked. On touch there was no tip to
+      // dismiss, and the tap is the only moment there'll ever be to show one.
+      onMouseDown={coarse ? undefined : hide}
+      onPointerDown={coarse ? showForTouch : undefined}
     >
       {children}
       {visible && (
@@ -101,7 +124,8 @@ export function HoverTip({ label, placement = 'right', style, children }: HoverT
             }}
           >
             {name}
-            {key && (
+            {/* No keyboard, no point printing the key it would have used. */}
+            {key && !coarse && (
               <span
                 style={{
                   padding: '1px 5px',

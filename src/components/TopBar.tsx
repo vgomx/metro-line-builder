@@ -111,12 +111,14 @@ export function TopBar({
       }}
     >
       <div
+        className="mlb-brand"
         style={{
           display: 'flex',
           alignItems: 'center',
           marginRight: 'var(--space-4)',
           paddingRight: 'var(--space-4)',
           borderRight: '1px solid var(--border-subtle)',
+          flexShrink: 0,
         }}
       >
         <img src={theme === 'dark' ? logoDarkUrl : logoLightUrl} alt="Metro Line Builder" height={24} />
@@ -141,6 +143,7 @@ export function TopBar({
           minWidth: 0,
           width: `${Math.max(mapName.length, 8)}ch`,
         }}
+        className="mlb-map-name"
       />
 
       <div style={{ width: '1px', height: '24px', background: 'var(--border-subtle)', margin: '0 var(--space-2)' }} />
@@ -156,7 +159,10 @@ export function TopBar({
 
       <div style={{ flex: 1 }} />
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-tight)', marginRight: 'var(--space-2)' }}>
+      <div
+        className="mlb-zoom-group"
+        style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-tight)', marginRight: 'var(--space-2)' }}
+      >
         <HoverTip label="Zoom out" placement="bottom">
           <IconButton icon={<ZoomOutIcon />} label="Zoom out" size="sm" onClick={onZoomOut} />
         </HoverTip>
@@ -241,17 +247,23 @@ export function TopBar({
       </div>
 
       <div style={{ width: 'var(--space-2)' }} />
-      <Button size="sm" variant="ghost" icon={<SparkleIcon />} onClick={onSurprise}>
-        Surprise me
-      </Button>
+      <span className="mlb-bar-action">
+        <Button size="sm" variant="ghost" icon={<SparkleIcon />} onClick={onSurprise}>
+          <span className="mlb-btn-label">Surprise me</span>
+        </Button>
+      </span>
       <div style={{ width: 'var(--gap-tight)' }} />
-      <Button size="sm" variant="ghost" icon={<FolderOpenIcon />} onClick={onOpen}>
-        Open
-      </Button>
+      <span className="mlb-bar-action">
+        <Button size="sm" variant="ghost" icon={<FolderOpenIcon />} onClick={onOpen}>
+          <span className="mlb-btn-label">Open</span>
+        </Button>
+      </span>
       <div style={{ width: 'var(--gap-tight)' }} />
-      <Button size="sm" variant="ghost" icon={<DownloadIcon />} onClick={onExport}>
-        Export
-      </Button>
+      <span className="mlb-bar-action">
+        <Button size="sm" variant="ghost" icon={<DownloadIcon />} onClick={onExport}>
+          <span className="mlb-btn-label">Export</span>
+        </Button>
+      </span>
     </div>
   )
 }

@@ -132,7 +132,10 @@ export function LineAnnouncer({ line, scrollText }: LineAnnouncerProps) {
         </div>
       </div>
 
-      {/* Static line chip — bottom-center; hovering re-lights the corner sign */}
+      {/* Static line chip — bottom-center; hovering re-lights the corner sign. On touch there
+          is no hover, so the sign could only ever be seen on its one automatic play and a tap
+          is the only gesture left to ask for another. It re-lights and then releases itself,
+          since no "pointer left" is coming. */}
       <div
         onMouseEnter={() => {
           if (!settled) return
@@ -140,6 +143,14 @@ export function LineAnnouncer({ line, scrollText }: LineAnnouncerProps) {
           setHovering(true)
         }}
         onMouseLeave={() => setHovering(false)}
+        onPointerDown={e => {
+          if (e.pointerType !== 'touch' || !settled) return
+          setReplayCount(n => n + 1)
+          setHovering(true)
+        }}
+        onPointerUp={e => {
+          if (e.pointerType === 'touch') setHovering(false)
+        }}
         style={{
           position: 'absolute',
           bottom: 'var(--space-3)',

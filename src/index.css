@@ -143,6 +143,15 @@ body {
 /* The picker's swatches are dragged rather than clicked, so they say so. The Inspector
    reuses this class for its symbol grid, where the tiles *are* buttons — hence keying the
    open hand off draggable rather than putting it on the class itself. */
+.mlb-poi-swatch[data-armed='true'] {
+  /* Held, not just hovered — this symbol is in hand and the next tap on the map places it.
+     The ring is the same one a selected landmark wears on the canvas, so the two read as the
+     same object in two places. */
+  background: var(--brand-50);
+  outline: 2px solid var(--brand-500);
+  outline-offset: -1px;
+}
+
 .mlb-poi-swatch[draggable='true'] {
   cursor: grab;
 }
@@ -575,4 +584,118 @@ body {
 .mlb-tabs button {
   padding-left: 8px !important;
   padding-right: 8px !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Touch
+
+   Everything below applies only where the primary pointer is a finger. It is a
+   media query rather than a class because it's a property of the device, and
+   because nothing here should ever affect a mouse: a 44px tap target on a
+   desktop toolbar is just a fat button.
+
+   44px is Apple's minimum and the reason most of these numbers exist. The app
+   was drawn for a cursor, so almost every control was under it — 28px top-bar
+   buttons, 22px colour swatches, a 20px visibility toggle.
+
+   The inline styles these override come from the design system, which sizes its
+   own controls; an inline style outranks a class, hence the importants. They're
+   confined to this block so the desktop rules stay clean.
+   --------------------------------------------------------------------------- */
+@media (pointer: coarse) {
+  /* Icon buttons at every design-system size, plus the app's own icon-only controls. */
+  button[aria-label],
+  .mlb-bar-action button,
+  .mlb-poi-swatch,
+  .mlb-tabs button {
+    min-width: 44px !important;
+    min-height: 44px !important;
+    /* Several of these were sized to their icon, so growing the box would otherwise strand
+       the glyph in a corner of its own tap target. */
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* List rows: reachable without being so tall the list stops being a list. */
+  .mlb-row {
+    min-height: 44px;
+  }
+
+  /* The colour swatches are the one place 44px would be wrong — eleven of them at that size
+     is three rows of chunky squares where the point is to compare colours at a glance. They
+     grow to 32 and take their tap area from the gap instead, which costs nothing visually. */
+  .mlb-swatch {
+    width: 32px !important;
+    height: 32px !important;
+  }
+
+  /* Hover states never resolve on touch — the finger leaves and the style stays. These are
+     the ones that were left permanently half-lit. */
+  .mlb-authority-mark {
+    opacity: 1;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Tablet widths
+
+   The chrome was sized against a desktop window: a 52px rail and a 272px panel
+   is 372px with the margins, which is half of a 768px iPad in portrait. The
+   panel already floats over the canvas rather than displacing it, so the fix is
+   about what's open by default and how wide the floating palette gets to be —
+   not about re-laying anything out.
+   --------------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  /* The top bar is one unshrinkable flex row, so at 768px the last button was simply cut off
+     by the window. The three trailing actions keep their icons and give up their words —
+     hidden the accessible way rather than with display:none, so each button keeps the name
+     that its icon alone doesn't carry. */
+  .mlb-btn-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* And the map's name grows a character at a time as it's typed, which pushed everything
+     right of it off the edge. */
+  .mlb-map-name {
+    max-width: 10ch !important;
+    /* And a floor, or the flex row shrinks it to nothing and the map loses its name from the
+       one place that shows it. */
+    min-width: 7ch !important;
+  }
+
+  /* The wordmark's breathing room is the cheapest thing in the bar to give up, and with touch
+     targets at 44px the row needs the pixels from somewhere. */
+  .mlb-brand {
+    margin-right: var(--space-2) !important;
+    padding-right: var(--space-2) !important;
+  }
+
+  /* The landmark palette is a fixed 268 beside a 52px rail. On a narrow tablet that plus the
+     right panel leaves a slot of canvas too small to aim at. */
+  .mlb-poi-picker {
+    width: auto !important;
+    right: var(--space-3);
+    max-width: 268px;
+  }
+}
+
+/* A narrow screen *and* a finger. Both conditions matter: a 768px desktop window fits the bar
+   at its ordinary button size, and a touchscreen at 1400px has room to spare. It's only the
+   two together that run the row out of width. */
+@media (max-width: 900px) and (pointer: coarse) {
+  /* Zoom in and out are a mouse's way to do what a pinch does directly, and the current zoom
+     is already written in the status bar at the other corner — so the cluster is 134px spent
+     on a gesture the device does better. Dropping it is what buys the rest of the bar room to
+     be 44px tall. */
+  .mlb-zoom-group {
+    display: none !important;
+  }
 }
