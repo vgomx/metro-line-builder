@@ -514,3 +514,23 @@ body {
 .mlb-toggle-off {
   animation: mlb-toggle-off 180ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
 }
+
+/* The right panel sliding out of the way and back. It travels its own width plus the margin
+   it floats by, so it parks fully clear of the edge rather than leaving a sliver.
+
+   Visibility is switched with a delay on the way out and none on the way in: the panel has to
+   stay visible for the length of the slide, then leave the accessibility tree once it's gone —
+   a panel sitting off-screen is still a panel a screen reader would read out. Its own
+   pointer-events are turned off in the markup, which is what stops an invisible column
+   swallowing clicks meant for the map. */
+.mlb-panel-slide {
+  transform: translateX(0);
+  visibility: visible;
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s;
+}
+
+.mlb-panel-slide[data-open='false'] {
+  transform: translateX(calc(100% + 12px));
+  visibility: hidden;
+  transition: transform 260ms cubic-bezier(0.55, 0, 0.9, 0.35), visibility 0s linear 260ms;
+}
