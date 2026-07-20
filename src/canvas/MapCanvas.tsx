@@ -18,6 +18,7 @@ import { minGeoPointsForTool } from '../geoDraft'
 import {
   buildLineTrack,
   buildNetworkGeometry,
+  distanceToPolyline,
   buildRefanFrames,
   closestSegmentIndex,
   resolveLineNodes,
@@ -147,6 +148,15 @@ const CRUMBLE_MS = 380
 const POI_EXIT_HOLD_MS = 440
 const LINE_SHATTER_MS = 620
 const LINE_EXIT_HOLD_MS = 700
+/** Softer than the 10 a committed route gets. A draft is a sketch — the hard elbow reads as a
+ * decision already made, and rounding it says the shape is still being felt out. It's also
+ * clamped to half the shorter neighbouring segment, so on tight zig-zags it quietly gives way
+ * rather than distorting the route. */
+/** How near the snapped point has to be to a route before the station tool offers to join it.
+ * Under half a cell: any further and the station would be created beside the line rather than
+ * on it, and promising a junction there would be a lie. */
+const STATION_JOIN_REACH = 14
+const DRAFT_CORNER_RADIUS = 18
 const RIVER_DRAFT_STROKE = '#60A5FA'
 const PARK_DRAFT_STROKE = '#4ADE80'
 
@@ -539,7 +549,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const handlePointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (DRAW_TOOLS.includes(tool)) {
       const w = toWorld(e.clientX, e.clientY)
-      setCursorWorld({ x: snapToGrid(w.x), y: snapToGrid(w.y) })
+      const snapped = { x: snapToGrid(w.x), y: snapToGrid(w.y) }
+      // Only when the grid point itself changes. A fresh object every pointermove would
+      // re-render the canvas on every pixel of travel, and — now that the marker is keyed by
+      // its position — could restart the settle animation while standing still.
+      setCursorWorld(prev => (prev && prev.x === snapped.x && prev.y === snapped.y ? prev : snapped))
     }
 
     if (drag.kind === 'marquee') {
@@ -705,12 +719,15 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   // Split into the already-committed portion (clickable to insert a station mid-route)
   // and a separate rubber-band segment to the live cursor (preview only, not clickable).
   const draftPoints = resolveLineNodes(draftLineNodes, stations)
-  const draftCommittedPath = draftPoints.length >= 2 ? routeOrthogonal(draftPoints) : ''
+  const draftCommittedPath = draftPoints.length >= 2 ? routeOrthogonal(draftPoints, false, DRAFT_CORNER_RADIUS) : ''
   const draftCursorPath =
-    cursorWorld && draftPoints.length >= 1 ? routeOrthogonal([draftPoints[draftPoints.length - 1], cursorWorld]) : ''
+    cursorWorld && draftPoints.length >= 1
+      ? routeOrthogonal([draftPoints[draftPoints.length - 1], cursorWorld], false, DRAFT_CORNER_RADIUS)
+      : ''
 
   const draftGeoPreviewPoints = cursorWorld ? [...draftGeoPoints, cursorWorld] : draftGeoPoints
-  const draftGeoPath = draftGeoPreviewPoints.length > 1 ? routeOrthogonal(draftGeoPreviewPoints) : ''
+  const draftGeoPath =
+    draftGeoPreviewPoints.length > 1 ? routeOrthogonal(draftGeoPreviewPoints, false, DRAFT_CORNER_RADIUS) : ''
 
   const snapLines = snapSession
     ? lineList.filter(
@@ -837,6 +854,25 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           : DRAW_TOOLS.includes(tool)
             ? 'crosshair'
             : 'default'
+
+  /**
+   * The line the station tool would join, if the pointer is over one.
+   *
+   * Clicking a line with this tool inserts a stop into it rather than dropping a loose
+   * station, and nothing said so — the marker looked identical over bare canvas and over a
+   * route. Where it would join, the marker becomes a swell in the line's own colour: the shape
+   * a station makes, in the colour of the line about to gain one.
+   */
+  const joinTarget = (() => {
+    if (tool !== 'add-station' || !cursorWorld) return null
+    for (const line of lineList) {
+      if (!line.visible) continue
+      const geometry = network.byLine.get(line.id)
+      if (!geometry) continue
+      if (distanceToPolyline(geometry.vertices, cursorWorld) <= STATION_JOIN_REACH) return line
+    }
+    return null
+  })()
 
   const gridLines = []
   if (showGrid) {
@@ -1022,7 +1058,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
               stroke="var(--brand-400)"
               strokeWidth={3}
               strokeDasharray="6 4"
-              style={{ pointerEvents: 'none' }}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ pointerEvents: 'none', animation: 'mlb-draft-flow 600ms linear infinite' }}
             />
           </>
         )}
@@ -1034,8 +1072,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             stroke="var(--brand-400)"
             strokeWidth={3}
             strokeDasharray="2 5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
             opacity={0.55}
-            style={{ pointerEvents: 'none' }}
+            style={{ pointerEvents: 'none', animation: 'mlb-draft-tip-flow 420ms linear infinite' }}
           />
         )}
 
@@ -1206,9 +1246,39 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             Sized against the zoom so it stays the same size on screen however far the map is
             scaled, which is what a cursor does. */}
         {DRAW_TOOLS.includes(tool) && cursorWorld && (
-          <g transform={`translate(${cursorWorld.x}, ${cursorWorld.y})`} style={{ pointerEvents: 'none' }}>
-            <circle r={10 / transform.k} fill="none" stroke="var(--interactive-primary)" strokeWidth={1.5 / transform.k} opacity={0.9} />
-            <circle r={2.5 / transform.k} fill="var(--interactive-primary)" />
+          // Keyed by the grid point, so arriving somewhere new remounts the marker and replays
+          // the settle. Moving the pointer within one cell changes nothing and animates
+          // nothing — the motion belongs to the snap, not to the mouse.
+          <g
+            key={`${cursorWorld.x},${cursorWorld.y}`}
+            transform={`translate(${cursorWorld.x}, ${cursorWorld.y})`}
+            style={{ pointerEvents: 'none' }}
+          >
+            <g className="mlb-snap-in">
+              {joinTarget ? (
+                <>
+                  <circle className="mlb-station-preview" r={13 / transform.k} fill={joinTarget.color} />
+                  <circle
+                    r={6.5 / transform.k}
+                    fill="var(--bg-page)"
+                    stroke="var(--text-primary)"
+                    strokeWidth={2.5 / transform.k}
+                    opacity={0.85}
+                  />
+                </>
+              ) : (
+                <>
+                  <circle
+                    className="mlb-snap-ring"
+                    r={10 / transform.k}
+                    fill="none"
+                    stroke="var(--interactive-primary)"
+                    strokeWidth={1.5 / transform.k}
+                  />
+                  <circle className="mlb-snap-dot" r={2.5 / transform.k} fill="var(--interactive-primary)" />
+                </>
+              )}
+            </g>
           </g>
         )}
       </g>

@@ -20,8 +20,11 @@ const PARK_LABEL = '#15803D'
 // Wide enough for the italic name to sit inside the water band rather than perched above it.
 const RIVER_STROKE_WIDTH = 20
 const LABEL_WEIGHT = 400
-const PARK_LABEL_SIZE = 12
-const PARK_LINE_HEIGHT = 13
+/** Smaller than a station's 10 and well under the 12 it used to be: a park is named for
+ * reference, not for reading first — the network is what the eye should land on, and green
+ * ground lettering competing with station names pulls attention off it. */
+const PARK_LABEL_SIZE = 8.5
+const PARK_LINE_HEIGHT = 9.5
 /** A park's name wraps to its own width, less a margin so the text doesn't touch the outline.
  * Narrow parks get a floor — below it the name would break to one word per line — and every
  * park gets a ceiling, so a long name wraps even when there is room to run: a single line

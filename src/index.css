@@ -383,3 +383,134 @@ body {
 .mlb-drawing * {
   cursor: none !important;
 }
+
+/* The placement marker arriving on a grid point. It only ever moves by snapping, so the
+   motion is the snap: the ring drops in from larger and settles, which turns a teleport into
+   something you can see being pulled onto the intersection. */
+@keyframes mlb-snap-in {
+  from {
+    transform: scale(1.5);
+    opacity: 0.35;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ...and a slow breath while it rests, so the tool reads as live with the pointer held
+   still. On the ring alone, nested inside the settle above — two animations fighting over
+   one element's transform would cancel each other out. */
+@keyframes mlb-snap-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.95;
+  }
+  50% {
+    transform: scale(1.14);
+    opacity: 0.6;
+  }
+}
+
+@keyframes mlb-snap-dot {
+  from {
+    transform: scale(0.2);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.mlb-snap-in {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mlb-snap-in 150ms cubic-bezier(0.2, 1.4, 0.5, 1) both;
+}
+
+.mlb-snap-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mlb-snap-breathe 2200ms ease-in-out infinite;
+}
+
+.mlb-snap-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mlb-snap-dot 150ms cubic-bezier(0.2, 1.4, 0.5, 1) both;
+}
+
+/* Marching ants along the line being drawn. The dashes travel from the start of the draft
+   toward the cursor — the direction the route is growing — so the preview reads as something
+   in progress rather than as a dotted line someone left lying there.
+
+   Two patterns, two keyframes: each shifts by exactly its own dash + gap, which is what makes
+   the loop seamless. The durations are set so both travel at the same speed on screen (10
+   units per 600ms, 7 per 420ms), so the committed run and the rubber band to the cursor read
+   as one moving pattern rather than two racing each other. */
+@keyframes mlb-draft-flow {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+@keyframes mlb-draft-tip-flow {
+  to {
+    stroke-dashoffset: -7;
+  }
+}
+
+/* The swell under the point a new station would join a line at. It breathes outward, which
+   is the promise being made: something is about to grow here. Paired with the placement
+   marker's own breath, at the same tempo, so hovering a line reads as a change of what will
+   happen rather than as a different tool taking over. */
+@keyframes mlb-station-preview {
+  0%,
+  100% {
+    transform: scale(0.86);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scale(1.16);
+    opacity: 0.2;
+  }
+}
+
+.mlb-station-preview {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mlb-station-preview 2200ms ease-in-out infinite;
+}
+
+/* A toggle's icon sliding into place. Up as it comes on, down as it goes off — the direction
+   carries the change, so the two states aren't only distinguishable by a background that
+   fades. Short, because this fires on a button people press often. */
+@keyframes mlb-toggle-on {
+  from {
+    transform: translateY(7px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes mlb-toggle-off {
+  from {
+    transform: translateY(-7px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.mlb-toggle-on {
+  animation: mlb-toggle-on 180ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+.mlb-toggle-off {
+  animation: mlb-toggle-off 180ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
