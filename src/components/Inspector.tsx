@@ -494,10 +494,12 @@ export function Inspector({
 
         <Divider label="Stations" />
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          {lineStations.map(s => {
+          {/* Keyed by position as well as id: a ring line legitimately calls at its terminus
+              twice, and the id alone collides on exactly the routes most worth looking at. */}
+          {lineStations.map((s, index) => {
             const transfer = isTransferStation(s, Object.values(lines))
             return (
-              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-tight)', padding: '4px 0' }}>
+              <div key={`${s.id}-${index}`} style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-tight)', padding: '4px 0' }}>
                 <div
                   style={{
                     width: '8px',

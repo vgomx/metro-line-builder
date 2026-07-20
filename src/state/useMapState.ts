@@ -295,6 +295,29 @@ function arrayToRecord<T extends { id: string }>(value: unknown): Record<string,
  * by early versions of "Export"), so both the localStorage autosave and an
  * imported/opened JSON file load through the same compatibility path.
  */
+/** True when inserting `stationId` at `index` would sit it next to a call at the same
+ * station — i.e. when the line already stops there at that point in the route. */
+function adjacentToStation(nodes: LineNode[], index: number, stationId: string): boolean {
+  const before = nodes[index - 1]
+  const after = nodes[index]
+  return (
+    (before?.kind === 'station' && before.stationId === stationId) ||
+    (after?.kind === 'station' && after.stationId === stationId)
+  )
+}
+
+/** Collapse consecutive calls at the same station down to one.
+ *
+ * Heals maps drawn before the insert paths checked for it. A line that legitimately returns
+ * to where it started — a ring — is untouched: only *neighbouring* repeats go, and a ring's
+ * two calls at its terminus have the whole route between them. */
+function collapseRepeatedStops(nodes: LineNode[]): LineNode[] {
+  return nodes.filter((node, i) => {
+    const previous = nodes[i - 1]
+    return !(node.kind === 'station' && previous?.kind === 'station' && previous.stationId === node.stationId)
+  })
+}
+
 function normalizeSnapshot(parsed: DataSnapshot): DataSnapshot {
   if (!parsed.mapName) parsed.mapName = (parsed as unknown as { name?: string }).name || 'Untitled Map'
   if (parsed.authorityName === undefined) parsed.authorityName = ''
@@ -326,6 +349,7 @@ function normalizeSnapshot(parsed: DataSnapshot): DataSnapshot {
   for (const line of Object.values(parsed.lines)) {
     if (line.visible === undefined) line.visible = true
     if (line.companyId === undefined) line.companyId = null
+    if (Array.isArray(line.nodes)) line.nodes = collapseRepeatedStops(line.nodes)
     // Older saves stored a line as a flat station-id sequence; convert to nodes.
     const legacy = line as unknown as { stationIds?: string[] }
     if (!line.nodes && legacy.stationIds) {
@@ -767,6 +791,11 @@ function reducer(rawState: MapState, action: Action): MapState {
       const existing = findStationAt(state.stations, action.x, action.y)
       const nodes = [...state.draftLineNodes]
       if (existing) {
+        // Already a stop here on this line. Adding it again would give the route two
+        // consecutive calls at the same platform, which is meaningless as a timetable and
+        // draws as a zero-length segment — and it's easy to do, because the place you click
+        // to add a stop is exactly where an existing one already sits.
+        if (adjacentToStation(nodes, action.index, existing.id)) return state
         nodes.splice(action.index, 0, { kind: 'station', stationId: existing.id })
         return { ...state, draftLineNodes: nodes }
       }
@@ -798,6 +827,7 @@ function reducer(rawState: MapState, action: Action): MapState {
       const existing = findStationAt(state.stations, action.x, action.y)
       const nodes = [...line.nodes]
       if (existing) {
+        if (adjacentToStation(nodes, action.index, existing.id)) return state
         nodes.splice(action.index, 0, { kind: 'station', stationId: existing.id })
         return { ...state, lines: { ...state.lines, [action.lineId]: { ...line, nodes } } }
       }
