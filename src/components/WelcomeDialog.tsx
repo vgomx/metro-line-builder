@@ -11,6 +11,12 @@ interface WelcomeDialogProps {
   onGenerate: () => void
   /** Hand them the grid and get out of the way. */
   onBlank: () => void
+  /** Close without choosing. On first run that leaves the blank canvas already underneath;
+   * reopened over a map, it leaves that map exactly as it was. */
+  onDismiss: () => void
+  /** True when it's been reopened over a map that already has something on it, which turns
+   * both choices from a start into a replacement. */
+  returning?: boolean
 }
 
 /**
@@ -25,9 +31,12 @@ interface WelcomeDialogProps {
  * and a click outside all leave the blank canvas that was already underneath — which is the
  * second answer anyway. No path drops the user somewhere they didn't ask to be.
  */
-export function WelcomeDialog({ open, theme, onGenerate, onBlank }: WelcomeDialogProps) {
+export function WelcomeDialog({ open, theme, onGenerate, onBlank, onDismiss, returning = false }: WelcomeDialogProps) {
   return (
-    <Dialog open={open} onClose={onBlank} title="" width="480px">
+    // Closing is the way out that changes nothing. It used to be onBlank, which was the same
+    // thing back when the canvas underneath was always already empty — reopened over a
+    // finished map, onBlank clears it for real and can't be what Esc does.
+    <Dialog open={open} onClose={onDismiss} title="" width="480px">
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--gap-lg)', textAlign: 'center' }}>
         <img src={theme === 'dark' ? logoDarkUrl : logoLightUrl} alt="" width={64} height={64} />
 
@@ -36,7 +45,9 @@ export function WelcomeDialog({ open, theme, onGenerate, onBlank }: WelcomeDialo
             Metro Line Builder
           </div>
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: '6px 0 0' }}>
-            Draw a transit map for a city that doesn&rsquo;t exist yet.
+            {returning
+              ? 'Start a new map. This replaces the one you have open — undo brings it back.'
+              : 'Draw a transit map for a city that doesn’t exist yet.'}
           </p>
         </div>
 

@@ -6,23 +6,40 @@ import logoDarkUrl from 'metro-ds/assets/logo-mark-white.svg'
 import { ChevronDownIcon, MoreIcon } from '../icons'
 import { LEGAL_NOTICES } from '../legalNotices'
 import { HoverTip } from './HoverTip'
+import { ShortcutsDialog } from './ShortcutsDialog'
 import type { Theme } from '../useTheme'
 
 const APP_VERSION = '0.1.0'
 
 interface MoreMenuProps {
   theme: Theme
+  /** Reopens the welcome screen, this time as a way to start a different map. */
+  onStartOver: () => void
 }
 
-export function MoreMenu({ theme }: MoreMenuProps) {
+export function MoreMenu({ theme, onStartOver }: MoreMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false)
-  const [activeDialog, setActiveDialog] = useState<'legal' | 'about' | null>(null)
+  const [activeDialog, setActiveDialog] = useState<'legal' | 'about' | 'shortcuts' | null>(null)
   // One notice open at a time. Several at once would put the list back where it started —
   // taller than the dialog, with the thing you just opened somewhere off the bottom.
   const [openNotice, setOpenNotice] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const legalScrollRef = useRef<HTMLDivElement>(null)
   const noticeRefs = useRef<Record<string, HTMLDivElement | null>>({})
+
+  // "?" is the near-universal key for this, and the whole point is that it works when you're
+  // in the middle of something rather than only from a menu you'd have to know about.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.key !== '?') return
+      setActiveDialog(prev => (prev === 'shortcuts' ? null : 'shortcuts'))
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   useEffect(() => {
     if (!menuOpen) return
@@ -40,7 +57,7 @@ export function MoreMenu({ theme }: MoreMenuProps) {
     }
   }, [menuOpen])
 
-  const openDialog = (dialog: 'legal' | 'about') => {
+  const openDialog = (dialog: 'legal' | 'about' | 'shortcuts') => {
     setMenuOpen(false)
     setOpenNotice(null)
     setActiveDialog(dialog)
@@ -88,6 +105,20 @@ export function MoreMenu({ theme }: MoreMenuProps) {
             zIndex: 100,
           }}
         >
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen(false)
+              onStartOver()
+            }}
+            style={menuItemStyle}
+          >
+            New map…
+          </button>
+          <button type="button" onClick={() => openDialog('shortcuts')} style={menuItemStyle}>
+            Keyboard shortcuts
+          </button>
+          <div style={{ height: '1px', background: 'var(--border-subtle)', margin: '3px 6px' }} />
           <button type="button" onClick={() => openDialog('legal')} style={menuItemStyle}>
             Legal
           </button>
@@ -104,6 +135,7 @@ export function MoreMenu({ theme }: MoreMenuProps) {
           of the window. The portal is what puts it back on the viewport. */}
       {createPortal(
         <>
+        <ShortcutsDialog open={activeDialog === 'shortcuts'} onClose={() => setActiveDialog(null)} />
         <Dialog open={activeDialog === 'legal'} onClose={() => setActiveDialog(null)} title="Legal" width="560px">
           {/* The dialog neither caps its height nor scrolls, and clips what overflows — so with
               a notice per shipped package the list runs off the bottom of the screen

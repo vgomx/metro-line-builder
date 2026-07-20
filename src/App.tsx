@@ -53,6 +53,7 @@ function App() {
     setAuthorityName,
     loadMap,
     generateMap,
+    clearMap,
     addCompany,
     renameCompany,
     setCompanyType,
@@ -116,6 +117,9 @@ function App() {
   // Asked once, on the first visit this browser has ever had. Read at mount, before the
   // persistence effect writes anything — a beat later there would be a saved map either way.
   const [showWelcome, setShowWelcome] = useState(() => !hasSavedMap())
+  // Whether there's anything on the canvas worth warning about before replacing it.
+  const hasContent =
+    state.stationOrder.length > 0 || state.lineOrder.length > 0 || state.geoFeatureOrder.length > 0 || state.poiOrder.length > 0
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null)
   const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
   // Set while the Delete key is waiting on an answer about the stations its lines alone serve.
@@ -474,11 +478,19 @@ function App() {
         <WelcomeDialog
           open={showWelcome}
           theme={theme}
+          // On first run the canvas underneath is already blank, so "blank canvas" only has
+          // to get out of the way. Reopened over a finished map it has to mean it — otherwise
+          // the slot that says "empty grid" would quietly do nothing.
+          returning={hasContent}
+          onDismiss={() => setShowWelcome(false)}
           onGenerate={handleWelcomeGenerate}
-          onBlank={() => setShowWelcome(false)}
+          onBlank={() => {
+            setShowWelcome(false)
+            if (hasContent) clearMap()
+          }}
         />
 
-        <LeftToolbar tool={state.tool} onSetTool={handleSetTool} theme={theme} />
+        <LeftToolbar tool={state.tool} onSetTool={handleSetTool} theme={theme} onStartOver={() => setShowWelcome(true)} />
 
         {state.tool === 'add-poi' && (
           <PoiPicker

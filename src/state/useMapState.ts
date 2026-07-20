@@ -113,6 +113,7 @@ type Action =
   | { type: 'redo' }
   | { type: 'loadMap'; snapshot: DataSnapshot }
   | { type: 'generateMap'; snapshot: DataSnapshot }
+  | { type: 'clearMap' }
 
 const MAX_HISTORY = 50
 
@@ -128,6 +129,7 @@ const GEO_FEATURE_LABEL: Record<GeoFeatureType, string> = {
 const RECORDABLE_ACTIONS = new Set<Action['type']>([
   'loadMap',
   'generateMap',
+  'clearMap',
   'setMapName',
   'setAuthorityName',
   'addCompany',
@@ -539,6 +541,12 @@ function reducer(rawState: MapState, action: Action): MapState {
         selectedWaypoint: null,
       }
     }
+
+    // Everything the map holds goes, and a new name comes with it — keeping the old one on
+    // an empty grid reads as a map that lost its contents rather than a map that ended.
+    // History survives on purpose: this is recordable, so it undoes like any other edit.
+    case 'clearMap':
+      return { ...state, ...emptyState, mapName: pickMapName(), past: state.past, future: state.future }
 
     case 'loadMap':
     case 'generateMap':
@@ -1327,6 +1335,7 @@ export function useMapState() {
     return true
   }, [])
   const generateMap = useCallback(() => dispatch({ type: 'generateMap', snapshot: buildRandomMap() }), [])
+  const clearMap = useCallback(() => dispatch({ type: 'clearMap' }), [])
   const addCompany = useCallback(() => dispatch({ type: 'addCompany' }), [])
   const renameCompany = useCallback(
     (companyId: string, name: string) => dispatch({ type: 'renameCompany', companyId, name }),
@@ -1525,6 +1534,7 @@ export function useMapState() {
     setAuthorityName,
     loadMap,
     generateMap,
+    clearMap,
     addCompany,
     renameCompany,
     setCompanyType,

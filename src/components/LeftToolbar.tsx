@@ -10,6 +10,7 @@ interface LeftToolbarProps {
   tool: Tool
   onSetTool: (tool: Tool) => void
   theme: Theme
+  onStartOver: () => void
 }
 
 export const LEFT_TOOLBAR_WIDTH = 52
@@ -27,7 +28,7 @@ const GEO_TOOLS: { tool: Tool; label: string; icon: JSX.Element; key: string }[]
   { tool: 'add-poi', label: 'Point of interest (I)', icon: <PoiIcon />, key: 'i' },
 ]
 
-export function LeftToolbar({ tool, onSetTool, theme }: LeftToolbarProps) {
+export function LeftToolbar({ tool, onSetTool, theme, onStartOver }: LeftToolbarProps) {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
@@ -76,7 +77,7 @@ export function LeftToolbar({ tool, onSetTool, theme }: LeftToolbarProps) {
         <ToolbarSeparator orientation="horizontal" />
       </Toolbar>
 
-      <MoreMenu theme={theme} />
+      <MoreMenu theme={theme} onStartOver={onStartOver} />
     </aside>
   )
 }
