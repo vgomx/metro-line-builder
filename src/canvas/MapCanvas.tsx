@@ -38,6 +38,9 @@ export interface MapCanvasHandle {
   frameLine: (lineId: string) => void
   /** Eases the viewport to frame every line — used after generating a fresh map. */
   fitContent: () => void
+  /** The grid point at the middle of what's on screen. The palette places there when a symbol
+   * is chosen by keyboard, since there's no pointer to say where. */
+  viewportCentre: () => Point
 }
 
 interface MapCanvasProps {
@@ -84,6 +87,8 @@ interface MapCanvasProps {
   onSelectWaypoint: (lineId: string, index: number) => void
   onDeleteWaypoint: (lineId: string, index: number) => void
   onDeleteSelected: () => void
+  /** A stop was double-clicked — the caller selects it and opens its name for editing. */
+  onRenameStationRequest: (stationId: string) => void
   onCheckpoint: () => void
   /** A station has been picked up — fires on every grab, before anything moves. */
   onStationGrab?: () => void
@@ -156,7 +161,10 @@ const LINE_EXIT_HOLD_MS = 700
  * Under half a cell: any further and the station would be created beside the line rather than
  * on it, and promising a junction there would be a lie. */
 const STATION_JOIN_REACH = 14
-const DRAFT_CORNER_RADIUS = 18
+/** Softer than a committed route's 10, but not by as much as it was: at 18 the line visibly
+ * firmed up the moment it stopped being a draft, which read as a glitch rather than as a
+ * decision settling. */
+const DRAFT_CORNER_RADIUS = 12
 const RIVER_DRAFT_STROKE = '#60A5FA'
 const PARK_DRAFT_STROKE = '#4ADE80'
 
@@ -199,6 +207,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onSelectWaypoint,
     onDeleteWaypoint,
     onDeleteSelected,
+    onRenameStationRequest,
     onCheckpoint,
     onStationGrab,
     onLineReroute,
@@ -296,6 +305,19 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         if (box.width === 0 && box.height === 0) return
         frameBounds({ x: box.x, y: box.y, width: box.width, height: box.height })
       },
+      viewportCentre: () => {
+        const rect = svgRef.current?.getBoundingClientRect()
+        if (!rect) return { x: 0, y: 0 }
+        // The middle of the *visible* map, not of the svg: the toolbar and panel cover a good
+        // slice of it, and dropping a landmark under the panel would be dropping it out of
+        // sight.
+        const screenX = viewportInsets.left + (rect.width - viewportInsets.left - viewportInsets.right) / 2
+        const screenY = viewportInsets.top + (rect.height - viewportInsets.top - viewportInsets.bottom) / 2
+        return {
+          x: snapToPoiGrid((screenX - transform.x) / transform.k),
+          y: snapToPoiGrid((screenY - transform.y) / transform.k),
+        }
+      },
       fitContent: () => {
         // Measured from the data rather than from the rendered paths. The paths are only the
         // routes: they know nothing of the station names hanging off them, the river running
@@ -323,7 +345,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         frameBounds({ x: minX, y: minY, width: Math.max(...xs) + margin - minX, height: Math.max(...ys) + margin - minY })
       },
     }),
-    [zoomIn, zoomOut, frameBounds, stationList, poiList, geoFeatureList, lineList, stations],
+    [zoomIn, zoomOut, frameBounds, stationList, poiList, geoFeatureList, lineList, stations, transform, viewportInsets],
   )
 
   useEffect(() => {
@@ -868,6 +890,19 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
    * route. Where it would join, the marker becomes a swell in the line's own colour: the shape
    * a station makes, in the colour of the line about to gain one.
    */
+  /**
+   * The station the pen would join, if the pointer is on one.
+   *
+   * Clicking an existing station while drawing runs the line through it rather than creating
+   * another stop there — the same silent difference the station tool had, and the marker was
+   * as mute about it. Over a station it becomes a ring around that station instead of a point
+   * on the grid: the click won't make anything new, so the marker stops promising a new thing.
+   */
+  const connectTarget =
+    tool === 'draw-line' && cursorWorld
+      ? (stationList.find(station => station.x === cursorWorld.x && station.y === cursorWorld.y) ?? null)
+      : null
+
   const joinTarget = (() => {
     if (tool !== 'add-station' || !cursorWorld) return null
     for (const line of lineList) {
@@ -1137,6 +1172,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             labelPlacement={labelPlacementByStation[station.id]}
             onPointerDown={handleStationPointerDown}
             onClick={handleStationClick}
+            onDoubleClick={s => tool === 'select' && onRenameStationRequest(s.id)}
           />
         ))}
 
@@ -1261,7 +1297,16 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             style={{ pointerEvents: 'none' }}
           >
             <g className="mlb-snap-in">
-              {joinTarget ? (
+              {connectTarget ? (
+                <circle
+                  className="mlb-snap-ring"
+                  r={14 / transform.k}
+                  fill="none"
+                  stroke="var(--interactive-primary)"
+                  strokeWidth={2 / transform.k}
+                  strokeDasharray={`${5 / transform.k} ${3.5 / transform.k}`}
+                />
+              ) : joinTarget ? (
                 <>
                   <circle className="mlb-station-preview" r={13 / transform.k} fill={joinTarget.color} />
                   <circle

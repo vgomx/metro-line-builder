@@ -20,6 +20,7 @@ import {
   ZoomOutIcon,
 } from '../icons'
 import type { Theme } from '../useTheme'
+import { HoverTip } from './HoverTip'
 
 /**
  * Slides a toggle's icon into place when its state changes: up when it comes on, down when it
@@ -145,14 +146,20 @@ export function TopBar({
       <div style={{ width: '1px', height: '24px', background: 'var(--border-subtle)', margin: '0 var(--space-2)' }} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-tight)' }}>
-        <IconButton icon={<UndoIcon />} label="Undo" size="sm" disabled={!canUndo} onClick={onUndo} />
-        <IconButton icon={<RedoIcon />} label="Redo" size="sm" disabled={!canRedo} onClick={onRedo} />
+        <HoverTip label="Undo" placement="bottom">
+          <IconButton icon={<UndoIcon />} label="Undo" size="sm" disabled={!canUndo} onClick={onUndo} />
+        </HoverTip>
+        <HoverTip label="Redo" placement="bottom">
+          <IconButton icon={<RedoIcon />} label="Redo" size="sm" disabled={!canRedo} onClick={onRedo} />
+        </HoverTip>
       </div>
 
       <div style={{ flex: 1 }} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-tight)', marginRight: 'var(--space-2)' }}>
-        <IconButton icon={<ZoomOutIcon />} label="Zoom out" size="sm" onClick={onZoomOut} />
+        <HoverTip label="Zoom out" placement="bottom">
+          <IconButton icon={<ZoomOutIcon />} label="Zoom out" size="sm" onClick={onZoomOut} />
+        </HoverTip>
         <span
           style={{
             fontSize: 'var(--text-xs)',
@@ -164,7 +171,9 @@ export function TopBar({
         >
           {Math.round(zoom * 100)}%
         </span>
-        <IconButton icon={<ZoomInIcon />} label="Zoom in" size="sm" onClick={onZoomIn} />
+        <HoverTip label="Zoom in" placement="bottom">
+          <IconButton icon={<ZoomInIcon />} label="Zoom in" size="sm" onClick={onZoomIn} />
+        </HoverTip>
       </div>
 
       <div style={{ width: '1px', height: '24px', background: 'var(--border-subtle)', margin: '0 var(--space-2)' }} />
@@ -173,52 +182,62 @@ export function TopBar({
           against each other, their active backgrounds met and read as one long pressed slab
           rather than as three switches, two of which happened to be on. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-tight)' }}>
-        <IconButton
-          icon={
-            <ToggleIcon on={showGrid}>
-              <GridIcon />
-            </ToggleIcon>
-          }
-          label="Toggle grid"
-          size="sm"
-          active={showGrid}
-          onClick={onToggleGrid}
-        />
-        <IconButton
-          icon={
-            <ToggleIcon on={showTrains}>
-              <TrainIcon />
-            </ToggleIcon>
-          }
-          label="Toggle trains"
-          size="sm"
-          active={showTrains}
-          onClick={onToggleTrains}
-        />
-        <IconButton
-          icon={
-            <ToggleIcon on={showPanel}>
-              <PanelIcon />
-            </ToggleIcon>
-          }
-          label={showPanel ? 'Hide side panel' : 'Show side panel'}
-          size="sm"
-          active={showPanel}
-          onClick={onTogglePanel}
-        />
-        <IconButton
-          icon={<ToggleIcon on={soundEnabled}>{soundEnabled ? <SoundOnIcon /> : <SoundOffIcon />}</ToggleIcon>}
-          label={soundEnabled ? 'Mute interface sounds' : 'Unmute interface sounds'}
-          size="sm"
-          active={soundEnabled}
-          onClick={onToggleSound}
-        />
-        <IconButton
-          icon={<ToggleIcon on={theme === 'dark'}>{theme === 'dark' ? <SunIcon /> : <MoonIcon />}</ToggleIcon>}
-          label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-          size="sm"
-          onClick={onToggleTheme}
-        />
+        <HoverTip label="Toggle grid" placement="bottom">
+          <IconButton
+            icon={
+              <ToggleIcon on={showGrid}>
+                <GridIcon />
+              </ToggleIcon>
+            }
+            label="Toggle grid"
+            size="sm"
+            active={showGrid}
+            onClick={onToggleGrid}
+          />
+        </HoverTip>
+        <HoverTip label="Toggle trains" placement="bottom">
+          <IconButton
+            icon={
+              <ToggleIcon on={showTrains}>
+                <TrainIcon />
+              </ToggleIcon>
+            }
+            label="Toggle trains"
+            size="sm"
+            active={showTrains}
+            onClick={onToggleTrains}
+          />
+        </HoverTip>
+        <HoverTip label={showPanel ? 'Hide side panel' : 'Show side panel'} placement="bottom">
+          <IconButton
+            icon={
+              <ToggleIcon on={showPanel}>
+                <PanelIcon />
+              </ToggleIcon>
+            }
+            label={showPanel ? 'Hide side panel' : 'Show side panel'}
+            size="sm"
+            active={showPanel}
+            onClick={onTogglePanel}
+          />
+        </HoverTip>
+        <HoverTip label={soundEnabled ? 'Mute interface sounds' : 'Unmute interface sounds'} placement="bottom">
+          <IconButton
+            icon={<ToggleIcon on={soundEnabled}>{soundEnabled ? <SoundOnIcon /> : <SoundOffIcon />}</ToggleIcon>}
+            label={soundEnabled ? 'Mute interface sounds' : 'Unmute interface sounds'}
+            size="sm"
+            active={soundEnabled}
+            onClick={onToggleSound}
+          />
+        </HoverTip>
+        <HoverTip label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} placement="bottom">
+          <IconButton
+            icon={<ToggleIcon on={theme === 'dark'}>{theme === 'dark' ? <SunIcon /> : <MoonIcon />}</ToggleIcon>}
+            label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            size="sm"
+            onClick={onToggleTheme}
+          />
+        </HoverTip>
       </div>
 
       <div style={{ width: 'var(--space-2)' }} />

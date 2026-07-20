@@ -534,3 +534,45 @@ body {
   visibility: hidden;
   transition: transform 260ms cubic-bezier(0.55, 0, 0.9, 0.35), visibility 0s linear 260ms;
 }
+
+/* The app's own tooltip arriving: a small nudge out from the control it belongs to, so it
+   reads as coming from that button rather than fading in over the map. The nudge is on an
+   inner element — the outer one's transform is busy centring the tip. */
+@keyframes mlb-tip-right {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes mlb-tip-down {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mlb-tip-right {
+  animation: mlb-tip-right 120ms ease both;
+}
+
+.mlb-tip-down {
+  animation: mlb-tip-down 120ms ease both;
+}
+
+/* The right panel's tab strip. The design system sets each tab's padding inline, sized for a
+   wider column than this panel has, and an inline style outranks a class — hence the
+   important. Without it four tabs still overflow 270px and the last one scrolls out of view,
+   which is a tab nobody can find. */
+.mlb-tabs button {
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}

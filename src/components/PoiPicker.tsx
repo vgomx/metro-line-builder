@@ -7,6 +7,8 @@ import { POI_ICON_SIZE } from '../canvas/PoiNode'
 interface PoiPickerProps {
   /** The canvas's current zoom, so the dragged tile can be the size the landmark will be. */
   scale: number
+  /** Place this symbol without a pointer — the keyboard's way onto the map. */
+  onPlaceByKeyboard: (hexcode: string) => void
 }
 
 /**
@@ -20,7 +22,7 @@ interface PoiPickerProps {
  * is zoomed a long way out, where the landmark really would be a speck. */
 const MIN_DRAG_TILE = 18
 
-export function PoiPicker({ scale }: PoiPickerProps) {
+export function PoiPicker({ scale, onPlaceByKeyboard }: PoiPickerProps) {
   const [query, setQuery] = useState('')
   const [draggingIcon, setDraggingIcon] = useState<string | null>(null)
   const groups = useMemo(() => openMojiBySubgroup(), [])
@@ -31,7 +33,7 @@ export function PoiPicker({ scale }: PoiPickerProps) {
   // than state because it must exist before setDragImage runs, and a render is too late.
   const ghostRef = useRef<HTMLDivElement | null>(null)
 
-  const startDrag = (e: ReactDragEvent<HTMLDivElement>, hexcode: string, url: string | undefined) => {
+  const startDrag = (e: ReactDragEvent<HTMLElement>, hexcode: string, url: string | undefined) => {
     e.dataTransfer.setData(POI_DRAG_MIME, hexcode)
     e.dataTransfer.effectAllowed = 'copy'
     setDraggingIcon(hexcode)
@@ -99,7 +101,7 @@ export function PoiPicker({ scale }: PoiPickerProps) {
           Point of interest
         </div>
         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
-          Drag a symbol onto the map to place it.
+          Drag a symbol onto the map, or press Enter to drop one in the middle.
         </div>
         <Input size="sm" placeholder="Search…" value={query} onChange={e => setQuery(e.target.value)} />
       </div>
@@ -126,22 +128,33 @@ export function PoiPicker({ scale }: PoiPickerProps) {
               {group.icons.map(entry => {
                 const url = openMojiUrl(entry.hexcode)
                 return (
-                  <div
+                  // A button rather than a div, so the palette is reachable by Tab and each
+                  // symbol can be fired with Enter or Space. Dragging still works from a
+                  // button; what it couldn't do as a div was be focused at all, which left
+                  // placing a landmark the one thing in the app a mouse was required for.
+                  //
+                  // Only keyboard activation places: a click carries detail >= 1, a keyboard
+                  // Enter carries 0. So a mouse user's click still does nothing, and dragging
+                  // remains the way a pointer places a symbol.
+                  <button
+                    type="button"
                     key={entry.hexcode}
                     className="mlb-poi-swatch"
                     draggable
                     title={entry.name}
-                    role="img"
-                    aria-label={entry.name}
+                    aria-label={`${entry.name} — press Enter to place`}
                     data-dragging={entry.hexcode === draggingIcon}
                     onDragStart={e => startDrag(e, entry.hexcode, url)}
                     onDragEnd={endDrag}
+                    onClick={e => {
+                      if (e.detail === 0) onPlaceByKeyboard(entry.hexcode)
+                    }}
                   >
                     {/* No draggable={false} on the img: the pointer usually goes down on the
                         artwork rather than the padding around it, and opting the img out would
                         kill the drag before it started. */}
                     {url && <img src={url} alt="" width={34} height={34} />}
-                  </div>
+                  </button>
                 )
               })}
             </div>

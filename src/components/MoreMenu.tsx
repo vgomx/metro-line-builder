@@ -5,6 +5,7 @@ import logoLightUrl from 'metro-ds/assets/logo-mark.svg'
 import logoDarkUrl from 'metro-ds/assets/logo-mark-white.svg'
 import { ChevronDownIcon, MoreIcon } from '../icons'
 import { LEGAL_NOTICES } from '../legalNotices'
+import { HoverTip } from './HoverTip'
 import type { Theme } from '../useTheme'
 
 const APP_VERSION = '0.1.0'
@@ -65,7 +66,9 @@ export function MoreMenu({ theme }: MoreMenuProps) {
 
   return (
     <div ref={menuRef} style={{ position: 'relative' }}>
-      <IconButton icon={<MoreIcon />} label="More" onClick={() => setMenuOpen(o => !o)} />
+      <HoverTip label="More">
+        <IconButton icon={<MoreIcon />} label="More" onClick={() => setMenuOpen(o => !o)} />
+      </HoverTip>
 
       {menuOpen && (
         <div
