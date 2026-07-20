@@ -309,7 +309,7 @@ function App() {
         canRedo={canRedo}
       />
 
-      <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+      <div style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <main style={{ position: 'absolute', inset: 0 }}>
           <MapCanvas
             ref={mapCanvasRef}
@@ -492,10 +492,19 @@ function App() {
             zIndex: 10,
             }}
         >
-          {/* The authority mark below stays whatever the panel does: it reads as part of
-              the map rather than as chrome on top of it, and putting the panel away is a
-              request to see the map. */}
-          {showPanel && (
+          {/* Kept mounted whether it's shown or not, because something has to be on screen to
+              slide off it — a panel that unmounts can only vanish. It travels its own width
+              plus the margin it floats by, which puts it fully past the right edge.
+
+              The authority mark below doesn't move with it: it reads as part of the map
+              rather than as chrome on top, and putting the panel away is a request to see the
+              map. */}
+          <div
+            className="mlb-panel-slide"
+            data-open={showPanel}
+            aria-hidden={!showPanel}
+            style={{ flex: 1, minHeight: 0, display: 'flex', pointerEvents: showPanel ? 'auto' : 'none' }}
+          >
             <RightPanel
               mapName={state.mapName}
               authorityName={state.authorityName}
@@ -552,7 +561,7 @@ function App() {
               onSetCompanySymbol={withSound('toggle', setCompanySymbol)}
               onDeleteCompany={withSound('remove', deleteCompany)}
             />
-          )}
+          </div>
 
           <CanvasLegend mapName={state.mapName} authorityName={state.authorityName} />
         </div>
