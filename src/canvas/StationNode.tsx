@@ -180,7 +180,11 @@ export function StationNode({
           x={labelX}
           y={labelY - ((lines.length - 1) * LABEL_FONT_SIZE) / 2}
           textAnchor={labelPlacement.anchor}
-          dominantBaseline="middle"
+          // "central" rather than "middle": SVG's `middle` baseline is halfway between the
+          // alphabetic baseline and the x-height, which ignores cap height entirely and left
+          // every label sitting about 1.3 units — a sixth of its own size — above the centre
+          // of its card. `central` is the middle of the em box, which is what centred means.
+          dominantBaseline="central"
           fontSize={LABEL_FONT_SIZE}
           fontFamily="'Barlow Condensed', system-ui, sans-serif"
           fontWeight={isMain ? 700 : 600}

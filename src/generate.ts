@@ -3,6 +3,7 @@ import type { GeoFeature, Line, LineNode, Point, PointOfInterest, Station } from
 import { nextLineColor } from './lineColors'
 import { GRID_SIZE, POI_GRID_SIZE } from './grid'
 import { buildVertices } from './canvas/routing'
+import { distanceToOutline, insidePolygon } from './canvas/polygon'
 import { pickLineName, pickMapName, pickStationName } from './names'
 
 const MIN_X = 200
@@ -106,28 +107,6 @@ function distanceToSegment(a: Point, b: Point, p: Point): number {
   if (dx === 0 && dy === 0) return Math.hypot(p.x - a.x, p.y - a.y)
   const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)))
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
-}
-
-/** Ray casting: is the point inside this polygon? Used against a park's own outline rather
- * than its bounding box — an irregular shape fills maybe half its box, so testing the box
- * rejected placements that were nowhere near the green and left a third of maps parkless. */
-function insidePolygon(polygon: Point[], p: Point): boolean {
-  let inside = false
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const a = polygon[i]
-    const b = polygon[j]
-    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside
-  }
-  return inside
-}
-
-/** How far a point is from a polygon's outline, ignoring which side it's on. */
-function distanceToOutline(polygon: Point[], p: Point): number {
-  let best = Infinity
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    best = Math.min(best, distanceToSegment(polygon[j], polygon[i], p))
-  }
-  return best
 }
 
 /** How far a point is from the nearest of a line's routed segments — the drawn path, elbows
