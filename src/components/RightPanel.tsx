@@ -6,6 +6,7 @@ import { StationsPanel } from './StationsPanel'
 import { GeoPanel } from './GeoPanel'
 import { CompaniesPanel } from './CompaniesPanel'
 import { Inspector } from './Inspector'
+import { HoverTip } from './HoverTip'
 import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
 
 interface RightPanelProps {
@@ -59,7 +60,14 @@ interface RightPanelProps {
   onDeleteCompany: (companyId: string) => void
 }
 
-const TABS = ['Lines', 'Stations', 'Geography', 'Companies', 'Properties']
+/**
+ * Properties isn't among them. Five tabs measured 422px inside a 270px strip, so two of them
+ * were always scrolled out of sight — and Properties was the one that least needed to be
+ * there: it is a detail view, reached by selecting something rather than by browsing to it,
+ * and the subheader's back arrow is how you leave. The four that remain are the four lists,
+ * which is a coherent thing for a tab strip to be.
+ */
+const TABS = ['Lines', 'Stations', 'Geography', 'Companies']
 
 export const RIGHT_PANEL_WIDTH = 272
 
@@ -172,7 +180,9 @@ export function RightPanel({
         pointerEvents: 'auto',
       }}
     >
-      <div style={{ borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+      {/* Tighter than the design system's own padding, which is sized for a wider column than
+          this panel has. Even four tabs overflow at 16px a side. */}
+      <div className="mlb-tabs" style={{ borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
         <Tabs tabs={TABS} activeTab={tab} onChange={setTab} />
       </div>
 
@@ -193,12 +203,9 @@ export function RightPanel({
         }}
       >
         {showBack && (
-          <IconButton
-            icon={<BackIcon />}
-            label={`Back to ${detail.from}`}
-            size="sm"
-            onClick={() => setTab(detail.from)}
-          />
+          <HoverTip label={`Back to ${detail.from}`} placement="bottom">
+            <IconButton icon={<BackIcon />} label={`Back to ${detail.from}`} size="sm" onClick={() => setTab(detail.from)} />
+          </HoverTip>
         )}
         <span
           style={{

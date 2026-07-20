@@ -567,3 +567,12 @@ body {
 .mlb-tip-down {
   animation: mlb-tip-down 120ms ease both;
 }
+
+/* The right panel's tab strip. The design system sets each tab's padding inline, sized for a
+   wider column than this panel has, and an inline style outranks a class — hence the
+   important. Without it four tabs still overflow 270px and the last one scrolls out of view,
+   which is a tab nobody can find. */
+.mlb-tabs button {
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}

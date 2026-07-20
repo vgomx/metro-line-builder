@@ -470,7 +470,17 @@ function App() {
 
         <LeftToolbar tool={state.tool} onSetTool={handleSetTool} theme={theme} />
 
-        {state.tool === 'add-poi' && <PoiPicker scale={zoom} />}
+        {state.tool === 'add-poi' && (
+          <PoiPicker
+            scale={zoom}
+            onPlaceByKeyboard={icon => {
+              const centre = mapCanvasRef.current?.viewportCentre()
+              if (!centre) return
+              playSound('drop')
+              addPoi(centre.x, centre.y, icon, openMojiLabel(icon))
+            }}
+          />
+        )}
 
         {/* Right-hand column: the panel flexes to fill it, leaving the authority mark
             seated beneath. Click-through so the gap between them, and the canvas showing

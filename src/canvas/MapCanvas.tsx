@@ -38,6 +38,9 @@ export interface MapCanvasHandle {
   frameLine: (lineId: string) => void
   /** Eases the viewport to frame every line — used after generating a fresh map. */
   fitContent: () => void
+  /** The grid point at the middle of what's on screen. The palette places there when a symbol
+   * is chosen by keyboard, since there's no pointer to say where. */
+  viewportCentre: () => Point
 }
 
 interface MapCanvasProps {
@@ -296,6 +299,19 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         if (box.width === 0 && box.height === 0) return
         frameBounds({ x: box.x, y: box.y, width: box.width, height: box.height })
       },
+      viewportCentre: () => {
+        const rect = svgRef.current?.getBoundingClientRect()
+        if (!rect) return { x: 0, y: 0 }
+        // The middle of the *visible* map, not of the svg: the toolbar and panel cover a good
+        // slice of it, and dropping a landmark under the panel would be dropping it out of
+        // sight.
+        const screenX = viewportInsets.left + (rect.width - viewportInsets.left - viewportInsets.right) / 2
+        const screenY = viewportInsets.top + (rect.height - viewportInsets.top - viewportInsets.bottom) / 2
+        return {
+          x: snapToPoiGrid((screenX - transform.x) / transform.k),
+          y: snapToPoiGrid((screenY - transform.y) / transform.k),
+        }
+      },
       fitContent: () => {
         // Measured from the data rather than from the rendered paths. The paths are only the
         // routes: they know nothing of the station names hanging off them, the river running
@@ -323,7 +339,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         frameBounds({ x: minX, y: minY, width: Math.max(...xs) + margin - minX, height: Math.max(...ys) + margin - minY })
       },
     }),
-    [zoomIn, zoomOut, frameBounds, stationList, poiList, geoFeatureList, lineList, stations],
+    [zoomIn, zoomOut, frameBounds, stationList, poiList, geoFeatureList, lineList, stations, transform, viewportInsets],
   )
 
   useEffect(() => {

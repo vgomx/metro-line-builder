@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 
 interface HoverTipProps {
   /** What the control is. A trailing "(V)" is pulled out and drawn as a key. */
   label: string
   /** Which side of the control the tip sits on. */
   placement?: 'right' | 'bottom'
+  /** Merged into the wrapper, so a tipped control can still take part in a flex row. */
+  style?: CSSProperties
   children: ReactNode
 }
 
@@ -35,7 +37,7 @@ function splitShortcut(label: string): { name: string; key: string | null } {
  * React puts it back whenever the label changes; the accessible name is unaffected, since
  * that comes from aria-label, which stays.
  */
-export function HoverTip({ label, placement = 'right', children }: HoverTipProps) {
+export function HoverTip({ label, placement = 'right', style, children }: HoverTipProps) {
   const [visible, setVisible] = useState(false)
   const wrapper = useRef<HTMLSpanElement>(null)
   const timer = useRef<number | undefined>(undefined)
@@ -59,7 +61,7 @@ export function HoverTip({ label, placement = 'right', children }: HoverTipProps
   return (
     <span
       ref={wrapper}
-      style={{ position: 'relative', display: 'inline-flex' }}
+      style={{ position: 'relative', display: 'inline-flex', ...style }}
       onMouseEnter={show}
       onMouseLeave={hide}
       // Pressing the control is an answer in itself: the tip has done its job and gets out of
