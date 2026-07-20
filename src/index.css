@@ -699,3 +699,24 @@ body {
     display: none !important;
   }
 }
+
+/* Rows in the export menu: a name and a line explaining what you'd get. Wider than a plain
+   menu item because the explanation is the point — three file extensions don't tell you
+   which one you want, and the wrong pick is only discovered after the download. */
+.mlb-menu-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 7px 10px;
+  text-align: left;
+  font-family: var(--font-sans);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.mlb-menu-item:hover {
+  background: var(--bg-subtle);
+}

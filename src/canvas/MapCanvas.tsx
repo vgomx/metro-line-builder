@@ -41,6 +41,8 @@ export interface MapCanvasHandle {
   /** The grid point at the middle of what's on screen. The palette places there when a symbol
    * is chosen by keyboard, since there's no pointer to say where. */
   viewportCentre: () => Point
+  /** The canvas element itself, for the image exporter to clone and resolve. */
+  svgElement: () => SVGSVGElement | null
 }
 
 interface MapCanvasProps {
@@ -295,6 +297,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     () => ({
       zoomIn,
       zoomOut,
+      svgElement: () => svgRef.current,
       frameLine: (lineId: string) => {
         // The line's rendered stroke already lives in world space (the pan/zoom transform
         // is on an ancestor group), so its own bbox is the world box to frame.
@@ -982,7 +985,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         </filter>
       </defs>
       <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.k})`}>
+        {/* The surface that catches a click on empty space. Marked as scaffolding for the
+            image exporter, which would otherwise measure the map as 20000 units across. */}
         <rect
+          data-export="exclude"
           x={-10000}
           y={-10000}
           width={20000}
@@ -992,7 +998,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         />
 
         {showGrid && (
-          <g stroke="var(--border-default)" strokeWidth={1 / transform.k} opacity={0.4}>
+          <g data-export="exclude" stroke="var(--border-default)" strokeWidth={1 / transform.k} opacity={0.4}>
             {gridLines}
           </g>
         )}
@@ -1163,6 +1169,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           />
         )}
 
+        {/* Trains are a property of the live map rather than of the map — a still image of one
+            frozen between stops reads as a mistake. */}
         {showTrains &&
           lineList
             .filter(line => line.visible && stationIdsOfLine(line).length >= 2)

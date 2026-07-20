@@ -25,6 +25,8 @@ import { DeleteStationsDialog } from './components/DeleteStationsDialog'
 import { CanvasLegend } from './components/CanvasLegend'
 import { LineAnnouncer } from './components/LineAnnouncer'
 import { exportMapAsJson, pickMapFile } from './export'
+import { exportMapAsImage } from './exportImage'
+import type { ImageFormat } from './exportImage'
 import { exclusiveStationIds, stationIdsOfLine } from './canvas/lineNodes'
 import { geoTypeOfTool, MIN_GEO_POINTS } from './geoDraft'
 import { useTheme } from './useTheme'
@@ -130,6 +132,7 @@ function App() {
   // can't survive into a later visit to the palette and place something unasked.
   const [armedPoi, setArmedPoi] = useState<string | null>(null)
   const [openDialog, setOpenDialog] = useState(false)
+  const [exporting, setExporting] = useState(false)
   // Read fresh each time the dialog opens rather than kept in step continuously: it's a
   // dozen deserialised maps, and nothing outside the dialog looks at it.
   const [library, setLibrary] = useState<LibrarySummary[]>([])
@@ -193,6 +196,35 @@ function App() {
     const timer = window.setTimeout(() => rememberMap(mapId.current!, snapshot), 800)
     return () => window.clearTimeout(timer)
   }, [snapshot])
+
+  /**
+   * Draw the map as a picture.
+   *
+   * The selection and the active tool are cleared first, and two frames are allowed to pass,
+   * because both put things on the canvas that belong to the editor rather than to the map —
+   * a selection ring, a half-drawn line, the placement marker. Clearing them is cheaper and
+   * more honest than teaching the exporter to recognise each one.
+   */
+  const handleExportImage = async (format: ImageFormat) => {
+    if (exporting) return
+    handleClearSelection()
+    handleSetTool('select')
+    setExporting(true)
+    try {
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      const svg = mapCanvasRef.current?.svgElement()
+      if (!svg) throw new Error('The canvas has gone missing.')
+      await exportMapAsImage(svg, state.mapName, format)
+      setToast({ message: `Saved as ${format.toUpperCase()}.`, variant: 'success' })
+    } catch (error) {
+      setToast({
+        message: error instanceof Error ? error.message : "The map couldn't be exported.",
+        variant: 'error',
+      })
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const handleSurprise = () => {
     playSound('generate')
@@ -357,6 +389,8 @@ function App() {
           setOpenDialog(true)
         }}
         onExport={() => exportMapAsJson(snapshot)}
+        onExportImage={handleExportImage}
+        exporting={exporting}
         onSurprise={handleSurprise}
         onUndo={undo}
         onRedo={redo}
