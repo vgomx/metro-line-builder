@@ -35,8 +35,47 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
   })
 }
 
+/** Long enough that the splash reads as a thing that happened rather than a flash of
+ * something. On a warm cache the app is ready well inside this. */
+const SPLASH_MIN_MS = 480
+/** How long to hold for the webfont before giving up on it. Barlow arrives from a CDN, so on
+ * a bad connection it may not arrive at all, and a splash that waits forever is worse than
+ * labels that restyle themselves a moment late. */
+const FONT_WAIT_CAP_MS = 1400
+/** Matches the fade in the splash's own stylesheet. */
+const SPLASH_FADE_MS = 320
+
+/**
+ * Takes the splash away once there's something worth showing underneath.
+ *
+ * It waits on the webfont as well as on React, because the map is mostly labels: letting it
+ * through early means a canvas full of fallback text that reflows to Barlow a moment later,
+ * which is precisely the flicker a splash is for. The wait is capped, and every path ends
+ * with the element gone — a splash that outlives its welcome covers the whole app.
+ */
+function dismissSplash() {
+  const splash = document.getElementById('splash')
+  if (!splash) return
+
+  const started = performance.now()
+  const fonts = document.fonts
+    ? Promise.race([document.fonts.ready, new Promise(resolve => setTimeout(resolve, FONT_WAIT_CAP_MS))])
+    : Promise.resolve()
+
+  void fonts.then(() => {
+    const remaining = Math.max(0, SPLASH_MIN_MS - (performance.now() - started))
+    setTimeout(() => {
+      splash.dataset.ready = 'true'
+      setTimeout(() => splash.remove(), SPLASH_FADE_MS)
+    }, remaining)
+  })
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
   </StrictMode>,
 )
+
+// After render, so the app is mounted and laying out behind the splash while it's still up.
+dismissSplash()

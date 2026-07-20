@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { Station } from '../types'
 import type { LabelPlacement } from './labelPlacement'
-import { labelGeometry, LABEL_FONT_SIZE } from './labelPlacement'
+import { BASELINE_CENTRE, labelGeometry, LABEL_FONT_SIZE } from './labelPlacement'
 
 interface StationNodeProps {
   station: Station
@@ -178,13 +178,8 @@ export function StationNode({
             sized for exactly these lines. */}
         <text
           x={labelX}
-          y={labelY - ((lines.length - 1) * LABEL_FONT_SIZE) / 2}
+          y={labelY - ((lines.length - 1) * LABEL_FONT_SIZE) / 2 + LABEL_FONT_SIZE * BASELINE_CENTRE}
           textAnchor={labelPlacement.anchor}
-          // "central" rather than "middle": SVG's `middle` baseline is halfway between the
-          // alphabetic baseline and the x-height, which ignores cap height entirely and left
-          // every label sitting about 1.3 units — a sixth of its own size — above the centre
-          // of its card. `central` is the middle of the em box, which is what centred means.
-          dominantBaseline="central"
           fontSize={LABEL_FONT_SIZE}
           fontFamily="'Barlow Condensed', system-ui, sans-serif"
           fontWeight={isMain ? 700 : 600}
