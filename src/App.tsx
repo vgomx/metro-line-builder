@@ -107,6 +107,7 @@ function App() {
     deleteLine,
     deleteStation,
     renameLine,
+    reorderLine,
     setLineNumber,
     recolorLine,
     toggleLineVisibility,
@@ -676,6 +677,7 @@ function App() {
               onSelectStation={withSound('tool', (id: string) => handleSetSelection([id], [], []))}
               onSelectGeoFeature={withSound('tool', (id: string) => handleSetSelection([], [], [id]))}
               onSelectCompany={handleSelectCompany}
+              onReorderLine={reorderLine}
               onToggleLineVisibility={withSound('toggle', toggleLineVisibility)}
               onAddLine={() => handleSetTool('draw-line')}
               onAddRiver={() => handleSetTool('draw-river')}

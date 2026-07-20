@@ -109,6 +109,7 @@ type Action =
   | { type: 'deleteLine'; lineId: string; withStations: boolean }
   | { type: 'deleteStation'; stationId: string }
   | { type: 'renameLine'; lineId: string; name: string }
+  | { type: 'reorderLine'; lineId: string; toIndex: number }
   | { type: 'setLineNumber'; lineId: string; number: number }
   | { type: 'recolorLine'; lineId: string; color: string }
   | { type: 'toggleLineVisibility'; lineId: string }
@@ -158,6 +159,7 @@ const RECORDABLE_ACTIONS = new Set<Action['type']>([
   'deletePoi',
   'renameGeoFeature',
   'renameLine',
+  'reorderLine',
   'setLineNumber',
   'recolorLine',
   'toggleLineVisibility',
@@ -1196,6 +1198,16 @@ function reducer(rawState: MapState, action: Action): MapState {
       }
     }
 
+    case 'reorderLine': {
+      const from = state.lineOrder.indexOf(action.lineId)
+      if (from < 0) return state
+      const to = Math.max(0, Math.min(state.lineOrder.length - 1, action.toIndex))
+      if (from === to) return state
+      const lineOrder = [...state.lineOrder]
+      lineOrder.splice(to, 0, ...lineOrder.splice(from, 1))
+      return { ...state, lineOrder }
+    }
+
     case 'renameLine': {
       const line = state.lines[action.lineId]
       if (!line) return state
@@ -1508,6 +1520,10 @@ export function useMapState() {
     [],
   )
   const deleteStation = useCallback((stationId: string) => dispatch({ type: 'deleteStation', stationId }), [])
+  const reorderLine = useCallback(
+    (lineId: string, toIndex: number) => dispatch({ type: 'reorderLine', lineId, toIndex }),
+    [],
+  )
   const renameLine = useCallback((lineId: string, name: string) => dispatch({ type: 'renameLine', lineId, name }), [])
   const setLineNumber = useCallback((lineId: string, number: number) => dispatch({ type: 'setLineNumber', lineId, number }), [])
   const recolorLine = useCallback((lineId: string, color: string) => dispatch({ type: 'recolorLine', lineId, color }), [])
@@ -1649,6 +1665,7 @@ export function useMapState() {
     deleteLine,
     deleteStation,
     renameLine,
+    reorderLine,
     setLineNumber,
     recolorLine,
     toggleLineVisibility,
