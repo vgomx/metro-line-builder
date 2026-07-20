@@ -110,7 +110,14 @@ function App() {
   const [zoom, setZoom] = useState(1)
   const [showGrid, setShowGrid] = useState(true)
   const [showTrains, setShowTrains] = useState(false)
-  const [showPanel, setShowPanel] = useState(true)
+  // Open by default, except where it would cover half the map: the rail and the panel come
+  // to 372px, which is most of a 768px tablet held in portrait. The toggle in the top bar is
+  // the way back. The threshold is the same 900px the tablet styles use — a laptop window at
+  // 1000px has room for both and shouldn't be treated as a tablet.
+  const [showPanel, setShowPanel] = useState(() => typeof window === 'undefined' || window.innerWidth >= 900)
+  // The palette symbol a finger is carrying. Cleared whenever the tool is put down, so it
+  // can't survive into a later visit to the palette and place something unasked.
+  const [armedPoi, setArmedPoi] = useState<string | null>(null)
   // Bumped each time a rename is asked for. A counter rather than a boolean because asking
   // twice for the same station has to focus the field twice.
   const [renameToken, setRenameToken] = useState(0)
@@ -227,6 +234,8 @@ function App() {
     (tool: Tool) => {
       playSound('tool')
       setTool(tool)
+      // Putting the landmark tool down puts the symbol down with it.
+      if (tool !== 'add-poi') setArmedPoi(null)
     },
     [setTool],
   )
@@ -347,6 +356,7 @@ function App() {
             onCancelDraftLine={cancelDraftLine}
             onAddGeoPoint={withSound('node', addGeoPoint)}
             onAddPoi={(x: number, y: number, icon: string) => addPoi(x, y, icon, openMojiLabel(icon))}
+            armedPoiIcon={armedPoi}
             onPoiLand={() => playSound('drop')}
             onMovePois={movePois}
             onReturnToSelect={() => handleSetTool('select')}
@@ -495,6 +505,8 @@ function App() {
         {state.tool === 'add-poi' && (
           <PoiPicker
             scale={zoom}
+            armedIcon={armedPoi}
+            onArm={setArmedPoi}
             onPlaceByKeyboard={icon => {
               const centre = mapCanvasRef.current?.viewportCentre()
               if (!centre) return

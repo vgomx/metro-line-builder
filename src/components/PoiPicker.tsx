@@ -1,10 +1,15 @@
 import { useMemo, useRef, useState } from 'react'
+import { useCoarsePointer } from '../useCoarsePointer'
 import type { DragEvent as ReactDragEvent } from 'react'
 import { Input } from 'metro-ds'
 import { openMojiBySubgroup, openMojiUrl, POI_DRAG_MIME, SUBGROUP_LABELS } from '../openmoji'
 import { POI_ICON_SIZE } from '../canvas/PoiNode'
 
 interface PoiPickerProps {
+  /** The symbol currently waiting to be tapped onto the map (touch only), or null. */
+  armedIcon: string | null
+  /** Pick a symbol up, or put it back down by picking the same one again. */
+  onArm: (hexcode: string | null) => void
   /** The canvas's current zoom, so the dragged tile can be the size the landmark will be. */
   scale: number
   /** Place this symbol without a pointer — the keyboard's way onto the map. */
@@ -22,9 +27,10 @@ interface PoiPickerProps {
  * is zoomed a long way out, where the landmark really would be a speck. */
 const MIN_DRAG_TILE = 18
 
-export function PoiPicker({ scale, onPlaceByKeyboard }: PoiPickerProps) {
+export function PoiPicker({ scale, onPlaceByKeyboard, armedIcon, onArm }: PoiPickerProps) {
   const [query, setQuery] = useState('')
   const [draggingIcon, setDraggingIcon] = useState<string | null>(null)
+  const coarse = useCoarsePointer()
   const groups = useMemo(() => openMojiBySubgroup(), [])
 
   // The tile the browser snapshots as the drag image. It has to be a real, rendered element
@@ -78,6 +84,7 @@ export function PoiPicker({ scale, onPlaceByKeyboard }: PoiPickerProps) {
 
   return (
     <div
+      className="mlb-poi-picker"
       style={{
         position: 'absolute',
         top: 'var(--space-3)',
@@ -101,7 +108,11 @@ export function PoiPicker({ scale, onPlaceByKeyboard }: PoiPickerProps) {
           Point of interest
         </div>
         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
-          Drag a symbol onto the map, or press Enter to drop one in the middle.
+          {coarse
+            ? armedIcon
+              ? 'Now tap the map. Tap the symbol again to put it back.'
+              : 'Tap a symbol, then tap where it goes.'
+            : 'Drag a symbol onto the map, or press Enter to drop one in the middle.'}
         </div>
         <Input size="sm" placeholder="Search…" value={query} onChange={e => setQuery(e.target.value)} />
       </div>
@@ -140,14 +151,19 @@ export function PoiPicker({ scale, onPlaceByKeyboard }: PoiPickerProps) {
                     type="button"
                     key={entry.hexcode}
                     className="mlb-poi-swatch"
-                    draggable
+                    draggable={!coarse}
                     title={entry.name}
-                    aria-label={`${entry.name} — press Enter to place`}
+                    aria-label={coarse ? `${entry.name} — tap to pick up` : `${entry.name} — press Enter to place`}
                     data-dragging={entry.hexcode === draggingIcon}
-                    onDragStart={e => startDrag(e, entry.hexcode, url)}
-                    onDragEnd={endDrag}
+                    data-armed={entry.hexcode === armedIcon}
+                    onDragStart={coarse ? undefined : e => startDrag(e, entry.hexcode, url)}
+                    onDragEnd={coarse ? undefined : endDrag}
                     onClick={e => {
-                      if (e.detail === 0) onPlaceByKeyboard(entry.hexcode)
+                      // On touch there is no drag to start, so the tap picks the symbol up and
+                      // the next tap on the map puts it down. Tapping the armed one again is
+                      // how you change your mind without placing anything.
+                      if (coarse) onArm(entry.hexcode === armedIcon ? null : entry.hexcode)
+                      else if (e.detail === 0) onPlaceByKeyboard(entry.hexcode)
                     }}
                   >
                     {/* No draggable={false} on the img: the pointer usually goes down on the

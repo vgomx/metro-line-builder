@@ -95,6 +95,10 @@ function widestWordPx(words: string[]): number {
  * as neutral, translucent chrome until hovered, when it takes on the app's
  * brand color like a real logo would. */
 function AuthorityMark({ name }: { name: string }) {
+  // A finger never hovers, so on a tablet this sat at 55% in muted grey forever and the
+  // designed state was simply unreachable. The class lets the touch block hand it the
+  // hovered opacity permanently — it's a mark on the map, not a control, so nothing is lost
+  // by it just being legible.
   const [hovered, setHovered] = useState(false)
   const accent = hovered ? 'var(--interactive-primary)' : 'var(--text-secondary)'
   const words = useMemo(() => `${name} Transit Authority`.split(/\s+/).filter(Boolean), [name])
@@ -109,6 +113,7 @@ function AuthorityMark({ name }: { name: string }) {
 
   return (
     <div
+      className="mlb-authority-mark"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{

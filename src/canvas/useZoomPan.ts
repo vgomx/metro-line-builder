@@ -84,6 +84,14 @@ export function useZoomPan(
         if (event instanceof MouseEvent) {
           return event.button === 1 || spaceHeldRef.current || panModeRef.current
         }
+        // Touch. One finger is the tool's — drawing a line, dragging a station, sweeping a
+        // marquee — and letting d3 have it too meant every one of those gestures panned the
+        // canvas underneath itself at the same time. Two fingers are unambiguous: nothing
+        // else in the app wants them, so they pan and pinch-zoom. The hand tool still claims
+        // a single finger, which is the whole reason it exists on a tablet.
+        if (typeof TouchEvent !== 'undefined' && event instanceof TouchEvent) {
+          return panModeRef.current || event.touches.length >= 2
+        }
         return true
       })
       .on('start', (event: D3ZoomEvent<SVGSVGElement, unknown>) => {

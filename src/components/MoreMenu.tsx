@@ -43,16 +43,18 @@ export function MoreMenu({ theme, onStartOver }: MoreMenuProps) {
 
   useEffect(() => {
     if (!menuOpen) return
-    const onPointerDown = (e: MouseEvent) => {
+    const onPointerDown = (e: Event) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
     }
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setMenuOpen(false)
     }
-    document.addEventListener('mousedown', onPointerDown)
+    // pointerdown rather than mousedown: iOS only synthesises a mouse event for taps on
+    // some elements, so tapping the canvas left the menu stuck open.
+    document.addEventListener('pointerdown', onPointerDown)
     document.addEventListener('keydown', onKeyDown)
     return () => {
-      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('pointerdown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
     }
   }, [menuOpen])
