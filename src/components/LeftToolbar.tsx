@@ -4,6 +4,7 @@ import { CursorIcon, HandIcon, ParkIcon, PenIcon, PoiIcon, RiverIcon, StationIco
 import type { Tool } from '../types'
 import type { Theme } from '../useTheme'
 import { MoreMenu } from './MoreMenu'
+import { HoverTip } from './HoverTip'
 
 interface LeftToolbarProps {
   tool: Tool
@@ -62,11 +63,15 @@ export function LeftToolbar({ tool, onSetTool, theme }: LeftToolbarProps) {
     >
       <Toolbar orientation="vertical" style={{ background: 'transparent', border: 'none', boxShadow: 'none', padding: 0 }}>
         {TOOLS.map(({ tool: t, label, icon }) => (
-          <IconButton key={t} icon={icon} label={label} active={tool === t} onClick={() => onSetTool(t)} />
+          <HoverTip key={t} label={label}>
+            <IconButton icon={icon} label={label} active={tool === t} onClick={() => onSetTool(t)} />
+          </HoverTip>
         ))}
         <ToolbarSeparator orientation="horizontal" />
         {GEO_TOOLS.map(({ tool: t, label, icon }) => (
-          <IconButton key={t} icon={icon} label={label} active={tool === t} onClick={() => onSetTool(t)} />
+          <HoverTip key={t} label={label}>
+            <IconButton icon={icon} label={label} active={tool === t} onClick={() => onSetTool(t)} />
+          </HoverTip>
         ))}
         <ToolbarSeparator orientation="horizontal" />
       </Toolbar>
