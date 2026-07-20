@@ -1,7 +1,7 @@
 import type { MouseEvent } from 'react'
 import type { GeoFeature, Point } from '../types'
 import { buildVertices, routeOrthogonal } from './routing'
-import { wrapLabel } from './labelPlacement'
+import { BASELINE_CENTRE, wrapLabel } from './labelPlacement'
 import { polygonLabelAnchor } from './polygon'
 
 interface GeoFeaturePathProps {
@@ -104,9 +104,8 @@ export function GeoFeaturePath({ feature, selected, onClick, onDoubleClick }: Ge
         {name && (
           <text
             x={anchor.x}
-            y={anchor.y}
+            y={anchor.y + 12 * BASELINE_CENTRE}
             textAnchor="middle"
-            dominantBaseline="central"
             fontSize={12}
             fontFamily="'Barlow Condensed', system-ui, sans-serif"
             fontStyle="italic"
@@ -148,9 +147,8 @@ export function GeoFeaturePath({ feature, selected, onClick, onDoubleClick }: Ge
       {parkLines.length > 0 && (
         <text
           x={centre.x}
-          y={centre.y - ((parkLines.length - 1) * PARK_LINE_HEIGHT) / 2}
+          y={centre.y - ((parkLines.length - 1) * PARK_LINE_HEIGHT) / 2 + PARK_LABEL_SIZE * BASELINE_CENTRE}
           textAnchor="middle"
-          dominantBaseline="central"
           fontSize={PARK_LABEL_SIZE}
           fontFamily="'Barlow Condensed', system-ui, sans-serif"
           fontWeight={LABEL_WEIGHT}

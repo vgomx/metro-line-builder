@@ -99,13 +99,53 @@ export function setSoundEnabled(next: boolean) {
   }
 }
 
+let unlocked = false
+
+/**
+ * Wakes the audio context on the first touch, click or key the page receives.
+ *
+ * ZzFX builds its AudioContext when this module is imported, and every browser hands that
+ * back suspended until the user has interacted. Resuming it at play time is enough on the
+ * desktop, where `resume()` settles before the next line runs — but not on iOS, where it
+ * resolves a turn later, so the buffer was scheduled against a context that was still asleep
+ * and thrown away. Sound was simply absent on an iPad no matter what the toggle said.
+ *
+ * So the unlock happens once, up front, on a real gesture, and the silent one-frame buffer is
+ * the part iOS actually requires: a context there has to have *played* something inside a
+ * gesture before it will play anything afterwards.
+ *
+ * Listeners are registered whether or not sound is currently on, because the toggle can be
+ * turned on later and the gesture that turns it on is not guaranteed to come again.
+ */
+function unlockAudio() {
+  if (unlocked) return
+  unlocked = true
+  try {
+    const context = ZZFX.audioContext
+    void context.resume()
+    const source = context.createBufferSource()
+    source.buffer = context.createBuffer(1, 1, 22050)
+    source.connect(context.destination)
+    source.start(0)
+  } catch {
+    // A browser without usable audio. Nothing here is worth interrupting anyone for.
+  }
+}
+
+if (typeof window !== 'undefined') {
+  const events: (keyof WindowEventMap)[] = ['pointerdown', 'touchend', 'keydown']
+  const onFirstGesture = () => {
+    unlockAudio()
+    for (const event of events) window.removeEventListener(event, onFirstGesture)
+  }
+  for (const event of events) window.addEventListener(event, onFirstGesture, { passive: true })
+}
+
 /**
  * Plays one of the patches, if sound is on.
  *
- * ZzFX constructs its AudioContext when this module is imported, which browsers hand back
- * suspended until the user has interacted with the page — so it needs resuming or every
- * sound is discarded silently. Doing it here works because there's no path to a sound that
- * isn't already inside a user gesture.
+ * The resume here is a backstop for the case where the context was suspended again by the
+ * browser — a tab left in the background long enough, which Safari does.
  */
 export function playSound(name: SoundName) {
   if (!enabled) return

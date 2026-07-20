@@ -746,3 +746,43 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   iOS selection and callouts
+
+   Pinching the map on an iPad drew a blue rectangle across it — Safari starting
+   a text selection, because a two-finger gesture on a page it considers
+   selectable is a selection gesture. The canvas already declared
+   user-select: none on the <svg>, but WebKit doesn't inherit that reliably into
+   SVG children, and the gesture starts on whatever is under the fingers.
+
+   So it's declared for the document and switched back on only where selecting
+   text is the point: the fields you type into. -webkit-touch-callout stops the
+   long-press "copy / share" sheet from appearing over a station, and the tap
+   highlight is the grey flash iOS paints over anything it thinks is a link.
+   --------------------------------------------------------------------------- */
+html,
+body {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+input,
+textarea,
+[contenteditable='true'] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Belt and braces for the same gesture: if a selection is somehow started over the map
+   anyway, it has nothing to paint. Scoped to the canvas on purpose — a transparent
+   highlight inside a text field would make selected text invisible. */
+svg::selection,
+svg ::selection {
+  background: transparent;
+}

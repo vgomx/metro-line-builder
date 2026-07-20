@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { PointOfInterest } from '../types'
 import { openMojiUrl } from '../openmoji'
-import { wrapLabel } from './labelPlacement'
+import { CAP_HEIGHT_RATIO, wrapLabel } from './labelPlacement'
 
 
 interface PoiNodeProps {
@@ -106,9 +106,11 @@ export function PoiNode({ poi, selected, dragging, landing, onPointerDown, onDou
         )}
         {nameLines.length > 0 && (
           <text
-            y={half + 4}
+            // Hung below the tile from the alphabetic baseline rather than with
+            // dominant-baseline="hanging", which Safari ignores — there the name climbed back
+            // over the artwork it belongs to.
+            y={half + 4 + LABEL_FONT_SIZE * CAP_HEIGHT_RATIO}
             textAnchor="middle"
-            dominantBaseline="hanging"
             fontSize={LABEL_FONT_SIZE}
             fontFamily="'Barlow Condensed', system-ui, sans-serif"
             fontWeight={600}

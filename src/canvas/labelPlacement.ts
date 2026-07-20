@@ -27,6 +27,26 @@ const LABEL_DIRECTIONS: LabelPlacement[] = [
  * one number that decides how much room every name takes. Kept deliberately small: a name is
  * a box the placement search has to find space for, and a smaller box is one that fits in
  * more of the eight directions before it starts landing on a neighbour. */
+/**
+ * Where text sits relative to its baseline, as a fraction of the font size.
+ *
+ * These exist because `dominant-baseline` cannot be relied on. Safari's support for the
+ * non-default values is patchy — `central` and `hanging` are ignored in places — so a label
+ * centred with it sits correctly in Chrome and rides up to the top of its card in Safari,
+ * which is exactly what was reported. The alphabetic baseline is the default everywhere and
+ * needs no support at all, so every label is now positioned from it arithmetically.
+ *
+ * Both numbers are measured from Barlow Condensed rather than assumed, at a font size large
+ * enough that the metrics aren't quantised: ascent is 1.0em and descent 0.2em, putting the
+ * centre of the em box 0.4em above the baseline; cap height is 0.70em.
+ *
+ * BASELINE_CENTRE reproduces what `central` drew, rather than the 0.35 that would centre the
+ * capitals optically — the point is to keep the rendering that was already signed off and
+ * make every browser agree on it, not to re-litigate it half a unit at a time.
+ */
+export const CAP_HEIGHT_RATIO = 0.7
+export const BASELINE_CENTRE = 0.4
+
 export const LABEL_FONT_SIZE = 10
 const LABEL_FONT = `600 ${LABEL_FONT_SIZE}px 'Barlow Condensed', system-ui, sans-serif`
 const CARD_PAD_X = 5
