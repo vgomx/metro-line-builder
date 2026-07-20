@@ -753,9 +753,14 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       : []
 
   const lineCountByStation: Record<string, number> = {}
+  // The colour of the last line seen at each station. Only read where the count is 1, so
+  // "last" is also "only" — an interchange keeps black, which is what makes black mean
+  // interchange rather than merely meaning station.
+  const lineColorByStation: Record<string, string> = {}
   for (const line of lineList) {
     for (const id of new Set(stationIdsOfLine(line))) {
       lineCountByStation[id] = (lineCountByStation[id] ?? 0) + 1
+      if (line.visible) lineColorByStation[id] = line.color
     }
   }
 
@@ -1120,6 +1125,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             selected={selectedStationIds.includes(station.id)}
             inDraftLine={draftLineStationIdSet.has(station.id)}
             interchange={(lineCountByStation[station.id] ?? 0) >= 2}
+            lineColor={lineCountByStation[station.id] === 1 ? lineColorByStation[station.id] : undefined}
             dragging={draggingStationIdSet.has(station.id)}
             landing={
               poppingStationIds.has(station.id)

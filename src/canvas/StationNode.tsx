@@ -10,6 +10,9 @@ interface StationNodeProps {
   inDraftLine: boolean
   /** True when the station sits on 2+ distinct lines — rendered as an interchange. */
   interchange: boolean
+  /** The colour of the one line calling here, for a stop that serves exactly one. Interchanges
+   * don't get one: black is what marks them out once the ordinary stops stop using it. */
+  lineColor?: string
   /** True while this station is being actively repositioned by a drag. */
   dragging: boolean
   /** A landing to play, or undefined for none. 'appear' is a station being added, which fades
@@ -32,7 +35,18 @@ const LAND_MS = 320
 const DRAG_GROWTH = 2
 const HOVER_GROWTH = 1.5
 
-export function StationNode({ station, selected, inDraftLine, interchange, dragging, landing, labelPlacement, onPointerDown, onClick }: StationNodeProps) {
+export function StationNode({
+  station,
+  selected,
+  inDraftLine,
+  interchange,
+  lineColor,
+  dragging,
+  landing,
+  labelPlacement,
+  onPointerDown,
+  onClick,
+}: StationNodeProps) {
   const [hovered, setHovered] = useState(false)
   const isInterchange = interchange || station.transfer
   const baseRadius = isInterchange ? 10 : 6.5
@@ -115,7 +129,23 @@ export function StationNode({ station, selected, inDraftLine, interchange, dragg
             <circle
               r={drawnRadius}
               fill={inDraftLine ? 'var(--brand-500)' : 'var(--bg-page)'}
-              stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
+              // A single-line stop wears its line's colour rather than black, so the map's
+              // black is spent on interchanges alone — the places where a decision is made.
+              //
+              // Not the raw colour, though: measured against the page, four of the ten line
+              // colours fall under 2:1 in one theme or the other — yellow disappears on a light
+              // page, purple and graphite on a dark one — and since the bead is a page-coloured
+              // hole inside that ring, low contrast means an invisible stop. Mixing a third of
+              // the ink in pulls every colour back to a legible edge while leaving the hue
+              // recognisable, and because the ink is themed, the mix darkens on light pages and
+              // lightens on dark ones without a second rule.
+              stroke={
+                inDraftLine
+                  ? 'var(--brand-500)'
+                  : lineColor
+                    ? `color-mix(in srgb, ${lineColor} 68%, var(--text-primary))`
+                    : 'var(--text-primary)'
+              }
               strokeWidth={2.5}
               style={{ transition: 'r 150ms ease' }}
             />
