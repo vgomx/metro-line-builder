@@ -44,6 +44,8 @@ interface RightPanelProps {
   onExtendLine: (lineId: string, end: 'start' | 'end') => void
   onDeleteLine: (lineId: string, withStations: boolean) => void
   onRenameStation: (stationId: string, name: string) => void
+  /** Changes when the canvas asks for the selected stop's name to be put in hand. */
+  focusNameToken: number
   onAddStationToLine: (lineId: string, stationId: string) => void
   onToggleTransfer: (stationId: string) => void
   onToggleMain: (stationId: string) => void
@@ -106,6 +108,7 @@ export function RightPanel({
   onExtendLine,
   onDeleteLine,
   onRenameStation,
+  focusNameToken,
   onAddStationToLine,
   onToggleTransfer,
   onToggleMain,
@@ -281,6 +284,7 @@ export function RightPanel({
             onExtendLine={onExtendLine}
             onDeleteLine={onDeleteLine}
             onRenameStation={onRenameStation}
+            focusNameToken={focusNameToken}
             onAddStationToLine={onAddStationToLine}
             onToggleTransfer={onToggleTransfer}
             onToggleMain={onToggleMain}

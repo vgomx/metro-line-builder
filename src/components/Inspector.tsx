@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Badge, Button, Divider, Input, Select, Tag, Toggle } from 'metro-ds'
 import { ParkIcon, PenIcon, PoiIcon, RiverIcon, TrashIcon } from '../icons'
 import { LINE_COLORS } from '../lineColors'
@@ -131,6 +131,7 @@ interface InspectorProps {
   onExtendLine: (lineId: string, end: 'start' | 'end') => void
   onDeleteLine: (lineId: string, withStations: boolean) => void
   onRenameStation: (stationId: string, name: string) => void
+  focusNameToken: number
   onAddStationToLine: (lineId: string, stationId: string) => void
   onToggleTransfer: (stationId: string) => void
   onToggleMain: (stationId: string) => void
@@ -164,6 +165,7 @@ export function Inspector({
   onExtendLine,
   onDeleteLine,
   onRenameStation,
+  focusNameToken,
   onAddStationToLine,
   onToggleTransfer,
   onToggleMain,
@@ -179,6 +181,18 @@ export function Inspector({
   onSetCompanySymbol,
   onDeleteCompany,
 }: InspectorProps) {
+  const nameField = useRef<HTMLDivElement>(null)
+
+  // The design system's Input takes no ref and no autoFocus, so the field is reached through
+  // the wrapper. Selecting the text as well as focusing it means a double-click can be
+  // followed straight by typing the new name over the old one.
+  useEffect(() => {
+    if (focusNameToken === 0) return
+    const input = nameField.current?.querySelector('input')
+    input?.focus()
+    input?.select()
+  }, [focusNameToken])
+
   if (!selectedLine && !selectedStation && !selectedGeoFeature && !selectedCompany && !selectedPoi) {
     return (
       <div style={{ padding: 'var(--space-5)', color: 'var(--text-muted)', fontSize: 'var(--text-sm)', textAlign: 'center' }}>
@@ -415,6 +429,10 @@ export function Inspector({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
           <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--text-secondary)' }}>Color</label>
           <div style={{ display: 'flex', gap: 'var(--gap-tight)', flexWrap: 'wrap' }}>
+            {/* The ten are the palette a transit map is usually drawn from — distinguishable
+                from each other and from the page in both themes. The custom swatch is last
+                because it's the exception: a colour nobody vetted, which is the map-maker's
+                right and their risk. */}
             {LINE_COLORS.map(color => (
               <button
                 key={color}
@@ -434,6 +452,30 @@ export function Inspector({
                 }}
               />
             ))}
+            <label
+              style={{
+                width: '22px',
+                height: '22px',
+                borderRadius: 'var(--radius-sm)',
+                border: LINE_COLORS.includes(line.color) ? '1px dashed var(--border-strong)' : 'none',
+                outline: LINE_COLORS.includes(line.color) ? 'none' : `2px solid ${line.color}`,
+                outlineOffset: '2px',
+                background: LINE_COLORS.includes(line.color)
+                  ? 'conic-gradient(#C62828, #F9A825, #2E7D32, #0277BD, #6A1B9A, #C62828)'
+                  : line.color,
+                cursor: 'pointer',
+                display: 'block',
+                overflow: 'hidden',
+              }}
+            >
+              <input
+                type="color"
+                aria-label="Custom line colour"
+                value={line.color}
+                onChange={e => onRecolorLine(line.id, e.target.value.toUpperCase())}
+                style={{ opacity: 0, width: '100%', height: '100%', cursor: 'pointer', display: 'block' }}
+              />
+            </label>
           </div>
         </div>
 
@@ -552,7 +594,9 @@ export function Inspector({
         </div>
         <Divider />
 
-        <Input label="Station name" value={station.name} onChange={e => onRenameStation(station.id, e.target.value)} />
+        <div ref={nameField}>
+          <Input label="Station name" value={station.name} onChange={e => onRenameStation(station.id, e.target.value)} />
+        </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
           <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--text-secondary)' }}>Lines</label>

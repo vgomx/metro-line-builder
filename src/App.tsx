@@ -110,6 +110,9 @@ function App() {
   const [showGrid, setShowGrid] = useState(true)
   const [showTrains, setShowTrains] = useState(false)
   const [showPanel, setShowPanel] = useState(true)
+  // Bumped each time a rename is asked for. A counter rather than a boolean because asking
+  // twice for the same station has to focus the field twice.
+  const [renameToken, setRenameToken] = useState(0)
   // Asked once, on the first visit this browser has ever had. Read at mount, before the
   // persistence effect writes anything — a beat later there would be a saved map either way.
   const [showWelcome, setShowWelcome] = useState(() => !hasSavedMap())
@@ -350,6 +353,13 @@ function App() {
             onSelectWaypoint={selectWaypoint}
             onDeleteWaypoint={withSound('remove', deleteWaypoint)}
             onDeleteSelected={handleDeleteSelected}
+            onRenameStationRequest={id => {
+              handleSetSelection([id], [], [])
+              // The field can't be typed into behind a closed panel, so asking to rename
+              // opens it.
+              setShowPanel(true)
+              setRenameToken(t => t + 1)
+            }}
             onCheckpoint={checkpoint}
             onStationGrab={() => playSound('grab')}
             onLineReroute={() => playSound('reroute')}
@@ -559,6 +569,7 @@ function App() {
               onExtendLine={startExtendLine}
               onDeleteLine={withSound('remove', (lineId: string, withStations: boolean) => deleteLine(lineId, withStations))}
               onRenameStation={renameStation}
+              focusNameToken={renameToken}
             onAddStationToLine={withSound('lineDone', addStationToLine)}
               onToggleTransfer={withSound('toggle', toggleStationTransfer)}
               onToggleMain={withSound('toggle', toggleStationMain)}

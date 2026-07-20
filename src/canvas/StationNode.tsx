@@ -24,6 +24,8 @@ interface StationNodeProps {
   labelPlacement: LabelPlacement
   onPointerDown: (e: ReactPointerEvent<SVGGElement>, station: Station) => void
   onClick: (station: Station) => void
+  /** Double-clicking a stop is a request to rename it — the most repeated edit on a map. */
+  onDoubleClick: (station: Station) => void
 }
 
 /** Matches the landmark's landing exactly — the two are the same gesture. */
@@ -46,6 +48,7 @@ export function StationNode({
   labelPlacement,
   onPointerDown,
   onClick,
+  onDoubleClick,
 }: StationNodeProps) {
   const [hovered, setHovered] = useState(false)
   const isInterchange = interchange || station.transfer
@@ -74,6 +77,12 @@ export function StationNode({
       transform={`translate(${station.x}, ${station.y})`}
       onPointerDown={e => onPointerDown(e, station)}
       onClick={() => onClick(station)}
+      onDoubleClick={e => {
+        // Kept off the svg's own double-click, which finishes a draft: this one only ever
+        // means "rename this stop", so it stops here rather than reaching the canvas.
+        e.stopPropagation()
+        onDoubleClick(station)
+      }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       // The marker's own cursor wins over the svg's wherever the pointer is actually on it,
