@@ -3,6 +3,7 @@ import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, Pointe
 import type { ZoomTransform } from 'd3-zoom'
 import type { GeoFeature, Line, LineNode, Point, PointOfInterest, Station, Tool } from '../types'
 import { useZoomPan } from './useZoomPan'
+import { useReducedMotion } from '../useReducedMotion'
 import type { ViewportInsets } from './useZoomPan'
 import { StationNode } from './StationNode'
 import { PoiNode } from './PoiNode'
@@ -92,8 +93,9 @@ interface MapCanvasProps {
   onSelectWaypoint: (lineId: string, index: number) => void
   onDeleteWaypoint: (lineId: string, index: number) => void
   onDeleteSelected: () => void
-  /** A stop was double-clicked — the caller selects it and opens its name for editing. */
-  onRenameStationRequest: (stationId: string) => void
+  /** Something on the map was double-clicked — the caller selects it and opens its name for
+   * editing. One prop for all three kinds, since the response is identical for each. */
+  onRenameRequest: (kind: 'station' | 'poi' | 'geo', id: string) => void
   onCheckpoint: () => void
   /** A station has been picked up — fires on every grab, before anything moves. */
   onStationGrab?: () => void
@@ -213,7 +215,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onSelectWaypoint,
     onDeleteWaypoint,
     onDeleteSelected,
-    onRenameStationRequest,
+    onRenameRequest,
     onCheckpoint,
     onStationGrab,
     onLineReroute,
@@ -270,6 +272,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   }
   // One session per completed drag; the ghost re-derives each affected line's shape
   // per frame from the interpolated station positions, so it needs only the origins.
+  const reducedMotion = useReducedMotion()
   const [snapSession, setSnapSession] = useState<{ key: string; originalPositions: Record<string, Point> } | null>(null)
   const snapSessionRef = useRef(0)
 
@@ -286,11 +289,15 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     // First render, or an unrelated re-render that didn't touch the line list — a station
     // drag keeps lineList's identity, so those fall through to the snap animation instead.
     if (!prevLines || prevLines === lineList) return
+    // Both of these tween geometry frame by frame in JavaScript, so the stylesheet's
+    // reduced-motion rule can't touch them. Skipping the session lands the new arrangement
+    // immediately, which is where the tween was going anyway.
+    if (reducedMotion) return
     const frames = buildRefanFrames(prevLines, lineList, stations)
     if (frames.length === 0) return
     refanSessionRef.current += 1
     setRefanSession({ key: refanSessionRef.current, lines: frames })
-  }, [lineList, stations])
+  }, [lineList, stations, reducedMotion])
 
   useImperativeHandle(
     ref,
@@ -684,7 +691,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       window.setTimeout(() => setSettlingStationIds(new Set()), SETTLE_MS)
 
       snapSessionRef.current += 1
-      setSnapSession({ key: String(snapSessionRef.current), originalPositions: drag.originalPositions })
+      if (!reducedMotion) setSnapSession({ key: String(snapSessionRef.current), originalPositions: drag.originalPositions })
       // Same gate as the reroute: only a line the drag actually reshaped has a spring to
       // play, so a lone station settling back makes no sound.
       if (lineList.some(line => line.nodes.some(n => n.kind === 'station' && drag.ids.includes(n.stationId)))) {
@@ -1009,6 +1016,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             feature={feature}
             selected={selectedGeoFeatureIds.includes(feature.id)}
             onClick={handleGeoFeatureClick}
+            onDoubleClick={f => tool === 'select' && onRenameRequest('geo', f.id)}
           />
         ))}
 
@@ -1213,7 +1221,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             labelPlacement={labelPlacementByStation[station.id]}
             onPointerDown={handleStationPointerDown}
             onClick={handleStationClick}
-            onDoubleClick={s => tool === 'select' && onRenameStationRequest(s.id)}
+            onDoubleClick={s => tool === 'select' && onRenameRequest('station', s.id)}
           />
         ))}
 
@@ -1255,6 +1263,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             dragging={drag.kind === 'pois' && drag.ids.includes(poi.id)}
             landing={landingPoiIds.has(poi.id) ? 'appear' : settlingPoiIds.has(poi.id) ? 'settle' : undefined}
             onPointerDown={handlePoiPointerDown}
+            onDoubleClick={p => tool === 'select' && onRenameRequest('poi', p.id)}
           />
         ))}
 

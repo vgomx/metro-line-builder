@@ -31,6 +31,7 @@ interface RightPanelProps {
   onSelectPoi: (poiId: string) => void
   onSelectCompany: (companyId: string) => void
   onToggleLineVisibility: (lineId: string) => void
+  onReorderLine: (lineId: string, toIndex: number) => void
   onAddLine: () => void
   onAddRiver: () => void
   onAddPark: () => void
@@ -95,6 +96,7 @@ export function RightPanel({
   onSelectPoi,
   onSelectCompany,
   onToggleLineVisibility,
+  onReorderLine,
   onAddLine,
   onAddRiver,
   onAddPark,
@@ -232,6 +234,7 @@ export function RightPanel({
             onSelect={openDetail(onSelectLine)}
             onToggleVisibility={onToggleLineVisibility}
             onAddLine={onAddLine}
+            onReorder={onReorderLine}
           />
         )}
         {tab === 'Stations' && (

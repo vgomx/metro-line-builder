@@ -269,8 +269,12 @@ export function buildNetworkGeometry(lineList: Line[], stations: Record<string, 
     for (let i = 0; i < geometry.vertices.length - 1; i++) {
       const key = segmentKey(geometry.vertices[i], geometry.vertices[i + 1])
       const group = segmentLineMap.get(key)
-      if (group) group.push(line.id)
-      else segmentLineMap.set(key, [line.id])
+      // Once per line, however many times that line runs the segment. A route that doubles
+      // back along its own track — a loop, or an out-and-back spur — would otherwise be
+      // counted twice in its own corridor, widening the fan by a lane and leaving that lane
+      // empty, since both traversals then resolve to the same index.
+      if (!group) segmentLineMap.set(key, [line.id])
+      else if (!group.includes(line.id)) group.push(line.id)
     }
   }
 

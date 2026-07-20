@@ -184,7 +184,8 @@ export function Inspector({
   const nameField = useRef<HTMLDivElement>(null)
 
   // The design system's Input takes no ref and no autoFocus, so the field is reached through
-  // the wrapper. Selecting the text as well as focusing it means a double-click can be
+  // the wrapper. One ref covers stations, landmarks and geography alike: the inspector shows
+  // exactly one of them at a time, so only one of these wrappers is ever mounted. Selecting the text as well as focusing it means a double-click can be
   // followed straight by typing the new name over the old one.
   useEffect(() => {
     if (focusNameToken === 0) return
@@ -297,7 +298,9 @@ export function Inspector({
         </div>
         <Divider />
 
-        <Input label="Name" value={poi.name} onChange={e => onRenamePoi(poi.id, e.target.value)} />
+        <div ref={nameField}>
+          <Input label="Name" value={poi.name} onChange={e => onRenamePoi(poi.id, e.target.value)} />
+        </div>
 
         {/* The same grid the placement picker offers, so changing a landmark's symbol after
             the fact is the gesture that placed it.
@@ -369,11 +372,9 @@ export function Inspector({
         </div>
         <Divider />
 
-        <Input
-          label="Name"
-          value={feature.name}
-          onChange={e => onRenameGeoFeature(feature.id, e.target.value)}
-        />
+        <div ref={nameField}>
+          <Input label="Name" value={feature.name} onChange={e => onRenameGeoFeature(feature.id, e.target.value)} />
+        </div>
 
         <Divider />
         <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
@@ -494,10 +495,12 @@ export function Inspector({
 
         <Divider label="Stations" />
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          {lineStations.map(s => {
+          {/* Keyed by position as well as id: a ring line legitimately calls at its terminus
+              twice, and the id alone collides on exactly the routes most worth looking at. */}
+          {lineStations.map((s, index) => {
             const transfer = isTransferStation(s, Object.values(lines))
             return (
-              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-tight)', padding: '4px 0' }}>
+              <div key={`${s.id}-${index}`} style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-tight)', padding: '4px 0' }}>
                 <div
                   style={{
                     width: '8px',

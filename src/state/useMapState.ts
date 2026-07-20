@@ -57,6 +57,10 @@ interface MapState extends DataSnapshot {
   draftGeoFeatureId: string | null
   /** True when extending from the feature's start — draftGeoPoints is reversed so appends still land at its end. */
   draftGeoReversed: boolean
+  /** Which run of text edits is in progress, so consecutive keystrokes undo as one. Null
+   * between runs. Not part of DataSnapshot — it's editing bookkeeping, not map data, so it
+   * never reaches a save or a history entry. */
+  editRunKey: string | null
   past: DataSnapshot[]
   future: DataSnapshot[]
 }
@@ -105,6 +109,7 @@ type Action =
   | { type: 'deleteLine'; lineId: string; withStations: boolean }
   | { type: 'deleteStation'; stationId: string }
   | { type: 'renameLine'; lineId: string; name: string }
+  | { type: 'reorderLine'; lineId: string; toIndex: number }
   | { type: 'setLineNumber'; lineId: string; number: number }
   | { type: 'recolorLine'; lineId: string; color: string }
   | { type: 'toggleLineVisibility'; lineId: string }
@@ -154,6 +159,7 @@ const RECORDABLE_ACTIONS = new Set<Action['type']>([
   'deletePoi',
   'renameGeoFeature',
   'renameLine',
+  'reorderLine',
   'setLineNumber',
   'recolorLine',
   'toggleLineVisibility',
@@ -218,6 +224,39 @@ function snapshotOf(state: DataSnapshot): DataSnapshot {
   }
 }
 
+/**
+ * A key identifying a run of edits that should undo as one.
+ *
+ * Text fields dispatch on every keystroke, so each character was its own history entry:
+ * renaming a station to "Vesper Halt" cost five presses of undo to take back, and a long
+ * enough name pushed everything else in the map's history off the end of the buffer. A run of
+ * edits to the same field on the same thing is one decision and undoes as one.
+ *
+ * Returns null for everything else, which is what breaks a run — including selecting
+ * something else or picking up a tool, since those go through the reducer too. Come back to
+ * a field later and you start a fresh entry.
+ */
+function editRunKey(action: Action): string | null {
+  switch (action.type) {
+    case 'renameStation':
+      return `renameStation:${action.stationId}`
+    case 'renameLine':
+      return `renameLine:${action.lineId}`
+    case 'renamePoi':
+      return `renamePoi:${action.poiId}`
+    case 'renameGeoFeature':
+      return `renameGeoFeature:${action.geoFeatureId}`
+    case 'renameCompany':
+      return `renameCompany:${action.companyId}`
+    case 'setMapName':
+      return 'setMapName'
+    case 'setAuthorityName':
+      return 'setAuthorityName'
+    default:
+      return null
+  }
+}
+
 function pushHistory(state: MapState): MapState {
   return {
     ...state,
@@ -257,6 +296,7 @@ const emptyState: MapState = {
   nextGeoFeatureNumber: 1,
   nextCompanyNumber: 1,
   nextPoiNumber: 1,
+  editRunKey: null,
   past: [],
   future: [],
 }
@@ -295,6 +335,29 @@ function arrayToRecord<T extends { id: string }>(value: unknown): Record<string,
  * by early versions of "Export"), so both the localStorage autosave and an
  * imported/opened JSON file load through the same compatibility path.
  */
+/** True when inserting `stationId` at `index` would sit it next to a call at the same
+ * station — i.e. when the line already stops there at that point in the route. */
+function adjacentToStation(nodes: LineNode[], index: number, stationId: string): boolean {
+  const before = nodes[index - 1]
+  const after = nodes[index]
+  return (
+    (before?.kind === 'station' && before.stationId === stationId) ||
+    (after?.kind === 'station' && after.stationId === stationId)
+  )
+}
+
+/** Collapse consecutive calls at the same station down to one.
+ *
+ * Heals maps drawn before the insert paths checked for it. A line that legitimately returns
+ * to where it started — a ring — is untouched: only *neighbouring* repeats go, and a ring's
+ * two calls at its terminus have the whole route between them. */
+function collapseRepeatedStops(nodes: LineNode[]): LineNode[] {
+  return nodes.filter((node, i) => {
+    const previous = nodes[i - 1]
+    return !(node.kind === 'station' && previous?.kind === 'station' && previous.stationId === node.stationId)
+  })
+}
+
 function normalizeSnapshot(parsed: DataSnapshot): DataSnapshot {
   if (!parsed.mapName) parsed.mapName = (parsed as unknown as { name?: string }).name || 'Untitled Map'
   if (parsed.authorityName === undefined) parsed.authorityName = ''
@@ -326,6 +389,7 @@ function normalizeSnapshot(parsed: DataSnapshot): DataSnapshot {
   for (const line of Object.values(parsed.lines)) {
     if (line.visible === undefined) line.visible = true
     if (line.companyId === undefined) line.companyId = null
+    if (Array.isArray(line.nodes)) line.nodes = collapseRepeatedStops(line.nodes)
     // Older saves stored a line as a flat station-id sequence; convert to nodes.
     const legacy = line as unknown as { stationIds?: string[] }
     if (!line.nodes && legacy.stationIds) {
@@ -506,7 +570,13 @@ function removeStationsFromLines(
 }
 
 function reducer(rawState: MapState, action: Action): MapState {
-  const state = RECORDABLE_ACTIONS.has(action.type) ? pushHistory(rawState) : rawState
+  // A keystroke in the middle of a rename joins the entry the run already pushed rather than
+  // starting another one.
+  const runKey = editRunKey(action)
+  const continuingRun = runKey !== null && runKey === rawState.editRunKey
+  const shouldRecord = RECORDABLE_ACTIONS.has(action.type) && !continuingRun
+  const recorded = shouldRecord ? pushHistory(rawState) : rawState
+  const state = recorded.editRunKey === runKey ? recorded : { ...recorded, editRunKey: runKey }
 
   switch (action.type) {
     case 'checkpoint':
@@ -767,6 +837,11 @@ function reducer(rawState: MapState, action: Action): MapState {
       const existing = findStationAt(state.stations, action.x, action.y)
       const nodes = [...state.draftLineNodes]
       if (existing) {
+        // Already a stop here on this line. Adding it again would give the route two
+        // consecutive calls at the same platform, which is meaningless as a timetable and
+        // draws as a zero-length segment — and it's easy to do, because the place you click
+        // to add a stop is exactly where an existing one already sits.
+        if (adjacentToStation(nodes, action.index, existing.id)) return state
         nodes.splice(action.index, 0, { kind: 'station', stationId: existing.id })
         return { ...state, draftLineNodes: nodes }
       }
@@ -798,6 +873,7 @@ function reducer(rawState: MapState, action: Action): MapState {
       const existing = findStationAt(state.stations, action.x, action.y)
       const nodes = [...line.nodes]
       if (existing) {
+        if (adjacentToStation(nodes, action.index, existing.id)) return state
         nodes.splice(action.index, 0, { kind: 'station', stationId: existing.id })
         return { ...state, lines: { ...state.lines, [action.lineId]: { ...line, nodes } } }
       }
@@ -1122,6 +1198,16 @@ function reducer(rawState: MapState, action: Action): MapState {
       }
     }
 
+    case 'reorderLine': {
+      const from = state.lineOrder.indexOf(action.lineId)
+      if (from < 0) return state
+      const to = Math.max(0, Math.min(state.lineOrder.length - 1, action.toIndex))
+      if (from === to) return state
+      const lineOrder = [...state.lineOrder]
+      lineOrder.splice(to, 0, ...lineOrder.splice(from, 1))
+      return { ...state, lineOrder }
+    }
+
     case 'renameLine': {
       const line = state.lines[action.lineId]
       if (!line) return state
@@ -1434,6 +1520,10 @@ export function useMapState() {
     [],
   )
   const deleteStation = useCallback((stationId: string) => dispatch({ type: 'deleteStation', stationId }), [])
+  const reorderLine = useCallback(
+    (lineId: string, toIndex: number) => dispatch({ type: 'reorderLine', lineId, toIndex }),
+    [],
+  )
   const renameLine = useCallback((lineId: string, name: string) => dispatch({ type: 'renameLine', lineId, name }), [])
   const setLineNumber = useCallback((lineId: string, number: number) => dispatch({ type: 'setLineNumber', lineId, number }), [])
   const recolorLine = useCallback((lineId: string, color: string) => dispatch({ type: 'recolorLine', lineId, color }), [])
@@ -1575,6 +1665,7 @@ export function useMapState() {
     deleteLine,
     deleteStation,
     renameLine,
+    reorderLine,
     setLineNumber,
     recolorLine,
     toggleLineVisibility,

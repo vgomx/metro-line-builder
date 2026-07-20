@@ -720,3 +720,29 @@ body {
 .mlb-menu-item:hover {
   background: var(--bg-subtle);
 }
+
+/* ---------------------------------------------------------------------------
+   Reduced motion
+
+   This app moves a lot: a whole map eases under the viewport when a line is
+   framed, panels slide, markers land and bounce, deleted lines shatter into
+   dashes. For someone with vestibular sensitivity that is not decoration, it's
+   a symptom trigger, and the browser has been telling us so all along.
+
+   Durations are collapsed rather than animations removed. `animation: none`
+   would drop the final frame of everything using `both` or `forwards` — the
+   panel that slides away would simply stay where it was, and every marker that
+   animates in from opacity 0 would never arrive. Near-zero duration lands each
+   one on its end state immediately, which is the same picture without the
+   journey.
+   --------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
