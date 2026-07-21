@@ -18,6 +18,21 @@ window.addEventListener('gesturestart', e => {
   e.preventDefault()
 })
 
+// The blue selection rectangle on an iPad pinch — reported three times, because the first
+// two fixes were aimed at the wrong layer. CSS `user-select: none` governs whether a
+// selection is *drawn*; a preventDefault on touchstart tried to stop the *gesture*. Neither
+// cancels the selection itself, and WebKit starts one from a two-finger gesture regardless.
+//
+// `selectstart` is the event that fires the instant a selection begins, and preventing it is
+// the one lever that stops the selection at its source — the piece both earlier attempts
+// missed. It's blocked everywhere except inside the fields you actually type into, which is
+// the whole of the app's selectable text; a canvas tool has nothing else worth selecting.
+document.addEventListener('selectstart', e => {
+  const target = e.target as HTMLElement | null
+  if (target?.closest('input, textarea, [contenteditable="true"]')) return
+  e.preventDefault()
+})
+
 // The service worker is what makes the app installable, and what lets a map be worked on
 // with no connection — which for something that keeps its data in the browser anyway is the
 // natural state, not an edge case.
