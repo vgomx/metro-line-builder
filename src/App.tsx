@@ -455,6 +455,7 @@ function App() {
             onLineReroute={() => playSound('reroute')}
             onLineSnap={() => playSound('snap')}
             onLineSelected={() => playSequence('lineSelect')}
+            onDetent={() => playSound('detent')}
             onUndo={undo}
             onRedo={redo}
             onTransformChange={t => setZoom(t.k)}

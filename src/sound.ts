@@ -70,6 +70,12 @@ const PATCHES = {
   remove: [0.5, 0.02, 460, 0.002, 0.04, 0.11, 0, 1, -3, 0, 0, 0, 0, 0, 0, 0, 0, 0.4, 0.06],
   /** A whole city arriving at once, so it earns a little more than a tick. */
   generate: [0.5, 0.03, 523, 0.01, 0.16, 0.2, 0, 1, 0, 0, 262, 0.12, 0, 0, 0, 0, 0, 0.6, 0.12],
+  /** The detent under a drag: the near-silent tick a dragged station or landmark makes each
+   * time it crosses a snap point, like the notch you feel turning a dial or straightening a
+   * photo in iOS. The quietest, shortest thing in the set by some way — it fires many times
+   * across a single drag, so it has to read as a texture felt more than heard. A breath of
+   * noise on the sine gives it the click of a notch rather than the pip of a key. */
+  detent: [0.22, 0.05, 1500, 0.001, 0, 0.015, 0, 1, 0, 0, 0, 0, 0, 0.05, 0, 0, 0, 0.3, 0.01],
 } satisfies Record<string, number[]>
 
 export type SoundName = keyof typeof PATCHES

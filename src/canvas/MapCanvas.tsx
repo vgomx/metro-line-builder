@@ -106,6 +106,8 @@ interface MapCanvasProps {
   onLineSnap?: () => void
   /** A line was picked on the canvas — the arrival chime, matching the list's. */
   onLineSelected?: () => void
+  /** A dragged station or landmark crossed a snap point — the soft detent tick. */
+  onDetent?: () => void
   onUndo: () => void
   onRedo: () => void
   onTransformChange?: (transform: ZoomTransform) => void
@@ -223,6 +225,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onLineReroute,
     onLineSnap,
     onLineSelected,
+    onDetent,
     onUndo,
     onRedo,
     onTransformChange,
@@ -624,6 +627,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           // A landmark shapes no route, so there's nothing to reroute or spring — but the
           // move still has to be one undo, hence the checkpoint at the first budge.
           if (!drag.moved) onCheckpoint()
+          onDetent?.()
           onMovePois(drag.ids, dx, dy)
           setDrag({ ...drag, moved: true })
         }
@@ -648,6 +652,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             )
             if (reshapesALine) onLineReroute?.()
           }
+          onDetent?.()
           onMoveStations(drag.ids, dx, dy)
           setDrag({ ...drag, moved: true })
         }
