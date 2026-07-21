@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { IconButton, Tabs } from 'metro-ds'
 import { BackIcon } from '../icons'
 import { LinesPanel } from './LinesPanel'
@@ -71,6 +71,10 @@ interface RightPanelProps {
  * which is a coherent thing for a tab strip to be.
  */
 const TABS = ['Lines', 'Stations', 'Geography', 'Companies']
+/** The tabs in strip order, plus Properties last — the deep view a selection opens into. The
+ * slide direction reads off this: a higher index enters from the right, a lower one from the
+ * left. */
+const TAB_ORDER = [...TABS, 'Properties']
 
 export const RIGHT_PANEL_WIDTH = 272
 
@@ -127,6 +131,15 @@ export function RightPanel({
   onDeleteCompany,
 }: RightPanelProps) {
   const [tab, setTab] = useState('Lines')
+
+  // Which way the content slides when the tab changes: rightward through the strip (and on to
+  // Properties, which is the deepest view) enters from the right, back the other way from the
+  // left. Recomputed only when the tab actually changes and frozen in a ref otherwise, so an
+  // unrelated re-render — selecting a row, say — doesn't replay the slide.
+  const slide = useRef<{ tab: string; dir: 'left' | 'right' }>({ tab, dir: 'right' })
+  if (tab !== slide.current.tab) {
+    slide.current = { tab, dir: TAB_ORDER.indexOf(tab) >= TAB_ORDER.indexOf(slide.current.tab) ? 'right' : 'left' }
+  }
 
   // Catches selections made out on the canvas, where there's no row to hang the navigation
   // off. It can only react to the selection *changing*, which is why the lists below don't
@@ -226,7 +239,10 @@ export function RightPanel({
         </span>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
+        {/* Keyed by tab so switching remounts and replays the slide; the class carries the
+            direction frozen above. */}
+        <div key={tab} className={slide.current.dir === 'right' ? 'mlb-tab-in-right' : 'mlb-tab-in-left'}>
         {tab === 'Lines' && (
           <LinesPanel
             lines={lineList}
@@ -304,6 +320,7 @@ export function RightPanel({
             onDeleteCompany={onDeleteCompany}
           />
         )}
+        </div>
       </div>
     </div>
   )
