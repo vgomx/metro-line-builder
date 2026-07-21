@@ -70,9 +70,31 @@ const PATCHES = {
   remove: [0.5, 0.02, 460, 0.002, 0.04, 0.11, 0, 1, -3, 0, 0, 0, 0, 0, 0, 0, 0, 0.4, 0.06],
   /** A whole city arriving at once, so it earns a little more than a tick. */
   generate: [0.5, 0.03, 523, 0.01, 0.16, 0.2, 0, 1, 0, 0, 262, 0.12, 0, 0, 0, 0, 0, 0.6, 0.12],
+  /** The detent under a drag: the near-silent tick a dragged station or landmark makes each
+   * time it crosses a snap point, like the notch you feel turning a dial or straightening a
+   * photo in iOS. The quietest, shortest thing in the set by some way — it fires many times
+   * across a single drag, so it has to read as a texture felt more than heard. A breath of
+   * noise on the sine gives it the click of a notch rather than the pip of a key. */
+  detent: [0.22, 0.05, 1500, 0.001, 0, 0.015, 0, 1, 0, 0, 0, 0, 0, 0.05, 0, 0, 0, 0.3, 0.01],
 } satisfies Record<string, number[]>
 
 export type SoundName = keyof typeof PATCHES
+
+/**
+ * Composed sounds — more than one note, scheduled. The set's only one so far is the arrival
+ * chime a line selection earns: a warm two-note bell, F#5 then D5 a beat later, the sound a
+ * train makes pulling into a platform. It's longer and more present than the pips on purpose,
+ * because picking a line is a deliberate act rather than a rattled-off click — but it's built
+ * from the same soft sine envelope, so it belongs to the same family.
+ */
+const SEQUENCES = {
+  lineSelect: [
+    { at: 0, patch: [0.5, 0.02, 740, 0.003, 0.12, 0.5, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.5, 0.3] },
+    { at: 260, patch: [0.55, 0.02, 587, 0.003, 0.16, 0.6, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.5, 0.35] },
+  ],
+} satisfies Record<string, { at: number; patch: number[] }[]>
+
+export type SequenceName = keyof typeof SEQUENCES
 
 /** A finger rather than a mouse. Read without React so the module-load default can use it. */
 function isTouchDevice(): boolean {
@@ -217,19 +239,33 @@ if (typeof window !== 'undefined') {
 }
 
 /**
- * Plays one of the patches, if sound is on.
- *
- * The resume here is a backstop for the case where the context was suspended again by the
- * browser — a tab left in the background long enough, which Safari does.
+ * Fires one patch. The resume is a backstop for a context the browser suspended again — a tab
+ * left in the background long enough, which Safari does.
  */
-export function playSound(name: SoundName) {
-  if (!enabled) return
+function emit(patch: number[]) {
   try {
     const context = ZZFX.audioContext
     if (context.state === 'suspended') void context.resume()
     ZZFX.volume = MASTER_VOLUME
-    zzfx(...PATCHES[name])
+    zzfx(...patch)
   } catch {
     // Audio is decoration. A browser that refuses it shouldn't take the interaction with it.
+  }
+}
+
+/** Plays one of the patches, if sound is on. */
+export function playSound(name: SoundName) {
+  if (!enabled) return
+  emit(PATCHES[name])
+}
+
+/** Plays a composed sound, scheduling each note. The on/off flag is re-checked at each note
+ * rather than only up front, so muting mid-chime silences the notes still to come. */
+export function playSequence(name: SequenceName) {
+  if (!enabled) return
+  for (const { at, patch } of SEQUENCES[name]) {
+    window.setTimeout(() => {
+      if (enabled) emit(patch)
+    }, at)
   }
 }
