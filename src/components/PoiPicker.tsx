@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useCoarsePointer } from '../useCoarsePointer'
-import type { DragEvent as ReactDragEvent } from 'react'
+import type { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { Input } from 'metro-ds'
 import { openMojiBySubgroup, openMojiUrl, POI_DRAG_MIME, SUBGROUP_LABELS } from '../openmoji'
 import { POI_ICON_SIZE } from '../canvas/PoiNode'
@@ -14,6 +15,9 @@ interface PoiPickerProps {
   scale: number
   /** Place this symbol without a pointer — the keyboard's way onto the map. */
   onPlaceByKeyboard: (hexcode: string) => void
+  /** Drop a dragged symbol at a screen point — the touch drag's way onto the map, since HTML5
+   * drop never fires on a finger. */
+  onDragPlace: (hexcode: string, clientX: number, clientY: number) => void
 }
 
 /**
@@ -27,7 +31,7 @@ interface PoiPickerProps {
  * is zoomed a long way out, where the landmark really would be a speck. */
 const MIN_DRAG_TILE = 18
 
-export function PoiPicker({ scale, onPlaceByKeyboard, armedIcon, onArm }: PoiPickerProps) {
+export function PoiPicker({ scale, onPlaceByKeyboard, armedIcon, onArm, onDragPlace }: PoiPickerProps) {
   const [query, setQuery] = useState('')
   const [draggingIcon, setDraggingIcon] = useState<string | null>(null)
   const coarse = useCoarsePointer()
@@ -38,6 +42,62 @@ export function PoiPicker({ scale, onPlaceByKeyboard, armedIcon, onArm }: PoiPic
   // off-screen for the length of the gesture and taken away on dragend. Held in a ref rather
   // than state because it must exist before setDragImage runs, and a render is too late.
   const ghostRef = useRef<HTMLDivElement | null>(null)
+
+  // A finger drag from the palette onto the map, since HTML5 drag-and-drop doesn't fire on
+  // touch at all. The live gesture is held in a ref so the pointer handlers read it without a
+  // stale closure; `preview` is the only part that has to re-render — the tile under the
+  // finger. `dragged` guards the click that follows a drag, so a drag doesn't also arm.
+  const touchDrag = useRef<{ hexcode: string; url?: string; startX: number; startY: number; pointerId: number; started: boolean } | null>(null)
+  const dragged = useRef(false)
+  const [preview, setPreview] = useState<{ x: number; y: number; url?: string; size: number } | null>(null)
+
+  // A drag only begins on a sideways pull — the palette scrolls vertically (touch-action:
+  // pan-y lets it), so an up/down swipe browses and a pull toward the map, out to the side,
+  // lifts the symbol. Small enough that the lift feels immediate, large enough not to trip on
+  // the wobble of a tap.
+  const DRAG_THRESHOLD = 8
+
+  const onSwatchPointerDown = (e: ReactPointerEvent<HTMLButtonElement>, hexcode: string, url?: string) => {
+    dragged.current = false
+    touchDrag.current = { hexcode, url, startX: e.clientX, startY: e.clientY, pointerId: e.pointerId, started: false }
+  }
+
+  const onSwatchPointerMove = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    const d = touchDrag.current
+    if (!d || d.pointerId !== e.pointerId) return
+    const dx = e.clientX - d.startX
+    const dy = e.clientY - d.startY
+    if (!d.started) {
+      // A sideways pull that beats the vertical is a lift; anything more vertical is a scroll,
+      // which pan-y hands to the browser and which ends this gesture on pointercancel.
+      if (Math.abs(dx) > DRAG_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
+        d.started = true
+        dragged.current = true
+        e.currentTarget.setPointerCapture(e.pointerId)
+        setPreview({ x: e.clientX, y: e.clientY, url: d.url, size: Math.max(MIN_DRAG_TILE, POI_ICON_SIZE * scale) + 2 })
+      }
+      return
+    }
+    setPreview(prev => (prev ? { ...prev, x: e.clientX, y: e.clientY } : prev))
+  }
+
+  const onSwatchPointerUp = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    const d = touchDrag.current
+    touchDrag.current = null
+    if (!d || !d.started) return
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
+    setPreview(null)
+    // Only a release over the map lands anything — let go over the palette and the symbol
+    // simply goes back, no harm done. The tile carries pointer-events: none, so it isn't what
+    // the point hits.
+    const under = document.elementFromPoint(e.clientX, e.clientY)
+    if (under?.closest('svg[data-map-canvas]')) onDragPlace(d.hexcode, e.clientX, e.clientY)
+  }
+
+  const onSwatchPointerCancel = () => {
+    touchDrag.current = null
+    setPreview(null)
+  }
 
   const startDrag = (e: ReactDragEvent<HTMLElement>, hexcode: string, url: string | undefined) => {
     e.dataTransfer.setData(POI_DRAG_MIME, hexcode)
@@ -111,7 +171,7 @@ export function PoiPicker({ scale, onPlaceByKeyboard, armedIcon, onArm }: PoiPic
           {coarse
             ? armedIcon
               ? 'Now tap the map. Tap the symbol again to put it back.'
-              : 'Tap a symbol, then tap where it goes.'
+              : 'Drag a symbol onto the map, or tap it then tap where it goes.'
             : 'Drag a symbol onto the map, or press Enter to drop one in the middle.'}
         </div>
         <Input size="sm" placeholder="Search…" value={query} onChange={e => setQuery(e.target.value)} />
@@ -153,17 +213,26 @@ export function PoiPicker({ scale, onPlaceByKeyboard, armedIcon, onArm }: PoiPic
                     className="mlb-poi-swatch"
                     draggable={!coarse}
                     title={entry.name}
-                    aria-label={coarse ? `${entry.name} — tap to pick up` : `${entry.name} — press Enter to place`}
+                    aria-label={coarse ? `${entry.name} — tap to pick up, or drag onto the map` : `${entry.name} — press Enter to place`}
                     data-dragging={entry.hexcode === draggingIcon}
                     data-armed={entry.hexcode === armedIcon}
+                    // pan-y so an up/down swipe still scrolls the palette while a sideways pull
+                    // is left free to become a drag onto the map.
+                    style={coarse ? { touchAction: 'pan-y' } : undefined}
                     onDragStart={coarse ? undefined : e => startDrag(e, entry.hexcode, url)}
                     onDragEnd={coarse ? undefined : endDrag}
+                    onPointerDown={coarse ? e => onSwatchPointerDown(e, entry.hexcode, url) : undefined}
+                    onPointerMove={coarse ? onSwatchPointerMove : undefined}
+                    onPointerUp={coarse ? onSwatchPointerUp : undefined}
+                    onPointerCancel={coarse ? onSwatchPointerCancel : undefined}
                     onClick={e => {
-                      // On touch there is no drag to start, so the tap picks the symbol up and
-                      // the next tap on the map puts it down. Tapping the armed one again is
-                      // how you change your mind without placing anything.
-                      if (coarse) onArm(entry.hexcode === armedIcon ? null : entry.hexcode)
-                      else if (e.detail === 0) onPlaceByKeyboard(entry.hexcode)
+                      // A tap picks the symbol up and the next tap on the map puts it down;
+                      // tapping the armed one again puts it back. A drag that just happened
+                      // isn't a tap, so it doesn't also arm.
+                      if (coarse) {
+                        if (dragged.current) { dragged.current = false; return }
+                        onArm(entry.hexcode === armedIcon ? null : entry.hexcode)
+                      } else if (e.detail === 0) onPlaceByKeyboard(entry.hexcode)
                     }}
                   >
                     {/* No draggable={false} on the img: the pointer usually goes down on the
@@ -181,6 +250,25 @@ export function PoiPicker({ scale, onPlaceByKeyboard, armedIcon, onArm }: PoiPic
           <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Nothing matches “{query}”.</div>
         )}
       </div>
+
+      {preview &&
+        createPortal(
+          <div
+            className="mlb-poi-drag-tile"
+            style={{
+              position: 'fixed',
+              left: preview.x - preview.size / 2,
+              top: preview.y - preview.size / 2,
+              width: preview.size,
+              height: preview.size,
+              pointerEvents: 'none',
+              zIndex: 1000,
+            }}
+          >
+            {preview.url && <img src={preview.url} width={preview.size - 2} height={preview.size - 2} alt="" />}
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }

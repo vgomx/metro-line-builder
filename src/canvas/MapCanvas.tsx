@@ -42,6 +42,9 @@ export interface MapCanvasHandle {
   /** The grid point at the middle of what's on screen. The palette places there when a symbol
    * is chosen by keyboard, since there's no pointer to say where. */
   viewportCentre: () => Point
+  /** Places a landmark at a screen point — the touch drag's way onto the map, since a finger
+   * never fires HTML5 drop. */
+  dropPoiAtClient: (icon: string, clientX: number, clientY: number) => void
   /** The canvas element itself, for the image exporter to clone and resolve. */
   svgElement: () => SVGSVGElement | null
 }
@@ -316,6 +319,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     () => ({
       zoomIn,
       zoomOut,
+      dropPoiAtClient: (icon: string, clientX: number, clientY: number) => placePoiRef.current(icon, clientX, clientY),
       svgElement: () => svgRef.current,
       frameLine: (lineId: string) => {
         // The line's rendered stroke already lives in world space (the pan/zoom transform
@@ -777,14 +781,25 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     e.dataTransfer.dropEffect = 'copy'
   }
 
+  // Placing a landmark at a screen point — shared by the desktop HTML5 drop and the touch
+  // drag, which can't use HTML5 drop because it never fires on a finger.
+  const placePoiAtClient = (icon: string, clientX: number, clientY: number) => {
+    const { x, y } = toWorld(clientX, clientY)
+    const landed = { x: snapToPoiGrid(x), y: snapToPoiGrid(y) }
+    onAddPoi(landed.x, landed.y, icon)
+    announceLanding([landed])
+  }
+  // The imperative handle calls this through a ref rather than capturing the closure, so a
+  // drop always lands against the current zoom rather than whatever it was when the handle
+  // last rebuilt.
+  const placePoiRef = useRef(placePoiAtClient)
+  placePoiRef.current = placePoiAtClient
+
   const handleDrop = (e: ReactDragEvent<SVGSVGElement>) => {
     const icon = e.dataTransfer.getData(POI_DRAG_MIME)
     if (!icon) return
     e.preventDefault()
-    const { x, y } = toWorld(e.clientX, e.clientY)
-    const landed = { x: snapToPoiGrid(x), y: snapToPoiGrid(y) }
-    onAddPoi(landed.x, landed.y, icon)
-    announceLanding([landed])
+    placePoiAtClient(icon, e.clientX, e.clientY)
   }
 
   const handleDoubleClick = () => {
