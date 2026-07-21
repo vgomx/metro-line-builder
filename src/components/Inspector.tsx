@@ -5,7 +5,7 @@ import { LINE_COLORS } from '../lineColors'
 import { isUsableLineNumber, MAX_LINE_NUMBER } from '../lineNumber'
 import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
 import { COMPANY_SYMBOLS } from '../types'
-import { CompanySymbolIcon } from '../companySymbols'
+import { CompanySymbolIcon, SYMBOL_LABEL } from '../companySymbols'
 import { DeleteStationsDialog } from './DeleteStationsDialog'
 import { HoverTip } from './HoverTip'
 import { openMojiBySubgroup, openMojiUrl, SUBGROUP_LABELS } from '../openmoji'
@@ -238,7 +238,7 @@ export function Inspector({
                 <button
                   key={symbol}
                   type="button"
-                  aria-label={`Set company symbol ${symbol}`}
+                  aria-label={`Company symbol: ${SYMBOL_LABEL[symbol]}`}
                   onClick={() => onSetCompanySymbol(company.id, symbol)}
                   style={{
                     width: '44px',
