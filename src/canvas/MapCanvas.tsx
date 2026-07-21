@@ -89,6 +89,7 @@ interface MapCanvasProps {
    * point-of-interest palette up, or Escape with nothing drafted. */
   onReturnToSelect: () => void
   onMovePois: (ids: string[], dx: number, dy: number) => void
+  onMoveGeoFeature: (id: string, dx: number, dy: number) => void
   onFinishGeoFeature: () => void
   onCancelGeoFeature: () => void
   onSetSelection: (stationIds: string[], lineIds: string[], geoFeatureIds: string[], poiIds?: string[]) => void
@@ -144,6 +145,15 @@ type DragState =
       kind: 'pois'
       ids: string[]
       anchorId: string
+      startAnchorX: number
+      startAnchorY: number
+      startPointerX: number
+      startPointerY: number
+      moved: boolean
+    }
+  | {
+      kind: 'geo'
+      id: string
       startAnchorX: number
       startAnchorY: number
       startPointerX: number
@@ -213,6 +223,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onAddPoi,
     armedPoiIcon,
     onMovePois,
+    onMoveGeoFeature,
     onReturnToSelect,
     onPoiLand,
     onFinishGeoFeature,
@@ -589,10 +600,27 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     }
   }
 
-  const handleGeoFeatureClick = (feature: GeoFeature) => {
-    if (spaceHeld) return
+  // A park or river is grabbed and dragged the way a landmark is: pointer-down selects it and
+  // takes hold, and if the pointer then moves the whole shape travels with it. A press that
+  // doesn't move is just a selection.
+  const handleGeoFeaturePointerDown = (e: ReactPointerEvent<SVGPathElement>, feature: GeoFeature) => {
+    if (e.button !== 0 || spaceHeld) return
     if (tool !== 'select') return
-    onSetSelection([], [], [feature.id])
+    e.stopPropagation()
+    onStationGrab?.()
+    safeSetPointerCapture(e.target as Element, e.pointerId)
+    if (!selectedGeoFeatureIds.includes(feature.id)) onSetSelection([], [], [feature.id])
+    const anchor = feature.points[0] ?? { x: 0, y: 0 }
+    const pointerWorld = toWorld(e.clientX, e.clientY)
+    setDrag({
+      kind: 'geo',
+      id: feature.id,
+      startAnchorX: anchor.x,
+      startAnchorY: anchor.y,
+      startPointerX: pointerWorld.x,
+      startPointerY: pointerWorld.y,
+      moved: false,
+    })
   }
 
   const handleWaypointClick = (e: ReactMouseEvent<SVGRectElement>, lineId: string, index: number) => {
@@ -633,6 +661,23 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           if (!drag.moved) onCheckpoint()
           onDetent?.()
           onMovePois(drag.ids, dx, dy)
+          setDrag({ ...drag, moved: true })
+        }
+      }
+    } else if (drag.kind === 'geo') {
+      // Snapped to the main grid, the one parks and rivers are drawn on, so the shape steps
+      // cell to cell and ticks a detent each crossing rather than sliding free.
+      const pointerWorld = toWorld(e.clientX, e.clientY)
+      const targetX = snapToGrid(drag.startAnchorX + (pointerWorld.x - drag.startPointerX))
+      const targetY = snapToGrid(drag.startAnchorY + (pointerWorld.y - drag.startPointerY))
+      const current = geoFeatureList.find(f => f.id === drag.id)?.points[0]
+      if (current) {
+        const dx = targetX - current.x
+        const dy = targetY - current.y
+        if (dx !== 0 || dy !== 0) {
+          if (!drag.moved) onCheckpoint()
+          onDetent?.()
+          onMoveGeoFeature(drag.id, dx, dy)
           setDrag({ ...drag, moved: true })
         }
       }
@@ -1069,7 +1114,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             key={feature.id}
             feature={feature}
             selected={selectedGeoFeatureIds.includes(feature.id)}
-            onClick={handleGeoFeatureClick}
+            onPointerDown={handleGeoFeaturePointerDown}
             onDoubleClick={f => tool === 'select' && onRenameRequest('geo', f.id)}
           />
         ))}

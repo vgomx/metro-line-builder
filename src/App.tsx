@@ -96,6 +96,7 @@ function App() {
     renameGeoFeature,
     addPoi,
     movePois,
+    moveGeoFeature,
     renamePoi,
     setPoiIcon,
     deletePoi,
@@ -433,6 +434,7 @@ function App() {
             armedPoiIcon={armedPoi}
             onPoiLand={() => playSound('drop')}
             onMovePois={movePois}
+            onMoveGeoFeature={moveGeoFeature}
             onReturnToSelect={() => handleSetTool('select')}
             onFinishGeoFeature={withSound('lineDone', finishGeoFeature)}
             onCancelGeoFeature={cancelGeoFeature}
