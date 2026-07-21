@@ -233,6 +233,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     viewportInsets,
   )
   const [drag, setDrag] = useState<DragState>({ kind: 'none' })
+  // Which fingers are currently on the canvas. A pinch is two of them, and the first one
+  // landing on empty space would otherwise start a marquee — a blue selection rectangle that
+  // then grows across the pinch and reads as a stray system selection. Tracked so the second
+  // finger can cancel that marquee and keep any tool from firing mid-gesture.
+  const activeTouches = useRef<Set<number>>(new Set())
+  const isPinch = () => activeTouches.current.size >= 2
   const [cursorWorld, setCursorWorld] = useState<{ x: number; y: number } | null>(null)
   /** The last landing, kept only long enough for the ripple to play out. Keyed so two drops in
    * quick succession restart the animation rather than sharing one that's already running. */
@@ -449,6 +455,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
 
   const handleBackgroundPointerDown = (e: ReactPointerEvent<SVGRectElement>) => {
     if (e.button !== 0) return
+    // A second finger already down means this is a pinch, not a tool action — placing a
+    // station or starting a marquee with it would be a side effect of trying to zoom.
+    if (e.pointerType === 'touch' && activeTouches.current.size >= 1) return
     if (spaceHeld) return // space-held drag is pan-only; let useZoomPan's own drag handle it
     if (tool === 'add-station') {
       const { x, y } = toWorld(e.clientX, e.clientY)
@@ -593,6 +602,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     }
 
     if (drag.kind === 'marquee') {
+      if (isPinch()) {
+        setDrag({ kind: 'none' })
+        return
+      }
       const { x, y } = toWorld(e.clientX, e.clientY)
       setDrag({ ...drag, x, y })
     } else if (drag.kind === 'pois') {
@@ -641,7 +654,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const handlePointerUp = (e?: ReactPointerEvent<SVGSVGElement>) => {
     // A finger has no hover, so pointerleave never comes and the placement marker stayed
     // parked wherever it was last tapped — a marker sitting on the map with nothing under it.
-    if (e?.pointerType === 'touch') setCursorWorld(null)
+    if (e?.pointerType === 'touch') {
+      setCursorWorld(null)
+      if (e.pointerId !== undefined) activeTouches.current.delete(e.pointerId)
+    }
 
     if (drag.kind === 'marquee') {
       const minX = Math.min(drag.startX, drag.x)
@@ -701,6 +717,13 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     setDrag({ kind: 'none' })
   }
 
+  const handlePointerCancel = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (e.pointerType === 'touch' && e.pointerId !== undefined) activeTouches.current.delete(e.pointerId)
+    // When the browser takes over the gesture (a pinch d3 claims), the fingers end on cancel
+    // rather than up, so the marquee has to be dropped here or it would hang on screen.
+    if (drag.kind === 'marquee') setDrag({ kind: 'none' })
+  }
+
   // The point-of-interest palette covers a good slice of the map, and once the landmarks are
   // down there's nothing left to pick from it. A click on the canvas is the natural way to say
   // so: the tool goes back to select and the panel leaves with it. On the root rather than the
@@ -708,6 +731,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   // tool up, neither of those does anything else. Space-held panning is exempt: that's
   // navigation, and it would be a poor reward for looking around.
   const handleRootPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (e.pointerType === 'touch') {
+      activeTouches.current.add(e.pointerId)
+      // The second finger of a pinch. Drop the marquee the first finger opened and let
+      // useZoomPan's own touch handling drive the zoom.
+      if (isPinch() && drag.kind === 'marquee') setDrag({ kind: 'none' })
+    }
     if (e.button !== 0 || spaceHeld) return
     if (tool !== 'add-poi') return
 
@@ -977,6 +1006,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       onPointerDown={handleRootPointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
       onPointerLeave={() => setCursorWorld(null)}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
