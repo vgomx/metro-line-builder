@@ -74,12 +74,23 @@ const PATCHES = {
 
 export type SoundName = keyof typeof PATCHES
 
+/** A finger rather than a mouse. Read without React so the module-load default can use it. */
+function isTouchDevice(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
+}
+
 function loadEnabled(): boolean {
   try {
-    return localStorage.getItem(STORAGE_KEY) !== 'off'
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored === 'on') return true
+    if (stored === 'off') return false
   } catch {
     return true
   }
+  // No saved preference. On at a desk, where a click is a click and a soft tick is welcome;
+  // off on a tablet, where making sound audible means overriding the silent switch (below),
+  // and doing that to someone who never asked for sound would be rude. They can turn it on.
+  return !isTouchDevice()
 }
 
 // Read by playSound, which is called from event handlers rather than from React, so the
@@ -92,6 +103,9 @@ export function isSoundEnabled(): boolean {
 
 export function setSoundEnabled(next: boolean) {
   enabled = next
+  // Turning sound on is a click, which is the gesture the playback session needs to start —
+  // so a touch user's first sound is the one right after they enable it, not the one after.
+  if (next) ensurePlaybackSession()
   try {
     localStorage.setItem(STORAGE_KEY, next ? 'on' : 'off')
   } catch {
@@ -100,6 +114,66 @@ export function setSoundEnabled(next: boolean) {
 }
 
 let unlocked = false
+let playbackSession: HTMLAudioElement | null = null
+
+/** A short silent WAV as a data URI, built rather than shipped. Mono, 8-bit, half a second —
+ * a few kB, looped forever. */
+function silentWavUri(): string {
+  const rate = 8000
+  const samples = rate / 2
+  const bytes = new Uint8Array(44 + samples)
+  const view = new DataView(bytes.buffer)
+  const ascii = (offset: number, text: string) => {
+    for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i))
+  }
+  ascii(0, 'RIFF')
+  view.setUint32(4, 36 + samples, true)
+  ascii(8, 'WAVE')
+  ascii(12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true) // PCM
+  view.setUint16(22, 1, true) // mono
+  view.setUint32(24, rate, true)
+  view.setUint32(28, rate, true) // byte rate
+  view.setUint16(32, 1, true) // block align
+  view.setUint16(34, 8, true) // bits per sample
+  ascii(36, 'data')
+  view.setUint32(40, samples, true)
+  bytes.fill(128, 44) // 8-bit unsigned silence
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+  return `data:audio/wav;base64,${btoa(binary)}`
+}
+
+/**
+ * Makes the app's sounds audible on an iPad with its silent switch on.
+ *
+ * iOS plays Web Audio in a session category the hardware mute governs, so on a silenced device
+ * the synthesised sounds reach earphones but never the speaker — which is exactly the report.
+ * There's no web API to change the category directly, but a rule of the platform does it for
+ * us: while an HTMLMediaElement is playing, the whole page's session becomes "playback", which
+ * the mute switch doesn't touch, and every sound the AudioContext makes rides along.
+ *
+ * So a silent clip loops quietly in the background for as long as sound is on. It must be
+ * started inside a user gesture, like the context resume, and only on touch: on the desktop
+ * there's no silent switch to beat, and a forever-playing media element would light the "this
+ * tab is playing audio" indicator over nothing.
+ */
+function ensurePlaybackSession() {
+  if (playbackSession || !isTouchDevice()) return
+  try {
+    const audio = new Audio(silentWavUri())
+    audio.loop = true
+    audio.volume = 0
+    void audio.play().catch(() => {
+      // Refused outside a gesture, or no autoplay for media. Try again on the next gesture.
+      playbackSession = null
+    })
+    playbackSession = audio
+  } catch {
+    playbackSession = null
+  }
+}
 
 /**
  * Wakes the audio context on the first touch, click or key the page receives.
@@ -127,6 +201,7 @@ function unlockAudio() {
     source.buffer = context.createBuffer(1, 1, 22050)
     source.connect(context.destination)
     source.start(0)
+    if (enabled) ensurePlaybackSession()
   } catch {
     // A browser without usable audio. Nothing here is worth interrupting anyone for.
   }
