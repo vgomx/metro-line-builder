@@ -135,10 +135,30 @@ export function useZoomPan(
     }
     svg.addEventListener('wheel', panOnWheel, { passive: false })
 
+    // The pinch selection square on iPad (both browsers — Chrome on iOS is WebKit too).
+    //
+    // When a second finger lands, WebKit begins a range selection and draws its blue
+    // rectangle. d3-zoom would suppress it, but only in its touchMOVE handler — at touchSTART
+    // it merely stops propagation — so the selection has already begun by the time the first
+    // move arrives to cancel it. CSS user-select doesn't reach a gesture-initiated selection
+    // on iOS, which is why declaring it wasn't enough.
+    //
+    // Preventing the default on the two-finger touchstart closes that gap. Capture phase, so
+    // it runs before d3's own touchstart listener, which stops propagation and would otherwise
+    // keep this from firing at all. Single-finger touches are left untouched — those are the
+    // tool's (drawing, dragging), and only a pinch puts two fingers down.
+    const blockMultiTouchSelection = (e: TouchEvent) => {
+      if (e.touches.length >= 2) e.preventDefault()
+    }
+    svg.addEventListener('touchstart', blockMultiTouchSelection, { passive: false, capture: true })
+    svg.addEventListener('touchmove', blockMultiTouchSelection, { passive: false, capture: true })
+
     return () => {
       selection.on('.zoom', null)
       svg.removeEventListener('wheel', blockPageZoom)
       svg.removeEventListener('wheel', panOnWheel)
+      svg.removeEventListener('touchstart', blockMultiTouchSelection, { capture: true } as EventListenerOptions)
+      svg.removeEventListener('touchmove', blockMultiTouchSelection, { capture: true } as EventListenerOptions)
       behaviorRef.current = null
       selectionRef.current = null
     }
