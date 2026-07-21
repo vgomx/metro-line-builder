@@ -168,7 +168,7 @@ export function LineAnnouncer({ line, scrollText }: LineAnnouncerProps) {
         }}
       >
         <span style={{ paddingLeft: '6px', paddingTop: '2px', paddingBottom: '2px', flexShrink: 0, display: 'flex' }}>
-          <LineIndicator id={String(line.number)} color={line.color} size="xs" />
+          <LineIndicator id={String(line.number)} color={line.color} shape="pill" size="xs" />
         </span>
         <span style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--ink-0)', paddingRight: '12px' }}>
           {line.name}

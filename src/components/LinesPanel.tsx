@@ -131,7 +131,7 @@ export function LinesPanel({ lines, selectedLineId, onSelect, onToggleVisibility
                 line the same way the canvas does. Sized up from the old 14px dot to seat the
                 number legibly — LineIndicator picks its own text colour against the fill,
                 which the pale end of the palette (the yellow) needs. */}
-            <LineIndicator id={String(line.number)} color={line.color} size="sm" />
+            <LineIndicator id={String(line.number)} color={line.color} shape="pill" size="sm" />
             <span
               style={{
                 flex: 1,
