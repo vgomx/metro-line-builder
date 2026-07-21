@@ -231,7 +231,10 @@ export function Inspector({
             are logos being chosen, not swatches, so they get room to read as one. */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
           <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--text-secondary)' }}>Symbol</label>
-          <div style={{ display: 'flex', gap: 'var(--gap-tight)', flexWrap: 'wrap' }}>
+          {/* A grid of large tiles rather than a tight wrap: these are illustrated badges now,
+              each a different shape, and they only tell one operator from another when given
+              room to be seen. Three to a row fills the panel's width at 66px. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--gap-sm)' }}>
             {COMPANY_SYMBOLS.map(symbol => {
               const active = company.symbol === symbol
               return (
@@ -241,8 +244,7 @@ export function Inspector({
                   aria-label={`Company symbol: ${SYMBOL_LABEL[symbol]}`}
                   onClick={() => onSetCompanySymbol(company.id, symbol)}
                   style={{
-                    width: '44px',
-                    height: '44px',
+                    aspectRatio: '1',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -256,7 +258,7 @@ export function Inspector({
                     transition: 'border-color 100ms ease, background 100ms ease',
                   }}
                 >
-                  <CompanySymbolIcon symbol={symbol} size={26} />
+                  <CompanySymbolIcon symbol={symbol} size={52} />
                 </button>
               )
             })}
