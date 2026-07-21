@@ -42,6 +42,9 @@ export interface MapCanvasHandle {
   /** The grid point at the middle of what's on screen. The palette places there when a symbol
    * is chosen by keyboard, since there's no pointer to say where. */
   viewportCentre: () => Point
+  /** Places a landmark at a screen point — the touch drag's way onto the map, since a finger
+   * never fires HTML5 drop. */
+  dropPoiAtClient: (icon: string, clientX: number, clientY: number) => void
   /** The canvas element itself, for the image exporter to clone and resolve. */
   svgElement: () => SVGSVGElement | null
 }
@@ -86,6 +89,7 @@ interface MapCanvasProps {
    * point-of-interest palette up, or Escape with nothing drafted. */
   onReturnToSelect: () => void
   onMovePois: (ids: string[], dx: number, dy: number) => void
+  onMoveGeoFeature: (id: string, dx: number, dy: number) => void
   onFinishGeoFeature: () => void
   onCancelGeoFeature: () => void
   onSetSelection: (stationIds: string[], lineIds: string[], geoFeatureIds: string[], poiIds?: string[]) => void
@@ -141,6 +145,15 @@ type DragState =
       kind: 'pois'
       ids: string[]
       anchorId: string
+      startAnchorX: number
+      startAnchorY: number
+      startPointerX: number
+      startPointerY: number
+      moved: boolean
+    }
+  | {
+      kind: 'geo'
+      id: string
       startAnchorX: number
       startAnchorY: number
       startPointerX: number
@@ -210,6 +223,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onAddPoi,
     armedPoiIcon,
     onMovePois,
+    onMoveGeoFeature,
     onReturnToSelect,
     onPoiLand,
     onFinishGeoFeature,
@@ -316,6 +330,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     () => ({
       zoomIn,
       zoomOut,
+      dropPoiAtClient: (icon: string, clientX: number, clientY: number) => placePoiRef.current(icon, clientX, clientY),
       svgElement: () => svgRef.current,
       frameLine: (lineId: string) => {
         // The line's rendered stroke already lives in world space (the pan/zoom transform
@@ -585,10 +600,27 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     }
   }
 
-  const handleGeoFeatureClick = (feature: GeoFeature) => {
-    if (spaceHeld) return
+  // A park or river is grabbed and dragged the way a landmark is: pointer-down selects it and
+  // takes hold, and if the pointer then moves the whole shape travels with it. A press that
+  // doesn't move is just a selection.
+  const handleGeoFeaturePointerDown = (e: ReactPointerEvent<SVGPathElement>, feature: GeoFeature) => {
+    if (e.button !== 0 || spaceHeld) return
     if (tool !== 'select') return
-    onSetSelection([], [], [feature.id])
+    e.stopPropagation()
+    onStationGrab?.()
+    safeSetPointerCapture(e.target as Element, e.pointerId)
+    if (!selectedGeoFeatureIds.includes(feature.id)) onSetSelection([], [], [feature.id])
+    const anchor = feature.points[0] ?? { x: 0, y: 0 }
+    const pointerWorld = toWorld(e.clientX, e.clientY)
+    setDrag({
+      kind: 'geo',
+      id: feature.id,
+      startAnchorX: anchor.x,
+      startAnchorY: anchor.y,
+      startPointerX: pointerWorld.x,
+      startPointerY: pointerWorld.y,
+      moved: false,
+    })
   }
 
   const handleWaypointClick = (e: ReactMouseEvent<SVGRectElement>, lineId: string, index: number) => {
@@ -629,6 +661,23 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           if (!drag.moved) onCheckpoint()
           onDetent?.()
           onMovePois(drag.ids, dx, dy)
+          setDrag({ ...drag, moved: true })
+        }
+      }
+    } else if (drag.kind === 'geo') {
+      // Snapped to the main grid, the one parks and rivers are drawn on, so the shape steps
+      // cell to cell and ticks a detent each crossing rather than sliding free.
+      const pointerWorld = toWorld(e.clientX, e.clientY)
+      const targetX = snapToGrid(drag.startAnchorX + (pointerWorld.x - drag.startPointerX))
+      const targetY = snapToGrid(drag.startAnchorY + (pointerWorld.y - drag.startPointerY))
+      const current = geoFeatureList.find(f => f.id === drag.id)?.points[0]
+      if (current) {
+        const dx = targetX - current.x
+        const dy = targetY - current.y
+        if (dx !== 0 || dy !== 0) {
+          if (!drag.moved) onCheckpoint()
+          onDetent?.()
+          onMoveGeoFeature(drag.id, dx, dy)
           setDrag({ ...drag, moved: true })
         }
       }
@@ -777,14 +826,25 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     e.dataTransfer.dropEffect = 'copy'
   }
 
+  // Placing a landmark at a screen point — shared by the desktop HTML5 drop and the touch
+  // drag, which can't use HTML5 drop because it never fires on a finger.
+  const placePoiAtClient = (icon: string, clientX: number, clientY: number) => {
+    const { x, y } = toWorld(clientX, clientY)
+    const landed = { x: snapToPoiGrid(x), y: snapToPoiGrid(y) }
+    onAddPoi(landed.x, landed.y, icon)
+    announceLanding([landed])
+  }
+  // The imperative handle calls this through a ref rather than capturing the closure, so a
+  // drop always lands against the current zoom rather than whatever it was when the handle
+  // last rebuilt.
+  const placePoiRef = useRef(placePoiAtClient)
+  placePoiRef.current = placePoiAtClient
+
   const handleDrop = (e: ReactDragEvent<SVGSVGElement>) => {
     const icon = e.dataTransfer.getData(POI_DRAG_MIME)
     if (!icon) return
     e.preventDefault()
-    const { x, y } = toWorld(e.clientX, e.clientY)
-    const landed = { x: snapToPoiGrid(x), y: snapToPoiGrid(y) }
-    onAddPoi(landed.x, landed.y, icon)
-    announceLanding([landed])
+    placePoiAtClient(icon, e.clientX, e.clientY)
   }
 
   const handleDoubleClick = () => {
@@ -1054,7 +1114,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             key={feature.id}
             feature={feature}
             selected={selectedGeoFeatureIds.includes(feature.id)}
-            onClick={handleGeoFeatureClick}
+            onPointerDown={handleGeoFeaturePointerDown}
             onDoubleClick={f => tool === 'select' && onRenameRequest('geo', f.id)}
           />
         ))}

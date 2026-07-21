@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Badge, Button, Divider, Input, Select, Tag, Toggle } from 'metro-ds'
+import { Badge, Button, Divider, Input, Tag, Toggle } from 'metro-ds'
 import { ParkIcon, PenIcon, PoiIcon, RiverIcon, TrashIcon } from '../icons'
 import { LINE_COLORS } from '../lineColors'
 import { isUsableLineNumber, MAX_LINE_NUMBER } from '../lineNumber'
 import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
 import { COMPANY_SYMBOLS } from '../types'
 import { CompanySymbolIcon, SYMBOL_LABEL } from '../companySymbols'
+import { CompanySelect } from './CompanySelect'
 import { DeleteStationsDialog } from './DeleteStationsDialog'
 import { HoverTip } from './HoverTip'
 import { openMojiBySubgroup, openMojiUrl, SUBGROUP_LABELS } from '../openmoji'
@@ -484,15 +485,11 @@ export function Inspector({
           </div>
         </div>
 
-        <Select
-          label="Company"
-          size="sm"
+        <CompanySelect
           value={line.companyId ?? ''}
-          options={[
-            { label: `${authorityDisplayName} (Local Transport Authority)`, value: '' },
-            ...companyList.map(c => ({ label: c.name, value: c.id })),
-          ]}
-          onChange={value => onSetLineCompany(line.id, value === '' ? null : String(value))}
+          companies={companyList}
+          authorityLabel={`${authorityDisplayName} (Local Transport Authority)`}
+          onChange={companyId => onSetLineCompany(line.id, companyId === '' ? null : companyId)}
         />
 
         <Divider label="Stations" />

@@ -1,4 +1,4 @@
-import type { MouseEvent } from 'react'
+import type { MouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import type { GeoFeature, Point } from '../types'
 import { buildVertices, routeOrthogonal } from './routing'
 import { BASELINE_CENTRE, wrapLabel } from './labelPlacement'
@@ -7,9 +7,10 @@ import { polygonLabelAnchor } from './polygon'
 interface GeoFeaturePathProps {
   feature: GeoFeature
   selected: boolean
-  onClick?: (feature: GeoFeature) => void
   /** Double-clicking a river or a park is a request to rename it. */
   onDoubleClick?: (feature: GeoFeature) => void
+  /** Pressing on a river or a park selects it and takes hold, so it can be dragged. */
+  onPointerDown?: (e: ReactPointerEvent<SVGPathElement>, feature: GeoFeature) => void
 }
 
 const RIVER_COLOR = '#BFDBFE'
@@ -70,7 +71,7 @@ function riverLabelAnchor(points: Point[]): Point {
  * (if any) is drawn as a map label — seated at the park's centre or along the
  * river — in the same condensed face the station labels use.
  */
-export function GeoFeaturePath({ feature, selected, onClick, onDoubleClick }: GeoFeaturePathProps) {
+export function GeoFeaturePath({ feature, selected, onDoubleClick, onPointerDown }: GeoFeaturePathProps) {
   if (feature.points.length < 2) return null
 
   const handleDoubleClick = (e: MouseEvent<SVGPathElement>) => {
@@ -78,9 +79,8 @@ export function GeoFeaturePath({ feature, selected, onClick, onDoubleClick }: Ge
     onDoubleClick?.(feature)
   }
 
-  const handleClick = (e: MouseEvent<SVGPathElement>) => {
-    e.stopPropagation()
-    onClick?.(feature)
+  const handlePointerDown = (e: ReactPointerEvent<SVGPathElement>) => {
+    onPointerDown?.(e, feature)
   }
 
   const name = feature.name.trim()
@@ -97,7 +97,7 @@ export function GeoFeaturePath({ feature, selected, onClick, onDoubleClick }: Ge
           strokeLinecap="round"
           strokeLinejoin="round"
           opacity={selected ? 0.9 : 0.7}
-          onClick={handleClick}
+          onPointerDown={handlePointerDown}
           onDoubleClick={handleDoubleClick}
           style={{ cursor: 'pointer' }}
         />
@@ -136,7 +136,7 @@ export function GeoFeaturePath({ feature, selected, onClick, onDoubleClick }: Ge
         stroke={selected ? 'var(--brand-500)' : PARK_STROKE}
         strokeWidth={selected ? 2 : 1.5}
         opacity={selected ? 0.9 : 0.7}
-        onClick={handleClick}
+        onPointerDown={handlePointerDown}
         onDoubleClick={handleDoubleClick}
         style={{ cursor: 'pointer' }}
       />

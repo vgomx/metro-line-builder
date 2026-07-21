@@ -97,6 +97,7 @@ type Action =
   | { type: 'deleteGeoFeature'; geoFeatureId: string }
   | { type: 'addPoi'; x: number; y: number; icon: string; name: string }
   | { type: 'movePois'; ids: string[]; dx: number; dy: number }
+  | { type: 'moveGeoFeature'; id: string; dx: number; dy: number }
   | { type: 'renamePoi'; poiId: string; name: string }
   | { type: 'setPoiIcon'; poiId: string; icon: string }
   | { type: 'deletePoi'; poiId: string }
@@ -1108,6 +1109,16 @@ function reducer(rawState: MapState, action: Action): MapState {
       return { ...state, pointsOfInterest }
     }
 
+    // Translate every point of a park or river together. Like the station and landmark moves
+    // it's fired continuously through a drag and left off the recordable list — the caller
+    // checkpoints once at the first budge, so the whole drag undoes as one.
+    case 'moveGeoFeature': {
+      const feature = state.geoFeatures[action.id]
+      if (!feature) return state
+      const points = feature.points.map(p => ({ x: p.x + action.dx, y: p.y + action.dy }))
+      return { ...state, geoFeatures: { ...state.geoFeatures, [action.id]: { ...feature, points } } }
+    }
+
     case 'renamePoi': {
       const poi = state.pointsOfInterest[action.poiId]
       if (!poi) return state
@@ -1535,6 +1546,10 @@ export function useMapState() {
     (x: number, y: number, icon: string, name: string) => dispatch({ type: 'addPoi', x, y, icon, name }),
     [],
   )
+  const moveGeoFeature = useCallback(
+    (id: string, dx: number, dy: number) => dispatch({ type: 'moveGeoFeature', id, dx, dy }),
+    [],
+  )
   const movePois = useCallback(
     (ids: string[], dx: number, dy: number) => dispatch({ type: 'movePois', ids, dx, dy }),
     [],
@@ -1654,6 +1669,7 @@ export function useMapState() {
     renameGeoFeature,
     addPoi,
     movePois,
+    moveGeoFeature,
     renamePoi,
     setPoiIcon,
     deletePoi,

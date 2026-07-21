@@ -96,6 +96,7 @@ function App() {
     renameGeoFeature,
     addPoi,
     movePois,
+    moveGeoFeature,
     renamePoi,
     setPoiIcon,
     deletePoi,
@@ -433,6 +434,7 @@ function App() {
             armedPoiIcon={armedPoi}
             onPoiLand={() => playSound('drop')}
             onMovePois={movePois}
+            onMoveGeoFeature={moveGeoFeature}
             onReturnToSelect={() => handleSetTool('select')}
             onFinishGeoFeature={withSound('lineDone', finishGeoFeature)}
             onCancelGeoFeature={cancelGeoFeature}
@@ -611,6 +613,7 @@ function App() {
             scale={zoom}
             armedIcon={armedPoi}
             onArm={setArmedPoi}
+            onDragPlace={(icon, x, y) => mapCanvasRef.current?.dropPoiAtClient(icon, x, y)}
             onPlaceByKeyboard={icon => {
               const centre = mapCanvasRef.current?.viewportCentre()
               if (!centre) return
