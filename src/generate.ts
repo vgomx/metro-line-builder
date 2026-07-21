@@ -6,10 +6,10 @@ import { buildVertices } from './canvas/routing'
 import { distanceToOutline, insidePolygon } from './canvas/polygon'
 import { pickLineName, pickMapName, pickStationName } from './names'
 
-const MIN_X = 200
-const MAX_X = 1080
-const MIN_Y = 120
-const MAX_Y = 560
+const MIN_X = 160
+const MAX_X = 1120
+const MIN_Y = 100
+const MAX_Y = 600
 
 // Eight compass directions in circular order, so two can be chosen a known number of
 // steps apart to control the angle of the bend a line makes at its hub.
@@ -38,14 +38,14 @@ function shuffle<T>(list: T[]): T[] {
   return out
 }
 
-/** Straight run of stops out from `start` along `dir`, each 1–2 cells apart, clamped in. */
+/** Straight run of stops out from `start` along `dir`, each 2–3 cells apart, clamped in. */
 function arm(start: Point, dir: [number, number], steps: number): Point[] {
   const points: Point[] = []
   let x = start.x
   let y = start.y
   for (let i = 0; i < steps; i++) {
-    x = clamp(x + dir[0] * rand(1, 2) * GRID_SIZE, MIN_X, MAX_X)
-    y = clamp(y + dir[1] * rand(1, 2) * GRID_SIZE, MIN_Y, MAX_Y)
+    x = clamp(x + dir[0] * rand(2, 3) * GRID_SIZE, MIN_X, MAX_X)
+    y = clamp(y + dir[1] * rand(2, 3) * GRID_SIZE, MIN_Y, MAX_Y)
     points.push({ x, y })
   }
   return points
@@ -91,15 +91,20 @@ const POI_NEAR_STATION_MAX = 110
 /** Landmarks stay out of the parks too. A monument standing in a green field looks placed by
  * accident, and its label has to fight the park's own. */
 const POI_CLEAR_OF_PARK = 20
-const PARK_CLEAR_OF_STATION = 30
-/** A park belongs to the city, so it stays within reach of the network rather than sitting
- * out in the margins where nothing else is. */
-const PARK_NEAR_STATION_MAX = 130
+const PARK_CLEAR_OF_STATION = 28
+/** A park belongs to the city, so it stays close to the network rather than sitting out in
+ * the margins. Tightened from a distance that let parks drift a good three cells clear of the
+ * nearest platform, which read as a field the city happened to be next to. */
+const PARK_NEAR_STATION_MAX = 96
 /** Parks that share an edge read as one bigger park, so they're kept a cell apart. */
 const PARK_CLEAR_OF_PARK = GRID_SIZE
+/** And out of the water. Parks used to be placed without any regard for the river, so a
+ * third of maps had a green sitting in the middle of the blue. The river is drawn wide, so
+ * this is its half-width plus a gap to read across. */
+const PARK_CLEAR_OF_RIVER = 26
 /** A river is drawn wide, and a station standing in one looks like a mistake rather than a
  * bridge. Half the river's width plus the station's marker, plus room to read between them. */
-const RIVER_CLEAR_OF_STATION = 26
+const RIVER_CLEAR_OF_STATION = 22
 
 function distanceToSegment(a: Point, b: Point, p: Point): number {
   const dx = b.x - a.x
@@ -117,6 +122,41 @@ function distanceToRoute(route: Point[], p: Point): number {
     best = Math.min(best, distanceToSegment(route[i], route[i + 1], p))
   }
   return best
+}
+
+/**
+ * Whether a park's outline stays clear of the river.
+ *
+ * Three ways they can touch, all checked: the river running through the park (a river vertex
+ * inside the outline), a corner of the park reaching into the river (a park vertex too near
+ * the river's course), or the river skimming an edge of the park between its own vertices (a
+ * river vertex too near the outline). Cheap, and the river is a five-point line so none of
+ * the loops are large.
+ */
+function parkClearsRiver(park: Point[], river: Point[], clearance: number): boolean {
+  for (const v of river) if (insidePolygon(park, v)) return false
+  for (const v of park) if (distanceToRoute(river, v) < clearance) return false
+  for (const v of river) if (distanceToOutline(park, v) < clearance) return false
+  return true
+}
+
+/** The convex hull of a set of points (Andrew's monotone chain), used as the network's
+ * footprint — the shape a landmark has to fall inside to read as standing within the city
+ * rather than out past its edge. */
+function convexHull(input: Point[]): Point[] {
+  const pts = [...new Map(input.map(p => [`${p.x},${p.y}`, p])).values()].sort((a, b) => a.x - b.x || a.y - b.y)
+  if (pts.length < 3) return pts
+  const cross = (o: Point, a: Point, b: Point) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
+  const half = (source: Point[]) => {
+    const out: Point[] = []
+    for (const p of source) {
+      while (out.length >= 2 && cross(out[out.length - 2], out[out.length - 1], p) <= 0) out.pop()
+      out.push(p)
+    }
+    out.pop()
+    return out
+  }
+  return [...half(pts), ...half([...pts].reverse())]
 }
 
 /**
@@ -297,14 +337,35 @@ export function buildRandomMap(): DataSnapshot {
     return points
   }
 
+  // The city's centre of mass, so the river can be asked to cross it rather than merely to
+  // avoid stations — which, on a network now spread wide, would push the water out to run
+  // down an empty margin where it reads as unconnected to the city.
+  const cityCentre = {
+    x: placedStations.reduce((sum, st) => sum + st.x, 0) / placedStations.length,
+    y: placedStations.reduce((sum, st) => sum + st.y, 0) / placedStations.length,
+  }
+  const riverClearsStations = (course: Point[]) =>
+    Math.min(...placedStations.map(st => distanceToRoute(course, st))) >= RIVER_CLEAR_OF_STATION
+  // Among courses that keep clear of every platform, take the one that passes closest to the
+  // centre — a river that actually runs through the city. Only if none clear the platforms
+  // does the search fall back to whichever keeps furthest from them.
   let riverPoints = proposeRiver()
-  let riverClearance = Math.min(...placedStations.map(st => distanceToRoute(riverPoints, st)))
-  for (let attempt = 0; attempt < 60 && riverClearance < RIVER_CLEAR_OF_STATION; attempt++) {
+  let bestCentral = riverClearsStations(riverPoints) ? distanceToRoute(riverPoints, cityCentre) : Infinity
+  let bestClearance = Math.min(...placedStations.map(st => distanceToRoute(riverPoints, st)))
+  for (let attempt = 0; attempt < 60; attempt++) {
     const candidate = proposeRiver()
     const clearance = Math.min(...placedStations.map(st => distanceToRoute(candidate, st)))
-    if (clearance > riverClearance) {
+    const central = distanceToRoute(candidate, cityCentre)
+    if (clearance >= RIVER_CLEAR_OF_STATION) {
+      if (central < bestCentral) {
+        riverPoints = candidate
+        bestCentral = central
+        bestClearance = clearance
+      }
+    } else if (bestCentral === Infinity && clearance > bestClearance) {
+      // Still hunting for a clear course; keep the roomiest seen so far as the fallback.
       riverPoints = candidate
-      riverClearance = clearance
+      bestClearance = clearance
     }
   }
   const riverId = `geo-${nextGeo++}`
@@ -321,20 +382,23 @@ export function buildRandomMap(): DataSnapshot {
   const parkCount = rand(1, 2)
   const parkBoxes: { x0: number; y0: number; x1: number; y1: number }[] = []
   const parkOutlines: Point[][] = []
-  for (let attempt = 0, made = 0; attempt < 150 && made < parkCount; attempt++) {
+  for (let attempt = 0, made = 0; attempt < 240 && made < parkCount; attempt++) {
     const anchorStation = placedStations[rand(0, placedStations.length - 1)]
     if (!anchorStation) break
+    // Kept within a couple of cells of the anchor, so the park lands in the interior pocket
+    // beside a stop rather than drifting off to find open space.
     const centre = {
-      x: snap(anchorStation.x + rand(-4, 4) * GRID_SIZE),
-      y: snap(anchorStation.y + rand(-4, 4) * GRID_SIZE),
+      x: snap(anchorStation.x + rand(-2, 2) * GRID_SIZE),
+      y: snap(anchorStation.y + rand(-2, 2) * GRID_SIZE),
     }
     const corners = rand(5, 7)
     const points: Point[] = []
     for (let i = 0; i < corners; i++) {
       // Angles in order around the centre, so the outline never crosses itself, with the
-      // reach varying corner to corner — that variation is the whole shape.
+      // reach varying corner to corner — that variation is the whole shape. Smaller than
+      // before (was up to 3.2 cells): a garden square in the network, not a district park.
       const angle = (i / corners) * Math.PI * 2 + (Math.random() - 0.5) * 0.35
-      const reach = (1.6 + Math.random() * 1.6) * GRID_SIZE
+      const reach = (0.9 + Math.random() * 0.9) * GRID_SIZE
       points.push({ x: snap(centre.x + Math.cos(angle) * reach), y: snap(centre.y + Math.sin(angle) * reach) })
     }
     const box = {
@@ -343,7 +407,7 @@ export function buildRandomMap(): DataSnapshot {
       x1: Math.max(...points.map(p => p.x)),
       y1: Math.max(...points.map(p => p.y)),
     }
-    if (box.x1 - box.x0 < GRID_SIZE * 2 || box.y1 - box.y0 < GRID_SIZE * 2) continue
+    if (box.x1 - box.x0 < GRID_SIZE * 1.5 || box.y1 - box.y0 < GRID_SIZE * 1.5) continue
     const nearestStation = Math.min(...placedStations.map(st => Math.hypot(st.x - centre.x, st.y - centre.y)))
     if (nearestStation > PARK_NEAR_STATION_MAX) continue
     const crowded = placedStations.some(
@@ -357,6 +421,7 @@ export function buildRandomMap(): DataSnapshot {
         box.y1 + PARK_CLEAR_OF_PARK > p.y0,
     )
     if (crowded || overlapsPark) continue
+    if (!parkClearsRiver(points, riverPoints, PARK_CLEAR_OF_RIVER)) continue
     parkBoxes.push(box)
     parkOutlines.push(points)
     const id = `geo-${nextGeo++}`
@@ -373,11 +438,35 @@ export function buildRandomMap(): DataSnapshot {
   const kinds = shuffle(POI_KINDS)
   const poiTarget = rand(3, 5)
   const placedPois: Point[] = []
-  for (let attempt = 0; attempt < 300 && poiOrder.length < poiTarget; attempt++) {
+  // Proposed from inside the network's own footprint rather than the whole canvas, so a
+  // landmark lands among the lines it's reached from instead of out past the last stop. The
+  // footprint is the stations' bounding box; with the wider spacing above it now has interior
+  // room to hold one. A small overshoot on each side lets a landmark sit just off the outer
+  // edge of the network too, which still reads as part of the city.
+  const bx0 = Math.min(...placedStations.map(st => st.x)) - GRID_SIZE
+  const bx1 = Math.max(...placedStations.map(st => st.x)) + GRID_SIZE
+  const by0 = Math.min(...placedStations.map(st => st.y)) - GRID_SIZE
+  const by1 = Math.max(...placedStations.map(st => st.y)) + GRID_SIZE
+  // The network's footprint, grown by a cell. A landmark has to land inside this: a bounding
+  // box alone accepts its four corners, which are exactly the empty outskirts the landmarks
+  // kept ending up in. The hull follows the network's real cross shape instead.
+  const footprint = convexHull(placedStations.map(st => ({ x: st.x, y: st.y })))
+  const footprintCentre = {
+    x: footprint.reduce((sum, p) => sum + p.x, 0) / footprint.length,
+    y: footprint.reduce((sum, p) => sum + p.y, 0) / footprint.length,
+  }
+  const grownFootprint = footprint.map(p => {
+    const dx = p.x - footprintCentre.x
+    const dy = p.y - footprintCentre.y
+    const len = Math.hypot(dx, dy) || 1
+    return { x: p.x + (dx / len) * GRID_SIZE, y: p.y + (dy / len) * GRID_SIZE }
+  })
+  for (let attempt = 0; attempt < 500 && poiOrder.length < poiTarget; attempt++) {
     const p = {
-      x: Math.round(rand(MIN_X - GRID_SIZE, MAX_X + GRID_SIZE) / POI_GRID_SIZE) * POI_GRID_SIZE,
-      y: Math.round(rand(MIN_Y - GRID_SIZE, MAX_Y + GRID_SIZE) / POI_GRID_SIZE) * POI_GRID_SIZE,
+      x: Math.round(rand(bx0, bx1) / POI_GRID_SIZE) * POI_GRID_SIZE,
+      y: Math.round(rand(by0, by1) / POI_GRID_SIZE) * POI_GRID_SIZE,
     }
+    if (grownFootprint.length >= 3 && !insidePolygon(grownFootprint, p)) continue
     const toNearestStation = Math.min(...placedStations.map(st => Math.hypot(st.x - p.x, st.y - p.y)))
     if (toNearestStation < POI_CLEAR_OF_STATION) continue
     if (toNearestStation > POI_NEAR_STATION_MAX) continue
