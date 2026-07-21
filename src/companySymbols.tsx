@@ -1,110 +1,117 @@
+import type { ReactNode } from 'react'
 import type { CompanySymbol } from './types'
 
 /** What a company wears before anyone picks — the plainest mark in the set. */
 export const DEFAULT_COMPANY_SYMBOL: CompanySymbol = 'arrow'
 
 /**
- * Ten minimalist company logos, all built from one vocabulary: track, direction, movement.
- * Real operators badge themselves this way — São Paulo's interlocking arrows, Montréal's
- * arrow-in-circle, the railway switch on half of Europe's infrastructure liveries — so the
- * set reads as ten plausible transit identities rather than ten generic glyphs.
+ * Ten transit-operator badges, drawn new in OpenMoji's house style — a bold dark rim, a flat
+ * colour fill, a simple white mark inside — from the vocabulary a rail company badges itself
+ * with: track, rail, the points, arrows, direction. Each takes its own operator colour so a
+ * list of companies reads as a row of liveries rather than ten variations of one glyph.
  *
- * Redrawn against OpenMoji's transit iconography — the railway-track, the roundabout, the
- * arrows — so each mark is bolder and reads at a glance: the rails recede in perspective
- * like the OpenMoji track rather than sitting flat, the loop wears a clear notch of travel,
- * the compass stamps as a solid star. The ten keys are unchanged, so a saved company keeps
- * whatever it was already wearing.
+ * This replaced an earlier set of thin monochrome line-marks, which were too faint and too
+ * abstract to carry as logos. These are coloured on purpose and don't follow the theme's ink
+ * the way a UI glyph would — the same way the map's landmarks keep their own colour — but the
+ * bright fills read against both a light and a dark tile, which the dark rim alone would not.
  *
- * Everything is drawn in currentColor so a mark takes the ink of wherever it sits — muted
- * in lists, primary in headers — never a colour of its own. Shared 16x16 grid; the stroke
- * is a touch heavier than the app's chrome icons (1.5 vs 1.3) because these render larger
- * and should carry logo weight, not UI weight. `satisfies` keeps this record and the
- * COMPANY_SYMBOLS list in types.ts locked to each other.
+ * The ten keys are unchanged from the line-mark set, so a saved company keeps its slot. The
+ * 32×32 grid gives the rounded OpenMoji geometry room the old 16×16 didn't.
  */
-const SYMBOL_ART = {
-  /** The plainest logo there is: one arrow, headed somewhere. */
-  arrow: (
+const RIM = { cx: 16, cy: 16, r: 13, stroke: '#000000', strokeWidth: 2 } as const
+/** The white mark inside a badge — one weight across the set so the ten read as a family. */
+const MARK = { fill: 'none', stroke: '#ffffff', strokeWidth: 2.6, strokeLinecap: 'round', strokeLinejoin: 'round' } as const
+const SOLID = { fill: '#ffffff', stroke: 'none' } as const
+
+/** A coloured roundel with the operator's rim, and whatever mark goes inside it. */
+function Badge({ color, children }: { color: string; children: ReactNode }) {
+  return (
     <>
-      <path d="M3 8h8.5" />
-      <path d="M8 4.5 11.5 8 8 11.5" />
+      <circle {...RIM} fill={color} />
+      {children}
     </>
+  )
+}
+
+const SYMBOL_ART = {
+  /** The plainest badge there is: one arrow, headed somewhere. */
+  arrow: (
+    <Badge color="#4EA3E0">
+      <path d="M10 16h9.5M15 11l5 5-5 5" {...MARK} />
+    </Badge>
   ),
   /** Motion as pure repetition — two chevrons driving right. */
-  chevrons: <path d="M4 4l4 4-4 4M8.5 4l4 4-4 4" />,
+  chevrons: (
+    <Badge color="#F59100">
+      <path d="M11 10.5l5.5 5.5-5.5 5.5M16.5 10.5l5.5 5.5-5.5 5.5" {...MARK} />
+    </Badge>
+  ),
   /** Two flows funnelling into one — the interchange operator, the São Paulo idea. */
   converge: (
-    <>
-      <path d="M2.5 4.5 7 8 2.5 11.5" />
-      <path d="M7 8h6" />
-      <path d="M10.5 5.8 13.2 8 10.5 10.2" />
-    </>
+    <Badge color="#16A6A6">
+      <path d="M9 11 15.5 16 9 21M15.5 16H23M20 13l3 3-3 3" {...MARK} />
+    </Badge>
   ),
-  /** Two-way running: up and down on their own tracks. */
+  /** Two-way running: one line dividing into a pair of directions. */
   diverge: (
-    <>
-      <path d="M5 13.5V4M3 6l2-2 2 2" />
-      <path d="M11 2.5v9.5M9 10l2 2 2-2" />
-    </>
+    <Badge color="#9B6FC4">
+      <path
+        d="M9 16h6.5M15.5 16 22 11.5M15.5 16 22 20.5M22 11.5l-2.6.1M22 11.5l-.1 2.6M22 20.5l-2.6-.1M22 20.5l-.1-2.6"
+        {...MARK}
+      />
+    </Badge>
   ),
-  /** Service in every direction — a four-point star, filled solid so it stamps like a seal. */
+  /** Service in every direction — a four-point compass star, the authority's seal. */
   compass: (
-    <path
-      d="M8 1.5 9.6 6.4 14.5 8 9.6 9.6 8 14.5 6.4 9.6 1.5 8 6.4 6.4Z"
-      fill="currentColor"
-      stroke="none"
-    />
+    <Badge color="#F1B31C">
+      <path
+        d="M16 7.5 18.4 13.6 24.5 16 18.4 18.4 16 24.5 13.6 18.4 7.5 16 13.6 13.6Z"
+        fill="#ffffff"
+        stroke="#ffffff"
+        strokeWidth={1.2}
+        strokeLinejoin="round"
+      />
+    </Badge>
   ),
-  /** The circle line: a ring wearing a notch of its direction of travel. */
+  /** The circle line: a ring wearing its direction of travel. */
   loop: (
-    <>
-      <circle cx="8" cy="8" r="5" />
-      <path d="M6.3 1.9 9.3 3 6.9 5.1" />
-    </>
+    <Badge color="#5FA43A">
+      <path d="M20.8 11.2A6.4 6.4 0 1 0 22 14.5" {...MARK} />
+      <path d="M18.2 6.3 22.6 8.2 20.7 12.6Z" {...SOLID} />
+    </Badge>
   ),
   /** A route dividing — the branch diagram every network map draws. */
   junction: (
-    <>
-      <path d="M8 14V8M8 8 4.2 4.2M8 8l3.8-3.8" />
-      <circle cx="4.2" cy="4.2" r="1.3" fill="currentColor" stroke="none" />
-      <circle cx="11.8" cy="4.2" r="1.3" fill="currentColor" stroke="none" />
-    </>
+    <Badge color="#E8604C">
+      <path d="M16 23V16M16 16 10.5 10.5M16 16 21.5 10.5" {...MARK} />
+      <circle cx="10.5" cy="10.5" r="1.9" fill="#ffffff" />
+      <circle cx="21.5" cy="10.5" r="1.9" fill="#ffffff" />
+    </Badge>
   ),
   /** Railway points: a rail peeling smoothly off the main line. */
   switch: (
-    <>
-      <path d="M6 2v12" />
-      <path d="M6 8.5C6.4 6 8 4.3 11.5 3.5" />
-    </>
+    <Badge color="#5C6BC0">
+      <path d="M13 9v14M13 16.5C14 13.5 16.5 12 20 11.5" {...MARK} />
+    </Badge>
   ),
   /** Two routes crossing at a shared station. */
   crossing: (
-    <>
-      <path d="M3 3l10 10M13 3 3 13" />
-      <circle cx="8" cy="8" r="1.6" fill="currentColor" stroke="none" />
-    </>
+    <Badge color="#B07A3F">
+      <path d="M10 10 22 22M22 10 10 22" {...MARK} />
+      <circle cx="16" cy="16" r="2.2" fill="#ffffff" />
+    </Badge>
   ),
-  /** The track itself, receding into the distance — sleepers between two rails. */
+  /** The track itself — sleepers laddered between two rails. */
   rails: (
-    <>
-      <path d="M5 13.6 6.8 3" />
-      <path d="M11 13.6 9.2 3" />
-      <path d="M4.2 12h7.6M5.4 8.4h5.2M6.4 4.9h3.2" />
-    </>
+    <Badge color="#6E8494">
+      <path d="M12.6 9 13.7 23M19.4 9 18.3 23M11.8 12h8.4M11.4 16h9.2M11 20h10" {...MARK} />
+    </Badge>
   ),
 } satisfies Record<CompanySymbol, JSX.Element>
 
 export function CompanySymbolIcon({ symbol, size = 14 }: { symbol: CompanySymbol; size?: number }) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg width={size} height={size} viewBox="0 0 32 32">
       {SYMBOL_ART[symbol] ?? SYMBOL_ART[DEFAULT_COMPANY_SYMBOL]}
     </svg>
   )
