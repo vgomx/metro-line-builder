@@ -31,7 +31,7 @@ import { exclusiveStationIds, stationIdsOfLine } from './canvas/lineNodes'
 import { geoTypeOfTool, MIN_GEO_POINTS } from './geoDraft'
 import { useTheme } from './useTheme'
 import { useSound } from './useSound'
-import { playSound } from './sound'
+import { playSequence, playSound } from './sound'
 import type { SoundName } from './sound'
 import type { Line, Tool } from './types'
 import { openMojiLabel } from './openmoji'
@@ -454,6 +454,7 @@ function App() {
             onStationGrab={() => playSound('grab')}
             onLineReroute={() => playSound('reroute')}
             onLineSnap={() => playSound('snap')}
+            onLineSelected={() => playSequence('lineSelect')}
             onUndo={undo}
             onRedo={redo}
             onTransformChange={t => setZoom(t.k)}
@@ -668,7 +669,7 @@ function App() {
               poiList={poiList}
               selectedCompany={selectedCompany}
               onSelectLine={id => {
-                playSound('tool')
+                playSequence('lineSelect')
                 handleSetSelection([], [id], [])
                 // Fly to the line only when picked from the list; a click on the canvas
                 // leaves the viewport alone (the line is already where the user is looking).
