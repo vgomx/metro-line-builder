@@ -5,21 +5,7 @@ import { EyeIcon, EyeOffIcon, GripIcon, PlusIcon, TrainIcon } from '../icons'
 import { stationIdsOfLine } from '../canvas/lineNodes'
 import type { Line } from '../types'
 
-interface LinesPanelProps {
-  lines: Line[]
-  selectedLineId: string | null
-  /** The line currently being ridden, so its row can show the ride as live. */
-  ridingLineId: string | null
-  onSelect: (lineId: string) => void
-  /** Board this line's train — the camera follows it and the trip view lights up. */
-  onRide: (lineId: string) => void
-  onToggleVisibility: (lineId: string) => void
-  onAddLine: () => void
-  /** Move a line to a new position in the manual order. */
-  onReorder: (lineId: string, toIndex: number) => void
-}
-
-type SortKey = 'manual' | 'name' | 'number' | 'length' | 'created'
+export type SortKey = 'manual' | 'name' | 'number' | 'length' | 'created'
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: 'manual', label: 'Manual' },
@@ -28,6 +14,112 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: 'length', label: 'Length' },
   { key: 'created', label: 'Created' },
 ]
+
+/**
+ * The "Sort by" control. Lives apart from the list so it can sit up on the panel's title row —
+ * its state is owned by RightPanel and handed to both this and the list.
+ */
+export function LineSortControl({ value, onChange }: { value: SortKey; onChange: (key: SortKey) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const close = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [open])
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Sort by</span>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+          height: '24px',
+          padding: '0 8px',
+          fontSize: 'var(--text-xs)',
+          fontWeight: 500,
+          color: 'var(--text-primary)',
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border-default)',
+          borderRadius: '5px',
+          cursor: 'pointer',
+        }}
+      >
+        {SORT_OPTIONS.find(o => o.key === value)?.label}
+        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" style={{ color: 'var(--text-muted)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms ease' }}>
+          <path d="M2 4L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          style={{
+            position: 'absolute',
+            top: '28px',
+            right: 0,
+            zIndex: 50,
+            minWidth: '120px',
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border-default)',
+            borderRadius: '6px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+            padding: '4px 0',
+          }}
+        >
+          {SORT_OPTIONS.map(option => (
+            <div
+              key={option.key}
+              role="option"
+              aria-selected={option.key === value}
+              onClick={() => {
+                onChange(option.key)
+                setOpen(false)
+              }}
+              style={{
+                padding: '5px 12px',
+                fontSize: 'var(--text-xs)',
+                cursor: 'pointer',
+                color: 'var(--text-primary)',
+                background: option.key === value ? 'var(--color-info-bg)' : 'transparent',
+                fontWeight: option.key === value ? 500 : 400,
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = option.key === value ? 'var(--color-info-bg)' : 'var(--bg-subtle)')}
+              onMouseLeave={e => (e.currentTarget.style.background = option.key === value ? 'var(--color-info-bg)' : 'transparent')}
+            >
+              {option.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface LinesPanelProps {
+  lines: Line[]
+  selectedLineId: string | null
+  /** The line currently being ridden, so its row can show the ride as live. */
+  ridingLineId: string | null
+  /** The active sort, owned by RightPanel so its control can live on the title row. */
+  sortBy: SortKey
+  onSelect: (lineId: string) => void
+  /** Board this line's train — the camera follows it and the trip view lights up. */
+  onRide: (lineId: string) => void
+  onToggleVisibility: (lineId: string) => void
+  onAddLine: () => void
+  /** Move a line to a new position in the manual order. */
+  onReorder: (lineId: string, toIndex: number) => void
+}
 
 /**
  * The list of lines.
@@ -45,21 +137,9 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
  * Dragged with pointer events rather than HTML5 drag-and-drop, which doesn't fire on touch. The
  * handle is a real button, so reordering also works from the keyboard: focus it and use the arrows.
  */
-export function LinesPanel({ lines, selectedLineId, ridingLineId, onSelect, onRide, onToggleVisibility, onAddLine, onReorder }: LinesPanelProps) {
+export function LinesPanel({ lines, selectedLineId, ridingLineId, sortBy, onSelect, onRide, onToggleVisibility, onAddLine, onReorder }: LinesPanelProps) {
   const [draggingId, setDraggingId] = useState<string | null>(null)
-  const [sortBy, setSortBy] = useState<SortKey>('manual')
-  const [sortOpen, setSortOpen] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
-  const sortRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!sortOpen) return
-    const close = (e: PointerEvent) => {
-      if (sortRef.current && !sortRef.current.contains(e.target as Node)) setSortOpen(false)
-    }
-    document.addEventListener('pointerdown', close)
-    return () => document.removeEventListener('pointerdown', close)
-  }, [sortOpen])
 
   const manual = sortBy === 'manual'
 
@@ -129,85 +209,12 @@ export function LinesPanel({ lines, selectedLineId, ridingLineId, onSelect, onRi
         </p>
       )}
 
-      {lines.length > 0 && (
-        <div style={{ padding: '8px 12px 4px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-          <div ref={sortRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Sort by</span>
-            <button
-              type="button"
-              onClick={() => setSortOpen(o => !o)}
-              aria-haspopup="listbox"
-              aria-expanded={sortOpen}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                height: '24px',
-                padding: '0 8px',
-                fontSize: 'var(--text-xs)',
-                fontWeight: 500,
-                color: 'var(--text-primary)',
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border-default)',
-                borderRadius: '5px',
-                cursor: 'pointer',
-              }}
-            >
-              {SORT_OPTIONS.find(o => o.key === sortBy)?.label}
-              <svg width="10" height="10" viewBox="0 0 12 12" fill="none" style={{ color: 'var(--text-muted)', transform: sortOpen ? 'rotate(180deg)' : 'none', transition: 'transform 150ms ease' }}>
-                <path d="M2 4L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            {sortOpen && (
-              <div
-                role="listbox"
-                style={{
-                  position: 'absolute',
-                  top: '28px',
-                  left: '48px',
-                  zIndex: 50,
-                  minWidth: '120px',
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border-default)',
-                  borderRadius: '6px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-                  padding: '4px 0',
-                }}
-              >
-                {SORT_OPTIONS.map(option => (
-                  <div
-                    key={option.key}
-                    role="option"
-                    aria-selected={option.key === sortBy}
-                    onClick={() => {
-                      setSortBy(option.key)
-                      setSortOpen(false)
-                    }}
-                    style={{
-                      padding: '5px 12px',
-                      fontSize: 'var(--text-xs)',
-                      cursor: 'pointer',
-                      color: 'var(--text-primary)',
-                      background: option.key === sortBy ? 'var(--color-info-bg)' : 'transparent',
-                      fontWeight: option.key === sortBy ? 500 : 400,
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = option.key === sortBy ? 'var(--color-info-bg)' : 'var(--bg-subtle)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = option.key === sortBy ? 'var(--color-info-bg)' : 'transparent')}
-                  >
-                    {option.label}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          {/* Say what the manual order is for — otherwise the drag handle reads as busy-work
-              rather than the one lever over a shared corridor. */}
-          {manual && (
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.35 }}>
-              Drag to set which lane each line takes where they share track.
-            </span>
-          )}
-        </div>
+      {/* Say what the manual order is for — otherwise the drag handle reads as busy-work rather
+          than the one lever over a shared corridor. */}
+      {manual && lines.length > 0 && (
+        <span style={{ padding: '8px 12px 4px', fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+          Drag to set which lane each line takes where they share track.
+        </span>
       )}
 
       {displayLines.map((line, index) => {

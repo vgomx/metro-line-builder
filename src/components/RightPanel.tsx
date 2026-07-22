@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { IconButton, Tabs } from 'metro-ds'
 import { BackIcon } from '../icons'
-import { LinesPanel } from './LinesPanel'
+import { LinesPanel, LineSortControl } from './LinesPanel'
+import type { SortKey } from './LinesPanel'
 import { StationsPanel } from './StationsPanel'
 import { GeoPanel } from './GeoPanel'
 import { CompaniesPanel } from './CompaniesPanel'
@@ -140,6 +141,8 @@ export function RightPanel({
   onDeleteCompany,
 }: RightPanelProps) {
   const [tab, setTab] = useState('Lines')
+  // Owned here rather than in LinesPanel so the "Sort by" control can sit on the title row.
+  const [lineSort, setLineSort] = useState<SortKey>('manual')
 
   // Which way the content slides when the tab changes: rightward through the strip (and on to
   // Properties, which is the deepest view) enters from the right, back the other way from the
@@ -246,6 +249,13 @@ export function RightPanel({
         >
           {detail && tab === 'Properties' ? detail.title : tab}
         </span>
+        {/* The lines' sort control rides the title row rather than sitting a line below it. Only
+            on the Lines tab — it's the one list that sorts. Pushed to the right edge. */}
+        {tab === 'Lines' && (
+          <div style={{ marginLeft: 'auto' }}>
+            <LineSortControl value={lineSort} onChange={setLineSort} />
+          </div>
+        )}
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
@@ -257,6 +267,7 @@ export function RightPanel({
             lines={lineList}
             selectedLineId={selectedLine?.id ?? null}
             ridingLineId={ride?.lineId ?? null}
+            sortBy={lineSort}
             onSelect={openDetail(onSelectLine)}
             onRide={onRideLine}
             onToggleVisibility={onToggleLineVisibility}
