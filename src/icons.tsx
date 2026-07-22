@@ -298,3 +298,12 @@ export const NewspaperIcon = () => (
     <path d="M8.4 5.6h1.6M8.4 7.1h1.6M4.6 9.2h5.4M4.6 10.8h5.4" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
   </svg>
 )
+
+/** Planning a journey: two stops joined by a route that bends between them, as an itinerary does. */
+export const JourneyIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <path d="M4 3.2v4.2a2.4 2.4 0 0 0 2.4 2.4h3.2a2.4 2.4 0 0 1 2.4 2.4v.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <circle cx="4" cy="2.9" r="1.9" stroke="currentColor" strokeWidth="1.4" />
+    <circle cx="12" cy="13.1" r="1.9" fill="currentColor" />
+  </svg>
+)

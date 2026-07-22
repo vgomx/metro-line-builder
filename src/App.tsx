@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Toast } from 'metro-ds'
 import { hasSavedMap, useMapState } from './state/useMapState'
+import { planJourney } from './journey'
 import { MapCanvas } from './canvas/MapCanvas'
 import type { MapCanvasHandle } from './canvas/MapCanvas'
 import type { RideProgress } from './canvas/trainMotion'
@@ -127,6 +128,55 @@ function App() {
   } = useMapState()
 
   const mapCanvasRef = useRef<MapCanvasHandle>(null)
+  // Where a planned journey starts and ends. Deliberately not part of the map's own state: it
+  // describes a question the reader is asking, not anything about the city, so it isn't saved,
+  // isn't undoable, and doesn't belong in a snapshot.
+  const [journeyFromId, setJourneyFromId] = useState<string | null>(null)
+  const [journeyToId, setJourneyToId] = useState<string | null>(null)
+
+  /**
+   * Whether the journey tool is up.
+   *
+   * The chosen stations outlive it, so coming back resumes where you left off — but the map's
+   * highlight does not. A dimmed network and a glowing route with no panel explaining them is a
+   * state the interface has stopped accounting for, and it reads as the map being stuck.
+   */
+  const planningJourney = state.tool === 'plan-journey'
+
+  // Planned once and shared: the panel lists the itinerary and the canvas draws it, and two
+  // separate calls could drift apart the moment either input changed.
+  const journey = useMemo(
+    () => (journeyFromId && journeyToId ? planJourney(journeyFromId, journeyToId, lineList, state.stations) : null),
+    [journeyFromId, journeyToId, lineList, state.stations],
+  )
+
+  /**
+   * A click on a station while the journey tool is up.
+   *
+   * The first sets the start, the second the end. After that a click begins again from the
+   * station just clicked, which is the question a reader actually asks next — "and from here?" —
+   * and saves clearing the pair by hand. Clicking the current start again clears it, so there's
+   * a way to undo a misclick without leaving the tool.
+   */
+  const handleJourneyPick = (stationId: string) => {
+    playSound('tool')
+    if (stationId === journeyFromId) {
+      setJourneyFromId(journeyToId)
+      setJourneyToId(null)
+      return
+    }
+    if (stationId === journeyToId) {
+      setJourneyToId(null)
+      return
+    }
+    if (!journeyFromId) setJourneyFromId(stationId)
+    else if (!journeyToId) setJourneyToId(stationId)
+    else {
+      setJourneyFromId(stationId)
+      setJourneyToId(null)
+    }
+  }
+
   const { theme, toggleTheme } = useTheme()
   const { soundEnabled, toggleSound } = useSound()
   // The Gazette: a running feed of the map's big moments (see useMapNotifications for what earns
@@ -515,6 +565,10 @@ function App() {
             onPoiLand={() => playSound('drop')}
             onMovePois={movePois}
             onMoveGeoFeature={moveGeoFeature}
+            journeyFromId={planningJourney ? journeyFromId : null}
+            journeyToId={planningJourney ? journeyToId : null}
+            onJourneyPick={handleJourneyPick}
+            journeyLegs={planningJourney ? journey?.legs ?? null : null}
             onReturnToSelect={() => handleSetTool('select')}
             onFinishGeoFeature={withSound('lineDone', finishGeoFeature)}
             onCancelGeoFeature={cancelGeoFeature}
@@ -767,6 +821,17 @@ function App() {
             style={{ flex: 1, minHeight: 0, display: 'flex', pointerEvents: showPanel ? 'auto' : 'none' }}
           >
             <RightPanel
+              journeyMode={planningJourney}
+              journeyFromId={journeyFromId}
+              journeyToId={journeyToId}
+              onSetJourneyFrom={setJourneyFromId}
+              onSetJourneyTo={setJourneyToId}
+              onSwapJourney={() => {
+                setJourneyFromId(journeyToId)
+                setJourneyToId(journeyFromId)
+              }}
+              onExitJourney={() => handleSetTool('select')}
+              journey={journey}
               mapName={state.mapName}
               authorityName={state.authorityName}
               authorityDisplayName={authorityDisplayName}

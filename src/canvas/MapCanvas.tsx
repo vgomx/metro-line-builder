@@ -118,6 +118,12 @@ interface MapCanvasProps {
   onLineSnap?: () => void
   /** A line was picked on the canvas — the arrival chime, matching the list's. */
   onLineSelected?: () => void
+  /** Journey planning: the two chosen ends, and the click that sets them. */
+  journeyFromId?: string | null
+  journeyToId?: string | null
+  onJourneyPick?: (stationId: string) => void
+  /** The planned itinerary's legs, or null. Drives the route highlight. */
+  journeyLegs?: { lineId: string; stationIds: string[] }[] | null
   /** A dragged station or landmark crossed a snap point — the soft detent tick. */
   onDetent?: () => void
   onUndo: () => void
@@ -255,6 +261,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onLineReroute,
     onLineSnap,
     onLineSelected,
+    journeyFromId,
+    journeyToId,
+    onJourneyPick,
+    journeyLegs,
     onDetent,
     onUndo,
     onRedo,
@@ -659,6 +669,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     if (spaceHeld) return
     if (tool === 'draw-line') {
       onAppendDraftLineNode({ kind: 'station', stationId: station.id })
+    } else if (tool === 'plan-journey') {
+      onJourneyPick?.(station.id)
     }
   }
 
@@ -1027,6 +1039,37 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   // layer read their lane geometry from it rather than each deriving their own.
   const network = buildNetworkGeometry(lineList, stations)
 
+  /**
+   * The drawn segments a journey actually rides over.
+   *
+   * Read off each line's own track — the same lane-offset, filleted geometry the line is drawn
+   * with — so the highlight lands on the rail rather than on a straight line between stations,
+   * which is what a fresh polyline through the stops would give. A leg names its boarding and
+   * alighting stations; everything between their two stop indices is the ride, waypoints
+   * included, and direction doesn't matter because a leg can run either way along the track.
+   */
+  const journeyPaths =
+    journeyLegs && journeyLegs.length > 0
+      ? journeyLegs.flatMap(leg => {
+          const line = lineList.find(l => l.id === leg.lineId)
+          const geometry = network.byLine.get(leg.lineId)
+          if (!line || !geometry) return []
+          const track = buildLineTrack(geometry, leg.lineId, network.segmentLineMap)
+          if (!track) return []
+          const boarded = track.stopStationIds.indexOf(leg.stationIds[0])
+          const alighted = track.stopStationIds.indexOf(leg.stationIds[leg.stationIds.length - 1])
+          if (boarded < 0 || alighted < 0) return []
+          const from = Math.min(boarded, alighted)
+          const to = Math.max(boarded, alighted)
+          const segments: { d: string; color: string }[] = []
+          for (let i = from; i < to; i++) {
+            const d = track.segmentPaths[i]
+            if (d) segments.push({ d, color: line.color })
+          }
+          return segments
+        })
+      : null
+
   // Enter animations: a line sketches itself on when it first appears (drawn, or every
   // line on load); a station pops in when added (but not the ones already there on load).
   const revealingLineIds = useAppearance(
@@ -1241,24 +1284,48 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           />
         )}
 
-        {lineList
-          .filter(line => line.visible)
-          .map(line => {
-            const geometry = network.byLine.get(line.id)
-            if (!geometry) return null
-            if (refanningIds?.has(line.id)) return null // drawn by the re-fan overlay meanwhile
-            return (
-              <LinePath
-                key={line.id}
-                line={line}
-                geometry={geometry}
-                selected={selectedLineIds.includes(line.id)}
-                revealing={revealingLineIds.has(line.id)}
-                segmentLineMap={network.segmentLineMap}
-                onClick={handleLineClick}
+        {/* While a journey is on show, the rest of the network steps back so the route reads as
+            one continuous thing. Dimmed rather than hidden: the parts you aren't riding are still
+            how you make sense of the parts you are. */}
+        <g style={{ opacity: journeyPaths ? 0.22 : 1, transition: 'opacity 200ms ease' }}>
+          {lineList
+            .filter(line => line.visible)
+            .map(line => {
+              const geometry = network.byLine.get(line.id)
+              if (!geometry) return null
+              if (refanningIds?.has(line.id)) return null // drawn by the re-fan overlay meanwhile
+              return (
+                <LinePath
+                  key={line.id}
+                  line={line}
+                  geometry={geometry}
+                  selected={selectedLineIds.includes(line.id)}
+                  revealing={revealingLineIds.has(line.id)}
+                  segmentLineMap={network.segmentLineMap}
+                  onClick={handleLineClick}
+                />
+              )
+            })}
+        </g>
+
+        {/* The route itself, redrawn at full strength over the dimmed network. These are the same
+            lane-offset, filleted segments LinePath draws, so the highlight sits exactly on the
+            rail rather than approximately near it. */}
+        {journeyPaths && (
+          <g pointerEvents="none">
+            {journeyPaths.map((segment, index) => (
+              <path
+                key={index}
+                d={segment.d}
+                fill="none"
+                stroke={segment.color}
+                strokeWidth={6}
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
-            )
-          })}
+            ))}
+          </g>
+        )}
 
         {refanSession && (
           <RefanAnimation
@@ -1402,6 +1469,22 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
                 />
               ))
             })}
+
+        {/* The journey's two ends, ringed in the world so the map and the panel are obviously
+            talking about the same two stations. Drawn under the station nodes, so the ring reads
+            as something around the station rather than something covering it. */}
+        {[journeyFromId, journeyToId].map((id, index) => {
+          const station = id ? stations[id] : null
+          if (!station) return null
+          return (
+            <g key={`journey-end-${index}`} pointerEvents="none">
+              {/* A soft disc of the page's own background first, so the ring stays legible where
+                  it crosses a line, then the ring itself. */}
+              <circle cx={station.x} cy={station.y} r={15} fill="var(--bg-canvas)" opacity={0.55} />
+              <circle cx={station.x} cy={station.y} r={15} fill="none" stroke="var(--text-primary)" strokeWidth={2} />
+            </g>
+          )
+        })}
 
         {stationList.map(station => (
           <StationNode
