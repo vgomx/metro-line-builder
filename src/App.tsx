@@ -314,7 +314,9 @@ function App() {
   // the chime, the same announcement a real platform makes.
   const handleRideProgress = useCallback((progress: RideProgress) => {
     setRide(progress)
-    if (progress.atStation) playSequence('lineSelect')
+    // A short arrival note, not the half-second lineSelect chime: stops can arrive a second apart
+    // on a short hop, and the long one stacked into a drone.
+    if (progress.atStation) playSound('arrive')
   }, [])
   // A ride belongs to exactly one selected line. The moment the selection moves off it — picking
   // another line, clearing, deleting the line — the ride ends rather than tracking a train the
