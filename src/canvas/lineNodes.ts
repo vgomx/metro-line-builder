@@ -418,6 +418,9 @@ export interface LineTrack {
   stopPoints: Point[]
   /** Parallel to stopPoints: true for real stations, false for waypoints it glides through. */
   stopFlags: boolean[]
+  /** Parallel to stopPoints: the station id at a real stop, null at a waypoint. Lets a train's
+   * position along the lane be read back as "which station is next", the thing a trip view needs. */
+  stopStationIds: (string | null)[]
   /** Path `d` between each consecutive pair of stops, lane-offset and filleted. */
   segmentPaths: string[]
 }
@@ -456,13 +459,16 @@ export function buildLineTrack(
 
   const stopIndices: number[] = []
   const stopFlags: boolean[] = []
+  const stopStationIds: (string | null)[] = []
   for (let vertex = 0; vertex < geometry.vertices.length; vertex++) {
     const nodeIndex = geometry.vertexNode[vertex]
     if (nodeIndex < 0) continue
     const at = sourceIndex.indexOf(vertex)
     if (at < 0) continue
+    const node = geometry.resolved[nodeIndex].node
     stopIndices.push(at)
-    stopFlags.push(geometry.resolved[nodeIndex].node.kind === 'station')
+    stopFlags.push(node.kind === 'station')
+    stopStationIds.push(node.kind === 'station' ? node.stationId : null)
   }
   if (stopIndices.length < 2) return null
 
@@ -472,7 +478,7 @@ export function buildLineTrack(
     segmentPaths.push(span.length >= 2 ? routeOrthogonal(span) : '')
   }
 
-  return { stopPoints: stopIndices.map(index => points[index]), stopFlags, segmentPaths }
+  return { stopPoints: stopIndices.map(index => points[index]), stopFlags, stopStationIds, segmentPaths }
 }
 
 export interface RefanLine {

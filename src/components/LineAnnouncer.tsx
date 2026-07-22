@@ -6,6 +6,9 @@ import type { Line } from '../types'
 interface LineAnnouncerProps {
   line: Line
   scrollText: string
+  /** True while this line's train is being ridden — the chip grows a "Stop" affordance. */
+  riding?: boolean
+  onStopRide?: () => void
 }
 
 // Real LED destination signs are amber regardless of the service's route color —
@@ -33,7 +36,7 @@ const LED_HEIGHT = CHAR_HEIGHT * DOT_PITCH
  * competes with the train rAF loops. Re-mounts (via the caller's `key`) whenever
  * a different line is selected, replaying the whole sequence.
  */
-export function LineAnnouncer({ line, scrollText }: LineAnnouncerProps) {
+export function LineAnnouncer({ line, scrollText, riding = false, onStopRide }: LineAnnouncerProps) {
   const [settled, setSettled] = useState(false)
   const [hovering, setHovering] = useState(false)
   const [replayCount, setReplayCount] = useState(0)
@@ -168,11 +171,39 @@ export function LineAnnouncer({ line, scrollText }: LineAnnouncerProps) {
         }}
       >
         <span style={{ paddingLeft: '6px', paddingTop: '2px', paddingBottom: '2px', flexShrink: 0, display: 'flex' }}>
-          <LineIndicator id={String(line.number)} color={line.color} size="xs" />
+          <LineIndicator id={String(line.number)} color={line.color} shape="pill" size="xs" />
         </span>
-        <span style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--ink-0)', paddingRight: '12px' }}>
+        <span style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--ink-0)', paddingRight: riding ? '4px' : '12px' }}>
           {line.name}
         </span>
+        {/* Riding turns the chip into the ride's own control: a clear way off the train that
+            doesn't depend on knowing Escape or where to click. */}
+        {riding && (
+          <button
+            type="button"
+            onClick={e => {
+              e.stopPropagation()
+              onStopRide?.()
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              marginRight: '4px',
+              height: '20px',
+              padding: '0 9px',
+              fontSize: '11px',
+              fontWeight: 600,
+              color: 'var(--ink-900)',
+              background: 'var(--ink-0)',
+              border: 'none',
+              borderRadius: 999,
+              cursor: 'pointer',
+            }}
+          >
+            Stop
+          </button>
+        )}
       </div>
     </>
   )

@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { Point } from '../types'
+import { buildTimeline, sampleTrain } from './trainMotion'
+import type { TrainSample } from './trainMotion'
 
 interface TrainMarkerProps {
   lineId: string
@@ -18,6 +20,13 @@ interface TrainMarkerProps {
    * line run at phase 0 and 0.5 — half a cycle apart is a mirror in time, so one is heading
    * out wherever the other is heading back: a train from each direction, passing at the middle. */
   phase?: number
+  /** The train being ridden: wears a pulsing ring so it reads as the one under the camera. */
+  highlighted?: boolean
+  /** Called every frame with the car's live world position and its motion sample. Read through a
+   * ref so it never restarts the loop; used to drive the follow-camera and the trip view. */
+  onFrame?: (x: number, y: number, sample: TrainSample) => void
+  /** When set, an enlarged invisible hit-area lets a click on the moving car start a ride. */
+  onSelect?: () => void
 }
 
 /**
@@ -39,7 +48,7 @@ const CAR_HEIGHT = 3.4
  * LinePath draws, so a train always sits on its own line's lane rather than on a
  * neighbour's rails wherever lines fan out along a shared stretch.
  */
-export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths, dwellMs = 1400, speed = 0.12, phase = 0 }: TrainMarkerProps) {
+export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths, dwellMs = 1400, speed = 0.12, phase = 0, highlighted = false, onFrame, onSelect }: TrainMarkerProps) {
   const groupRef = useRef<SVGGElement>(null)
   const segmentRefs = useRef<(SVGPathElement | null)[]>([])
   const lastAngleRef = useRef(0)
@@ -50,9 +59,11 @@ export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths
   const stopPointsRef = useRef(stopPoints)
   const stopFlagsRef = useRef(stopFlags)
   const segmentPathsRef = useRef(segmentPaths)
+  const onFrameRef = useRef(onFrame)
   stopPointsRef.current = stopPoints
   stopFlagsRef.current = stopFlags
   segmentPathsRef.current = segmentPaths
+  onFrameRef.current = onFrame
 
   // The rails only move when a station does. Re-stamping `d` every frame would
   // invalidate each path's cached geometry and force getTotalLength to re-measure
@@ -74,16 +85,6 @@ export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths
         return
       }
 
-      // Visits every stop forward then back, e.g. [0,1,2,1,0] for a 3-stop line —
-      // the shared terminus at each end gets two consecutive dwells across the loop
-      // seam, reading as a brief layover before reversing. Waypoints (stopFlags=false)
-      // get zero dwell, so the train passes through them without pausing.
-      const stopSequence: number[] = []
-      for (let i = 0; i < stopPoints.length; i++) stopSequence.push(i)
-      for (let i = stopPoints.length - 2; i >= 0; i--) stopSequence.push(i)
-
-      const dwellFor = (idx: number) => (stopFlags[idx] ? dwellMs : 0)
-
       const applied = appliedPathsRef.current
       const segmentLengths = segmentLengthsRef.current
       for (let i = 0; i < segmentPaths.length; i++) {
@@ -99,83 +100,45 @@ export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths
         }
       }
 
-      const travelDurations: number[] = []
-      let cycleDuration = 0
-      for (let i = 0; i < stopSequence.length; i++) cycleDuration += dwellFor(stopSequence[i])
-      for (let i = 0; i < stopSequence.length - 1; i++) {
-        const segIndex = Math.min(stopSequence[i], stopSequence[i + 1])
-        const duration = (segmentLengths[segIndex] ?? 0) / speed
-        travelDurations.push(duration)
-        cycleDuration += duration
-      }
-      if (cycleDuration <= 0) {
+      const timeline = buildTimeline({ stopPoints, stopFlags }, segmentLengths, dwellMs, speed)
+      const sample = sampleTrain({ stopPoints, stopFlags }, timeline, now - startTime, phase)
+      if (!sample) {
         frameId = requestAnimationFrame(tick)
         return
       }
 
-      // phase shifts where in the shared cycle this car sits; the two services on a line run
-      // half a cycle apart so they cross going opposite ways.
-      let remaining = (now - startTime + phase * cycleDuration) % cycleDuration
-      let x = stopPoints[stopSequence[0]].x
-      let y = stopPoints[stopSequence[0]].y
+      let x: number
+      let y: number
+      if (sample.kind === 'dwell') {
+        x = stopPoints[sample.stopIndex].x
+        y = stopPoints[sample.stopIndex].y
+      } else {
+        // The pure sample gives the eased position along the segment; only here, with the live
+        // path element, does it become a point and a heading.
+        const segLength = segmentLengths[sample.segIndex] ?? 0
+        const distance = sample.forward ? sample.travelled * segLength : (1 - sample.travelled) * segLength
+        const segPath = segmentRefs.current[sample.segIndex]
+        if (segPath && segLength > 0) {
+          const point = segPath.getPointAtLength(distance)
+          x = point.x
+          y = point.y
 
-      for (let i = 0; i < stopSequence.length; i++) {
-        const dwell = dwellFor(stopSequence[i])
-        if (remaining < dwell) {
-          const p = stopPoints[stopSequence[i]]
-          x = p.x
-          y = p.y
-          break
-        }
-        remaining -= dwell
-
-        if (i < stopSequence.length - 1) {
-          const duration = travelDurations[i]
-          if (remaining < duration) {
-            const from = stopSequence[i]
-            const to = stopSequence[i + 1]
-            const segIndex = Math.min(from, to)
-            const forward = to > from
-            const segLength = segmentLengths[segIndex] ?? 0
-            const frac = duration > 0 ? remaining / duration : 0
-            // Accelerate away from a station and decelerate into one, but glide through
-            // waypoints at speed. easeIn ends and easeOut begins at the same rate, so a
-            // waypoint between two segments is crossed with continuous speed, no lurch.
-            const departingStation = stopFlags[from]
-            const arrivingStation = stopFlags[to]
-            const travelled =
-              departingStation && arrivingStation
-                ? frac < 0.5
-                  ? 2 * frac * frac
-                  : 1 - (-2 * frac + 2) ** 2 / 2
-                : departingStation
-                  ? frac * frac
-                  : arrivingStation
-                    ? frac * (2 - frac)
-                    : frac
-            const distance = forward ? travelled * segLength : (1 - travelled) * segLength
-            const segPath = segmentRefs.current[segIndex]
-            if (segPath && segLength > 0) {
-              const point = segPath.getPointAtLength(distance)
-              x = point.x
-              y = point.y
-
-              const eps = 1
-              const a = segPath.getPointAtLength(Math.max(0, distance - eps))
-              const b = segPath.getPointAtLength(Math.min(segLength, distance + eps))
-              let angle = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI
-              if (!forward) angle += 180
-              lastAngleRef.current = angle
-            }
-            break
-          }
-          remaining -= duration
+          const eps = 1
+          const a = segPath.getPointAtLength(Math.max(0, distance - eps))
+          const b = segPath.getPointAtLength(Math.min(segLength, distance + eps))
+          let angle = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI
+          if (!sample.forward) angle += 180
+          lastAngleRef.current = angle
+        } else {
+          x = stopPoints[sample.from].x
+          y = stopPoints[sample.from].y
         }
       }
 
       // Both services ride the centreline; the two just pass through each other where they
       // cross, which reads fine at this size.
       group.setAttribute('transform', `translate(${x}, ${y}) rotate(${lastAngleRef.current})`)
+      onFrameRef.current?.(x, y, sample)
       frameId = requestAnimationFrame(tick)
     }
 
@@ -203,6 +166,28 @@ export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths
         />
       ))}
       <g ref={groupRef} data-export="exclude" style={{ pointerEvents: 'none' }}>
+        {/* The ridden car wears a pulsing halo in its line colour so the eye can hold onto it
+            while the camera tracks — and so its twin, hidden during a ride, isn't missed. The
+            circle is rotation-symmetric, so the group's heading rotation leaves it be. */}
+        {highlighted && (
+          <circle className="mlb-train-ring" cx={0} cy={0} r={9} fill="none" stroke={color} strokeWidth={1.5} />
+        )}
+        {/* An enlarged, invisible target so a click can catch the moving car and start a ride —
+            the visible body alone is far too small and fast to hit. */}
+        {onSelect && (
+          <rect
+            x={-13}
+            y={-9}
+            width={26}
+            height={18}
+            rx={9}
+            fill="transparent"
+            style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+            onClick={onSelect}
+          >
+            <title>Ride this train</title>
+          </rect>
+        )}
         {/* Capsule body with a colored outline (line color), echoing a real train-car
             silhouette — trim lines and portholes instead of a solid-fill blob.
 

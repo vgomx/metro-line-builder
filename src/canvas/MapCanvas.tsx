@@ -1,12 +1,12 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import type { ZoomTransform } from 'd3-zoom'
 import type { GeoFeature, Line, LineNode, Point, PointOfInterest, Station, Tool } from '../types'
 import { useZoomPan } from './useZoomPan'
 import { useReducedMotion } from '../useReducedMotion'
 import type { ViewportInsets } from './useZoomPan'
 import { StationNode } from './StationNode'
-import { PoiNode } from './PoiNode'
+import { PoiNode, POI_ICON_SIZE } from './PoiNode'
 import { WaypointNode } from './WaypointNode'
 import { LinePath } from './LinePath'
 import { GeoFeaturePath } from './GeoFeaturePath'
@@ -25,9 +25,10 @@ import {
   resolveLineNodes,
   stationIdsOfLine,
 } from './lineNodes'
-import type { RefanLine } from './lineNodes'
+import type { LineTrack, RefanLine } from './lineNodes'
+import type { RideProgress, TrainSample } from './trainMotion'
 import { computeLabelPlacements } from './labelPlacement'
-import { openMojiUrl, POI_DRAG_MIME } from '../openmoji'
+import { openMojiUrl } from '../openmoji'
 import { useAppearance } from './useAppearance'
 import { useExit } from './useExit'
 import { buildLinePath } from './lineNodes'
@@ -42,9 +43,16 @@ export interface MapCanvasHandle {
   /** The grid point at the middle of what's on screen. The palette places there when a symbol
    * is chosen by keyboard, since there's no pointer to say where. */
   viewportCentre: () => Point
-  /** Places a landmark at a screen point — the touch drag's way onto the map, since a finger
-   * never fires HTML5 drop. */
+  /** Places a landmark at a screen point — how a palette drag lands its symbol. */
   dropPoiAtClient: (icon: string, clientX: number, clientY: number) => void
+  /** A palette drag has lifted a symbol: arm the grid-snapped ghost and play the grab. */
+  beginPoiPreview: (icon: string) => void
+  /** The drag is over the map at this point: step the ghost to the cell, ticking on a crossing. */
+  movePoiPreview: (clientX: number, clientY: number) => void
+  /** The drag wandered off the map: hide the ghost but keep the lift alive. */
+  hidePoiPreview: () => void
+  /** The drag ended (placed or cancelled): tear the ghost down. */
+  endPoiPreview: () => void
   /** The canvas element itself, for the image exporter to clone and resolve. */
   svgElement: () => SVGSVGElement | null
 }
@@ -115,6 +123,14 @@ interface MapCanvasProps {
   onUndo: () => void
   onRedo: () => void
   onTransformChange?: (transform: ZoomTransform) => void
+  /** The line whose train the camera is currently riding, or null. */
+  ridingLineId: string | null
+  /** Start riding a line's train — from a click on the moving car. */
+  onRideLine: (lineId: string) => void
+  /** End the ride — a click on empty canvas while riding. */
+  onStopRide: () => void
+  /** The ridden train reached a new stop or set out again — drives the trip view and the chime. */
+  onRideProgress: (progress: RideProgress) => void
 }
 
 function safeSetPointerCapture(target: Element, pointerId: number) {
@@ -243,11 +259,15 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onUndo,
     onRedo,
     onTransformChange,
+    ridingLineId,
+    onRideLine,
+    onStopRide,
+    onRideProgress,
   },
   ref,
 ) {
   const svgRef = useRef<SVGSVGElement>(null)
-  const { transform, zoomIn, zoomOut, spaceHeld, panning, frameBounds } = useZoomPan(
+  const { transform, zoomIn, zoomOut, spaceHeld, panning, frameBounds, centerOn, easeToTransform } = useZoomPan(
     svgRef,
     tool === 'pan',
     viewportInsets,
@@ -260,6 +280,13 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const activeTouches = useRef<Set<number>>(new Set())
   const isPinch = () => activeTouches.current.size >= 2
   const [cursorWorld, setCursorWorld] = useState<{ x: number; y: number } | null>(null)
+  // A landmark being dragged in from the palette, shown at the grid cell it would land on — the
+  // same snapped, step-by-step preview an existing landmark gives while it's being moved, rather
+  // than a tile floating free under the pointer. The icon rides in a ref (it never changes across
+  // a drag) so only the position, which does, lives in state.
+  const [poiPreview, setPoiPreview] = useState<Point | null>(null)
+  const placingIconRef = useRef<string | null>(null)
+  const lastPreviewCellRef = useRef<string | null>(null)
   /** The last landing, kept only long enough for the ripple to play out. Keyed so two drops in
    * quick succession restart the animation rather than sharing one that's already running. */
   const [impact, setImpact] = useState<{ key: number; points: Point[]; soft: boolean } | null>(null)
@@ -331,6 +358,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       zoomIn,
       zoomOut,
       dropPoiAtClient: (icon: string, clientX: number, clientY: number) => placePoiRef.current(icon, clientX, clientY),
+      beginPoiPreview: (icon: string) => previewApiRef.current.beginPoiPreview(icon),
+      movePoiPreview: (clientX: number, clientY: number) => previewApiRef.current.movePoiPreview(clientX, clientY),
+      hidePoiPreview: () => previewApiRef.current.hidePoiPreview(),
+      endPoiPreview: () => previewApiRef.current.endPoiPreview(),
       svgElement: () => svgRef.current,
       frameLine: (lineId: string) => {
         // The line's rendered stroke already lives in world space (the pan/zoom transform
@@ -393,13 +424,58 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onTransformChange?.(transform)
   }, [transform, onTransformChange])
 
+  // --- Riding a train: the camera locks onto the followed car each frame, easing the zoom in at
+  // the start and back out at the end. The per-frame work happens in handleRideFrame (called by
+  // the ridden TrainMarker's own loop); this just brackets it — banking the pre-ride view to
+  // return to, and starting the zoom from wherever we were so it grows in rather than jumping.
+  const RIDE_SCALE = 2
+  const rideScaleRef = useRef(transform.k)
+  const preRideTransformRef = useRef<ZoomTransform | null>(null)
+  const lastRideStopRef = useRef<string | null>(null)
+  const centerOnRef = useRef(centerOn)
+  centerOnRef.current = centerOn
+
+  useEffect(() => {
+    if (ridingLineId) {
+      preRideTransformRef.current = transform
+      rideScaleRef.current = transform.k
+      lastRideStopRef.current = null
+    } else if (preRideTransformRef.current) {
+      easeToTransform(preRideTransformRef.current)
+      preRideTransformRef.current = null
+    }
+    // Keyed on the ride's identity alone: `transform` churns every frame *during* a ride and must
+    // not re-trigger this, or it would re-bank the ride view as the pre-ride one and never restore.
+  }, [ridingLineId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRideFrame = (track: LineTrack, lineId: string) => (x: number, y: number, sample: TrainSample) => {
+    rideScaleRef.current += (RIDE_SCALE - rideScaleRef.current) * 0.06
+    centerOnRef.current({ x, y }, rideScaleRef.current)
+    // Report only when the stop or heading actually changes — the panel and chime react to
+    // arrivals, not to every one of 60 frames a second.
+    const stationId = track.stopStationIds[sample.nextStationStop] ?? null
+    const atStation = sample.kind === 'dwell'
+    const key = `${stationId}|${atStation}|${sample.direction}`
+    if (key !== lastRideStopRef.current) {
+      lastRideStopRef.current = key
+      onRideProgress({
+        lineId,
+        nextStationId: stationId,
+        direction: sample.direction,
+        atStation,
+        msToNextStation: sample.msToNextStation,
+      })
+    }
+  }
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
 
       if (e.key === 'Escape') {
-        if (draftLineNodes.length > 0) onCancelDraftLine()
+        if (ridingLineId) onStopRide()
+        else if (draftLineNodes.length > 0) onCancelDraftLine()
         else if (draftGeoPoints.length > 0) onCancelGeoFeature()
         // Nothing drafted, so Escape backs out of the tool itself rather than doing nothing
         // visible. A drawing tool you can't put down with the key that means "stop" is the
@@ -462,6 +538,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onFinishGeoFeature,
     onUndo,
     onRedo,
+    ridingLineId,
+    onStopRide,
   ])
 
   const toWorld = (clientX: number, clientY: number) => {
@@ -730,6 +808,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           .map(s => s.id)
         const ids = drag.union ? Array.from(new Set([...selectedStationIds, ...hitIds])) : hitIds
         onSetSelection(ids, [], [])
+      } else if (ridingLineId) {
+        // A tap on empty map steps out of the ride first; the line stays selected, so its trip
+        // view is still there to read. A second tap then clears the selection as usual.
+        onStopRide()
       } else if (!drag.union) {
         onClearSelection()
       }
@@ -812,22 +894,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onReturnToSelect()
   }
 
-  // Dragging a symbol in from the palette. dragover has to preventDefault on every event or
-  // the browser refuses the drop, and the payload itself is unreadable until drop — only the
-  // *types* are exposed mid-drag, which is exactly enough to tell our symbols from anything
-  // else the user might be dragging across the window.
-  const handleDragOver = (e: ReactDragEvent<SVGSVGElement>) => {
-    if (!e.dataTransfer.types.includes(POI_DRAG_MIME)) return
-    // Only to accept the drop: without preventDefault on every dragover the browser refuses it.
-    // Nothing is drawn under the pointer while a symbol is in flight — the tile the drag
-    // carries is already the landmark at its real size, and a marker behind it was a second
-    // opinion about a position the tile was giving anyway.
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'copy'
-  }
-
-  // Placing a landmark at a screen point — shared by the desktop HTML5 drop and the touch
-  // drag, which can't use HTML5 drop because it never fires on a finger.
+  // Placing a landmark at the point the drag let go of it, snapped to the landmark grid.
   const placePoiAtClient = (icon: string, clientX: number, clientY: number) => {
     const { x, y } = toWorld(clientX, clientY)
     const landed = { x: snapToPoiGrid(x), y: snapToPoiGrid(y) }
@@ -840,12 +907,43 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const placePoiRef = useRef(placePoiAtClient)
   placePoiRef.current = placePoiAtClient
 
-  const handleDrop = (e: ReactDragEvent<SVGSVGElement>) => {
-    const icon = e.dataTransfer.getData(POI_DRAG_MIME)
-    if (!icon) return
-    e.preventDefault()
-    placePoiAtClient(icon, e.clientX, e.clientY)
+  // Dragging a landmark in from the palette, made to feel exactly like moving one already on the
+  // map: the same grab on pickup, the same grid-snapped ghost that steps cell to cell, the same
+  // detent tick at each crossing. The palette drives these through the imperative handle as the
+  // pointer moves, since it owns the pointer; the landing (ripple + drop) is placePoiAtClient's.
+  const beginPoiPreview = (icon: string) => {
+    placingIconRef.current = icon
+    lastPreviewCellRef.current = null
+    onStationGrab?.()
   }
+  const movePoiPreview = (clientX: number, clientY: number) => {
+    if (!placingIconRef.current) return
+    const { x, y } = toWorld(clientX, clientY)
+    const cell = { x: snapToPoiGrid(x), y: snapToPoiGrid(y) }
+    const key = `${cell.x},${cell.y}`
+    if (key !== lastPreviewCellRef.current) {
+      // Only once the ghost has landed on a first cell does a *change* of cell tick — so crossing
+      // onto the map doesn't tick, but stepping across it does, matching a landmark being moved.
+      if (lastPreviewCellRef.current !== null) onDetent?.()
+      lastPreviewCellRef.current = key
+    }
+    setPoiPreview(cell)
+  }
+  const hidePoiPreview = () => {
+    // The pointer wandered back off the map: drop the ghost but keep the drag alive, and forget
+    // the last cell so re-entering the map doesn't tick on arrival.
+    lastPreviewCellRef.current = null
+    setPoiPreview(null)
+  }
+  const endPoiPreview = () => {
+    placingIconRef.current = null
+    lastPreviewCellRef.current = null
+    setPoiPreview(null)
+  }
+  // Same latest-closure-through-a-ref trick as placePoiRef, so the handle always snaps against
+  // the current zoom.
+  const previewApiRef = useRef({ beginPoiPreview, movePoiPreview, hidePoiPreview, endPoiPreview })
+  previewApiRef.current = { beginPoiPreview, movePoiPreview, hidePoiPreview, endPoiPreview }
 
   const handleDoubleClick = () => {
     if (spaceHeld) return
@@ -1077,8 +1175,6 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
       onPointerLeave={() => setCursorWorld(null)}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
       onDoubleClick={handleDoubleClick}
     >
       <defs>
@@ -1286,9 +1382,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
               const geometry = network.byLine.get(line.id)
               const track = geometry ? buildLineTrack(geometry, line.id, network.segmentLineMap) : null
               if (!track) return null
-              // Two services per line, half a cycle apart: one running each way, meeting and
-              // passing in the middle.
-              return [0, 0.5].map(phase => (
+              const riding = ridingLineId === line.id
+              // Riding a line drops it to a single car — the one under the camera — so there's no
+              // confusion about which train the trip view is tracking. Every other line keeps its
+              // two services, half a cycle apart, meeting and passing in the middle.
+              const phases = riding ? [0] : [0, 0.5]
+              return phases.map(phase => (
                 <TrainMarker
                   key={`${line.id}-${phase}`}
                   lineId={line.id}
@@ -1297,6 +1396,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
                   stopFlags={track.stopFlags}
                   segmentPaths={track.segmentPaths}
                   phase={phase}
+                  highlighted={riding}
+                  onFrame={riding ? handleRideFrame(track, line.id) : undefined}
+                  onSelect={ridingLineId ? undefined : () => onRideLine(line.id)}
                 />
               ))
             })}
@@ -1365,6 +1467,34 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             onDoubleClick={p => tool === 'select' && onRenameRequest('poi', p.id)}
           />
         ))}
+
+        {/* The palette-drag ghost: a landmark-in-waiting at the cell it would land on, drawn with
+            the same lift a landmark wears while it's being moved, so dragging one in reads exactly
+            like sliding one that's already down. */}
+        {poiPreview && placingIconRef.current && (
+          <g transform={`translate(${poiPreview.x}, ${poiPreview.y})`} style={{ pointerEvents: 'none' }} filter="url(#station-drag-shadow)">
+            <rect
+              x={-POI_ICON_SIZE / 2 - 3}
+              y={-POI_ICON_SIZE / 2 - 3}
+              width={POI_ICON_SIZE + 6}
+              height={POI_ICON_SIZE + 6}
+              rx={6}
+              fill="var(--bg-surface)"
+              stroke="var(--border-subtle)"
+              strokeWidth={1}
+              opacity={0.92}
+            />
+            {openMojiUrl(placingIconRef.current) && (
+              <image
+                href={openMojiUrl(placingIconRef.current)}
+                x={-POI_ICON_SIZE / 2 - 2}
+                y={-POI_ICON_SIZE / 2 - 2}
+                width={POI_ICON_SIZE + 4}
+                height={POI_ICON_SIZE + 4}
+              />
+            )}
+          </g>
+        )}
 
         {/* A deleted landmark comes apart where it stood, the impact rings running backwards
             into it as it goes. */}

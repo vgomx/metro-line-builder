@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
+import type { Point } from '../types'
 import { select } from 'd3-selection'
 import type { Selection } from 'd3-selection'
 import { zoom, zoomIdentity, zoomTransform } from 'd3-zoom'
@@ -209,5 +210,36 @@ export function useZoomPan(
     [svgRef],
   )
 
-  return { transform, zoomIn, zoomOut, spaceHeld, panning, frameBounds }
+  /** Snaps the viewport so a world point sits at the centre of the *uncovered* area, at a given
+   * scale. No transition — this is the per-frame primitive a follow-camera calls every rAF, so it
+   * must be cheap and immediate. Panning to a moving target each frame reads as smooth tracking. */
+  const centerOn = useCallback(
+    (point: Point, scale: number) => {
+      const svg = svgRef.current
+      const behavior = behaviorRef.current
+      const selection = selectionRef.current
+      if (!svg || !behavior || !selection) return
+      const rect = svg.getBoundingClientRect()
+      const { left, right, top, bottom } = insetsRef.current
+      const visibleWidth = Math.max(1, rect.width - left - right)
+      const visibleHeight = Math.max(1, rect.height - top - bottom)
+      const tx = left + visibleWidth / 2 - scale * point.x
+      const ty = top + visibleHeight / 2 - scale * point.y
+      behavior.transform(selection, zoomIdentity.translate(tx, ty).scale(scale))
+    },
+    [svgRef],
+  )
+
+  /** Eases the viewport back to a stored transform — used to restore the map after a ride ends. */
+  const easeToTransform = useCallback(
+    (target: ZoomTransform) => {
+      const behavior = behaviorRef.current
+      const selection = selectionRef.current
+      if (!behavior || !selection) return
+      behavior.transform(selection.transition().duration(prefersReducedMotion() ? 0 : 420), target)
+    },
+    [],
+  )
+
+  return { transform, zoomIn, zoomOut, spaceHeld, panning, frameBounds, centerOn, easeToTransform }
 }

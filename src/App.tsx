@@ -3,6 +3,7 @@ import { Button, Toast } from 'metro-ds'
 import { hasSavedMap, useMapState } from './state/useMapState'
 import { MapCanvas } from './canvas/MapCanvas'
 import type { MapCanvasHandle } from './canvas/MapCanvas'
+import type { RideProgress } from './canvas/trainMotion'
 import { TopBar } from './components/TopBar'
 import { LeftToolbar, LEFT_TOOLBAR_WIDTH } from './components/LeftToolbar'
 import { RightPanel, RIGHT_PANEL_WIDTH } from './components/RightPanel'
@@ -125,6 +126,11 @@ function App() {
   const [zoom, setZoom] = useState(1)
   const [showGrid, setShowGrid] = useState(true)
   const [showTrains, setShowTrains] = useState(false)
+  // The line whose train the viewport is riding, plus its live position along the route, or null
+  // when no ride is on. One object so the camera, the trip view, and the announcer all read the
+  // same source. `trainsBeforeRide` remembers whether trains were showing, to put the toggle back.
+  const [ride, setRide] = useState<RideProgress | null>(null)
+  const trainsBeforeRideRef = useRef(false)
   // Open by default, except where it would cover half the map: the rail and the panel come
   // to 372px, which is most of a 768px tablet held in portrait. The toggle in the top bar is
   // the way back. The threshold is the same 900px the tablet styles use — a laptop window at
@@ -287,6 +293,45 @@ function App() {
     clearSelection()
     setSelectedCompanyId(companyId)
   }
+  // The arrival chime marks arriving at a line, not hopping between them: clicking down a list of
+  // lines would otherwise machine-gun the ding-dong. So it sounds only when no line was selected
+  // before this one — the first pick, not the ones that just move the selection along.
+  const chimeIfEnteringLine = () => {
+    if (state.selectedLineIds.length === 0) playSequence('lineSelect')
+  }
+
+  // Start riding a line's train: trains have to be on the map to be ridden, the panel has to be
+  // open to show the trip, and the line has to be the selection so its Properties (the trip view)
+  // are what's on screen. The ding-dong doubles as the "boarding" cue.
+  const startRide = (lineId: string) => {
+    playSequence('lineSelect')
+    trainsBeforeRideRef.current = showTrains
+    setShowTrains(true)
+    setShowPanel(true)
+    handleSetSelection([], [lineId], [])
+    setRide({ lineId, nextStationId: null, direction: 1, atStation: false, msToNextStation: 0 })
+  }
+  const stopRide = useCallback(() => {
+    setRide(null)
+    // Leave the map as we found it: if trains weren't showing before the ride, hide them again.
+    if (!trainsBeforeRideRef.current) setShowTrains(false)
+  }, [])
+  // Each stop the train reaches (or sets out from) updates the trip view; an arrival also rings
+  // the chime, the same announcement a real platform makes.
+  const handleRideProgress = useCallback((progress: RideProgress) => {
+    setRide(progress)
+    // A short arrival note, not the half-second lineSelect chime: stops can arrive a second apart
+    // on a short hop, and the long one stacked into a drone.
+    if (progress.atStation) playSound('arrive')
+  }, [])
+  // A ride belongs to exactly one selected line. The moment the selection moves off it — picking
+  // another line, clearing, deleting the line — the ride ends rather than tracking a train the
+  // panel no longer describes.
+  useEffect(() => {
+    if (!ride) return
+    const stillRiding = state.selectedLineIds.length === 1 && state.selectedLineIds[0] === ride.lineId
+    if (!stillRiding) stopRide()
+  }, [ride, state.selectedLineIds, stopRide])
 
   // Sound is a presentation concern, so it's attached to the callbacks here at the
   // interaction layer rather than fired from the reducer — the state layer stays unaware
@@ -456,11 +501,15 @@ function App() {
             onStationGrab={() => playSound('grab')}
             onLineReroute={() => playSound('reroute')}
             onLineSnap={() => playSound('snap')}
-            onLineSelected={() => playSequence('lineSelect')}
+            onLineSelected={chimeIfEnteringLine}
             onDetent={() => playSound('detent')}
             onUndo={undo}
             onRedo={redo}
             onTransformChange={t => setZoom(t.k)}
+            ridingLineId={ride?.lineId ?? null}
+            onRideLine={startRide}
+            onStopRide={stopRide}
+            onRideProgress={handleRideProgress}
           />
 
           <CanvasStats lineCount={lineList.length} stationCount={stationList.length} zoom={zoom} />
@@ -483,9 +532,18 @@ function App() {
               <LineAnnouncer
                 key={selectedLine.id}
                 line={selectedLine}
+                riding={ride?.lineId === selectedLine.id}
+                onStopRide={stopRide}
                 scrollText={(() => {
                   const ids = stationIdsOfLine(selectedLine)
-                  const terminus = ids.length > 0 ? state.stations[ids[ids.length - 1]]?.name : null
+                  // Like a real destination sign, the LED shows where this service is bound, not
+                  // the next stop — so it holds steady the whole ride and only re-scrolls when the
+                  // train reverses at a terminus and its destination genuinely changes. (The live
+                  // next-stop lives in the trip view.) Rewriting it per departure made the marquee
+                  // blank and restart at every station.
+                  const riding = ride?.lineId === selectedLine.id
+                  const terminusId = riding && ride.direction === -1 ? ids[0] : ids[ids.length - 1]
+                  const terminus = terminusId ? state.stations[terminusId]?.name : null
                   return terminus ? `${selectedLine.name}  •  TO ${terminus}` : selectedLine.name
                 })()}
               />
@@ -613,7 +671,14 @@ function App() {
             scale={zoom}
             armedIcon={armedPoi}
             onArm={setArmedPoi}
-            onDragPlace={(icon, x, y) => mapCanvasRef.current?.dropPoiAtClient(icon, x, y)}
+            onPlacementBegin={icon => mapCanvasRef.current?.beginPoiPreview(icon)}
+            onPlacementMove={(x, y, over) =>
+              over ? mapCanvasRef.current?.movePoiPreview(x, y) : mapCanvasRef.current?.hidePoiPreview()
+            }
+            onPlacementEnd={(icon, x, y, over) => {
+              if (over) mapCanvasRef.current?.dropPoiAtClient(icon, x, y)
+              mapCanvasRef.current?.endPoiPreview()
+            }}
             onPlaceByKeyboard={icon => {
               const centre = mapCanvasRef.current?.viewportCentre()
               if (!centre) return
@@ -672,8 +737,11 @@ function App() {
               selectedPoi={selectedPoi}
               poiList={poiList}
               selectedCompany={selectedCompany}
+              ride={ride}
+              onRideLine={startRide}
+              onStopRide={stopRide}
               onSelectLine={id => {
-                playSequence('lineSelect')
+                chimeIfEnteringLine()
                 handleSetSelection([], [id], [])
                 // Fly to the line only when picked from the list; a click on the canvas
                 // leaves the viewport alone (the line is already where the user is looking).

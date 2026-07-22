@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { IconButton, Tabs } from 'metro-ds'
 import { BackIcon } from '../icons'
-import { LinesPanel } from './LinesPanel'
+import { LinesPanel, LineSortControl } from './LinesPanel'
+import type { SortKey } from './LinesPanel'
 import { StationsPanel } from './StationsPanel'
 import { GeoPanel } from './GeoPanel'
 import { CompaniesPanel } from './CompaniesPanel'
 import { Inspector } from './Inspector'
 import { HoverTip } from './HoverTip'
 import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
+import type { RideProgress } from '../canvas/trainMotion'
 
 interface RightPanelProps {
   mapName: string
@@ -26,6 +28,11 @@ interface RightPanelProps {
   selectedPoi: PointOfInterest | null
   selectedCompany: Company | null
   onSelectLine: (lineId: string) => void
+  /** The active ride's live position, or null. Drives the trip view when its line is open. */
+  ride: RideProgress | null
+  /** Board a line's train — from the ride glyph on a list row or the button in its Properties. */
+  onRideLine: (lineId: string) => void
+  onStopRide: () => void
   onSelectStation: (stationId: string) => void
   onSelectGeoFeature: (geoFeatureId: string) => void
   onSelectPoi: (poiId: string) => void
@@ -71,6 +78,10 @@ interface RightPanelProps {
  * which is a coherent thing for a tab strip to be.
  */
 const TABS = ['Lines', 'Stations', 'Geography', 'Companies']
+/** The tabs in strip order, plus Properties last — the deep view a selection opens into. The
+ * slide direction reads off this: a higher index enters from the right, a lower one from the
+ * left. */
+const TAB_ORDER = [...TABS, 'Properties']
 
 export const RIGHT_PANEL_WIDTH = 272
 
@@ -91,6 +102,9 @@ export function RightPanel({
   selectedPoi,
   selectedCompany,
   onSelectLine,
+  ride,
+  onRideLine,
+  onStopRide,
   onSelectStation,
   onSelectGeoFeature,
   onSelectPoi,
@@ -127,6 +141,18 @@ export function RightPanel({
   onDeleteCompany,
 }: RightPanelProps) {
   const [tab, setTab] = useState('Lines')
+  // Owned here rather than in LinesPanel so the "Sort by" control can sit on the title row.
+  // Number by default — how riders know the lines, and the order most lists want to open in.
+  const [lineSort, setLineSort] = useState<SortKey>('number')
+
+  // Which way the content slides when the tab changes: rightward through the strip (and on to
+  // Properties, which is the deepest view) enters from the right, back the other way from the
+  // left. Recomputed only when the tab actually changes and frozen in a ref otherwise, so an
+  // unrelated re-render — selecting a row, say — doesn't replay the slide.
+  const slide = useRef<{ tab: string; dir: 'left' | 'right' }>({ tab, dir: 'right' })
+  if (tab !== slide.current.tab) {
+    slide.current = { tab, dir: TAB_ORDER.indexOf(tab) >= TAB_ORDER.indexOf(slide.current.tab) ? 'right' : 'left' }
+  }
 
   // Catches selections made out on the canvas, where there's no row to hang the navigation
   // off. It can only react to the selection *changing*, which is why the lists below don't
@@ -224,14 +250,27 @@ export function RightPanel({
         >
           {detail && tab === 'Properties' ? detail.title : tab}
         </span>
+        {/* The lines' sort control rides the title row rather than sitting a line below it. Only
+            on the Lines tab — it's the one list that sorts. Pushed to the right edge. */}
+        {tab === 'Lines' && (
+          <div style={{ marginLeft: 'auto' }}>
+            <LineSortControl value={lineSort} onChange={setLineSort} />
+          </div>
+        )}
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
+        {/* Keyed by tab so switching remounts and replays the slide; the class carries the
+            direction frozen above. */}
+        <div key={tab} className={slide.current.dir === 'right' ? 'mlb-tab-in-right' : 'mlb-tab-in-left'}>
         {tab === 'Lines' && (
           <LinesPanel
             lines={lineList}
             selectedLineId={selectedLine?.id ?? null}
+            ridingLineId={ride?.lineId ?? null}
+            sortBy={lineSort}
             onSelect={openDetail(onSelectLine)}
+            onRide={onRideLine}
             onToggleVisibility={onToggleLineVisibility}
             onAddLine={onAddLine}
             onReorder={onReorderLine}
@@ -280,6 +319,9 @@ export function RightPanel({
             lines={lines}
             companyList={companyList}
             authorityDisplayName={authorityDisplayName}
+            ride={ride}
+            onRideLine={onRideLine}
+            onStopRide={onStopRide}
             onRenameLine={onRenameLine}
             onSetLineNumber={onSetLineNumber}
             onRecolorLine={onRecolorLine}
@@ -304,6 +346,7 @@ export function RightPanel({
             onDeleteCompany={onDeleteCompany}
           />
         )}
+        </div>
       </div>
     </div>
   )

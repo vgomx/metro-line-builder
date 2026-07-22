@@ -786,3 +786,63 @@ svg::selection,
 svg ::selection {
   background: transparent;
 }
+
+/* The right panel's tab content sliding in when the tab changes. A short directional slide
+   with a fade — into the strip's direction of travel — rather than a full carousel, which
+   would mean keeping both panels mounted through the transition. The fade covers the single
+   frame where the old panel is gone and the new one is still at zero opacity, so the swap
+   never flashes empty. Both hold their end frame (opacity 1, no offset); the reduced-motion
+   block above collapses the duration, so the content just lands. */
+@keyframes mlb-tab-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+}
+@keyframes mlb-tab-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+}
+.mlb-tab-in-right {
+  animation: mlb-tab-in-right 190ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.mlb-tab-in-left {
+  animation: mlb-tab-in-left 190ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* The halo around the train you're riding: a slow breath of radius and fade, so it reads as a
+   live "you are here" without ever competing with the map. transform-box keeps the scale centred
+   on the circle itself rather than the SVG root. */
+@keyframes mlb-train-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.9;
+  }
+  70% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+}
+.mlb-train-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mlb-train-ring 1600ms ease-out infinite;
+}
+
+/* The trip view's travelling leg: the full-colour remainder of the current leg recedes toward
+   the next stop, uncovering the muted "already travelled" tint behind it. Its shrinking edge is
+   where the train is. */
+@keyframes mlb-trip-recede {
+  from {
+    transform: scaleY(1);
+  }
+  to {
+    transform: scaleY(0);
+  }
+}

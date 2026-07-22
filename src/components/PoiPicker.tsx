@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useCoarsePointer } from '../useCoarsePointer'
-import type { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import { Input } from 'metro-ds'
-import { openMojiBySubgroup, openMojiUrl, POI_DRAG_MIME, SUBGROUP_LABELS } from '../openmoji'
+import { openMojiBySubgroup, openMojiUrl, SUBGROUP_LABELS } from '../openmoji'
 import { POI_ICON_SIZE } from '../canvas/PoiNode'
 
 interface PoiPickerProps {
@@ -11,13 +11,16 @@ interface PoiPickerProps {
   armedIcon: string | null
   /** Pick a symbol up, or put it back down by picking the same one again. */
   onArm: (hexcode: string | null) => void
-  /** The canvas's current zoom, so the dragged tile can be the size the landmark will be. */
+  /** The canvas's current zoom, so the tile carried over the palette is the size the landmark will be. */
   scale: number
   /** Place this symbol without a pointer — the keyboard's way onto the map. */
   onPlaceByKeyboard: (hexcode: string) => void
-  /** Drop a dragged symbol at a screen point — the touch drag's way onto the map, since HTML5
-   * drop never fires on a finger. */
-  onDragPlace: (hexcode: string, clientX: number, clientY: number) => void
+  /** A drag has lifted this symbol off the palette. */
+  onPlacementBegin: (hexcode: string) => void
+  /** The drag has moved to this screen point; overCanvas says whether it's over the map. */
+  onPlacementMove: (clientX: number, clientY: number, overCanvas: boolean) => void
+  /** The drag ended here; when overCanvas, this is where the symbol lands. */
+  onPlacementEnd: (hexcode: string, clientX: number, clientY: number, overCanvas: boolean) => void
 }
 
 /**
@@ -26,113 +29,103 @@ interface PoiPickerProps {
  * it lands where you let go — no mode to arm and nothing to remember between the two halves
  * of the gesture. The tool is modal, so the picker is too: it appears with the tool and
  * leaves with it.
+ *
+ * The drag is one gesture for mouse and finger alike, driven by pointer events rather than
+ * HTML5 drag-and-drop (which never fires on touch, and whose free-floating ghost never matched
+ * how a landmark already on the map moves). Once the pointer crosses onto the canvas, the map
+ * itself shows the landmark snapped to the grid cell it would land on, stepping and ticking
+ * exactly as an existing one does when it's slid around — see MapCanvas's poiPreview. Over the
+ * palette, before it reaches the map, a small tile carries under the pointer so you can see what
+ * you've picked up.
  */
-/** Below this the tile is too small to see under the pointer at all. Only bites when the map
- * is zoomed a long way out, where the landmark really would be a speck. */
 const MIN_DRAG_TILE = 18
 
-export function PoiPicker({ scale, onPlaceByKeyboard, armedIcon, onArm, onDragPlace }: PoiPickerProps) {
+/** A drag only begins on a pull past this — small enough that the lift feels immediate, large
+ * enough not to trip on the wobble of a tap. On touch the pull must also be more sideways than
+ * vertical, since the palette scrolls vertically (touch-action: pan-y) and an up/down swipe is
+ * a browse, not a lift. */
+const DRAG_THRESHOLD = 8
+
+interface DragState {
+  hexcode: string
+  url?: string
+  startX: number
+  startY: number
+  pointerId: number
+  started: boolean
+}
+
+export function PoiPicker({ scale, onPlaceByKeyboard, armedIcon, onArm, onPlacementBegin, onPlacementMove, onPlacementEnd }: PoiPickerProps) {
   const [query, setQuery] = useState('')
-  const [draggingIcon, setDraggingIcon] = useState<string | null>(null)
   const coarse = useCoarsePointer()
   const groups = useMemo(() => openMojiBySubgroup(), [])
 
-  // The tile the browser snapshots as the drag image. It has to be a real, rendered element
-  // at snapshot time — display:none or a detached node yields nothing — so it's parked
-  // off-screen for the length of the gesture and taken away on dragend. Held in a ref rather
-  // than state because it must exist before setDragImage runs, and a render is too late.
-  const ghostRef = useRef<HTMLDivElement | null>(null)
-
-  // A finger drag from the palette onto the map, since HTML5 drag-and-drop doesn't fire on
-  // touch at all. The live gesture is held in a ref so the pointer handlers read it without a
-  // stale closure; `preview` is the only part that has to re-render — the tile under the
-  // finger. `dragged` guards the click that follows a drag, so a drag doesn't also arm.
-  const touchDrag = useRef<{ hexcode: string; url?: string; startX: number; startY: number; pointerId: number; started: boolean } | null>(null)
+  // The live gesture, held in a ref so the pointer handlers read it without a stale closure.
+  // `preview` — the tile under the pointer while it's still over the palette — is the only part
+  // that re-renders. `dragged` guards the click that follows a drag, so a drag doesn't also arm.
+  const drag = useRef<DragState | null>(null)
   const dragged = useRef(false)
   const [preview, setPreview] = useState<{ x: number; y: number; url?: string; size: number } | null>(null)
 
-  // A drag only begins on a sideways pull — the palette scrolls vertically (touch-action:
-  // pan-y lets it), so an up/down swipe browses and a pull toward the map, out to the side,
-  // lifts the symbol. Small enough that the lift feels immediate, large enough not to trip on
-  // the wobble of a tap.
-  const DRAG_THRESHOLD = 8
+  const isOverCanvas = (x: number, y: number) => !!document.elementFromPoint(x, y)?.closest('svg[data-map-canvas]')
+
+  // Over the map, the canvas draws the snapped ghost, so the carry tile steps aside; over the
+  // palette, the tile is all there is to show what's in hand.
+  const updatePlacement = (x: number, y: number, d: DragState) => {
+    const over = isOverCanvas(x, y)
+    onPlacementMove(x, y, over)
+    setPreview(over ? null : { x, y, url: d.url, size: Math.max(MIN_DRAG_TILE, POI_ICON_SIZE * scale) + 2 })
+  }
 
   const onSwatchPointerDown = (e: ReactPointerEvent<HTMLButtonElement>, hexcode: string, url?: string) => {
     dragged.current = false
-    touchDrag.current = { hexcode, url, startX: e.clientX, startY: e.clientY, pointerId: e.pointerId, started: false }
+    drag.current = { hexcode, url, startX: e.clientX, startY: e.clientY, pointerId: e.pointerId, started: false }
+    // Capture the mouse up front: a quick pull throws the pointer off the little swatch in one
+    // move, and without capture already in hand that move lands on the canvas and the swatch
+    // never sees it. Touch waits until the gesture is a confirmed sideways lift, so an up/down
+    // swipe is left to the palette's own scroll (the browser cancels our pointer when it takes
+    // that over).
+    if (!coarse) e.currentTarget.setPointerCapture(e.pointerId)
   }
 
   const onSwatchPointerMove = (e: ReactPointerEvent<HTMLButtonElement>) => {
-    const d = touchDrag.current
+    const d = drag.current
     if (!d || d.pointerId !== e.pointerId) return
     const dx = e.clientX - d.startX
     const dy = e.clientY - d.startY
     if (!d.started) {
-      // A sideways pull that beats the vertical is a lift; anything more vertical is a scroll,
-      // which pan-y hands to the browser and which ends this gesture on pointercancel.
-      if (Math.abs(dx) > DRAG_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
-        d.started = true
-        dragged.current = true
-        e.currentTarget.setPointerCapture(e.pointerId)
-        setPreview({ x: e.clientX, y: e.clientY, url: d.url, size: Math.max(MIN_DRAG_TILE, POI_ICON_SIZE * scale) + 2 })
-      }
+      const beyond = Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD
+      // On touch a lift has to beat the palette's own vertical scroll; a mouse never scrolls the
+      // palette by dragging, so any pull past the threshold lifts.
+      const lifts = coarse ? Math.abs(dx) > DRAG_THRESHOLD && Math.abs(dx) > Math.abs(dy) : beyond
+      if (!lifts) return
+      d.started = true
+      dragged.current = true
+      if (coarse) e.currentTarget.setPointerCapture(e.pointerId)
+      onPlacementBegin(d.hexcode)
+      updatePlacement(e.clientX, e.clientY, d)
       return
     }
-    setPreview(prev => (prev ? { ...prev, x: e.clientX, y: e.clientY } : prev))
+    updatePlacement(e.clientX, e.clientY, d)
   }
 
   const onSwatchPointerUp = (e: ReactPointerEvent<HTMLButtonElement>) => {
-    const d = touchDrag.current
-    touchDrag.current = null
-    if (!d || !d.started) return
+    const d = drag.current
+    drag.current = null
+    // Release even when no drag started — the mouse was captured on the way down.
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
+    if (!d || !d.started) return
     setPreview(null)
-    // Only a release over the map lands anything — let go over the palette and the symbol
-    // simply goes back, no harm done. The tile carries pointer-events: none, so it isn't what
-    // the point hits.
-    const under = document.elementFromPoint(e.clientX, e.clientY)
-    if (under?.closest('svg[data-map-canvas]')) onDragPlace(d.hexcode, e.clientX, e.clientY)
+    onPlacementEnd(d.hexcode, e.clientX, e.clientY, isOverCanvas(e.clientX, e.clientY))
   }
 
   const onSwatchPointerCancel = () => {
-    touchDrag.current = null
+    const d = drag.current
+    drag.current = null
     setPreview(null)
-  }
-
-  const startDrag = (e: ReactDragEvent<HTMLElement>, hexcode: string, url: string | undefined) => {
-    e.dataTransfer.setData(POI_DRAG_MIME, hexcode)
-    e.dataTransfer.effectAllowed = 'copy'
-    setDraggingIcon(hexcode)
-    if (!url) return
-
-    // Sized at the map's current zoom rather than at some fixed picker size, so the tile in
-    // hand is the landmark that will land — zoomed out it's a speck, zoomed in it's a slab,
-    // and either way you can see what you're about to commit to before letting go.
-    const iconPx = Math.max(MIN_DRAG_TILE, POI_ICON_SIZE * scale)
-    const tilePx = iconPx + 2
-
-    const ghost = document.createElement('div')
-    ghost.className = 'mlb-poi-drag-tile'
-    ghost.style.width = `${tilePx}px`
-    ghost.style.height = `${tilePx}px`
-    ghost.style.borderRadius = `${Math.max(3, 6 * scale)}px`
-    const img = document.createElement('img')
-    img.src = url
-    img.width = iconPx
-    img.height = iconPx
-    img.alt = ''
-    ghost.appendChild(img)
-    document.body.appendChild(ghost)
-    // Centred under the pointer: the gesture ends by pointing at where the landmark goes, so
-    // the tile should sit on that spot rather than hang below and to the right of it.
-    e.dataTransfer.setDragImage(ghost, tilePx / 2, tilePx / 2)
-    ghostRef.current = ghost
-  }
-
-  const endDrag = () => {
-    setDraggingIcon(null)
-    ghostRef.current?.remove()
-    ghostRef.current = null
+    // The browser reclaimed the gesture (a scroll it decided was one after all): tear the ghost
+    // down with nothing placed.
+    if (d?.started) onPlacementEnd(d.hexcode, -1, -1, false)
   }
 
   const needle = query.trim().toLowerCase()
@@ -200,45 +193,34 @@ export function PoiPicker({ scale, onPlaceByKeyboard, armedIcon, onArm, onDragPl
                 const url = openMojiUrl(entry.hexcode)
                 return (
                   // A button rather than a div, so the palette is reachable by Tab and each
-                  // symbol can be fired with Enter or Space. Dragging still works from a
-                  // button; what it couldn't do as a div was be focused at all, which left
-                  // placing a landmark the one thing in the app a mouse was required for.
-                  //
-                  // Only keyboard activation places: a click carries detail >= 1, a keyboard
-                  // Enter carries 0. So a mouse user's click still does nothing, and dragging
-                  // remains the way a pointer places a symbol.
+                  // symbol can be fired with Enter or Space. Placing is a drag (pointer) or, for
+                  // the keyboard, Enter — a plain mouse click does nothing, which is why the click
+                  // handler only acts on a keyboard activation or a touch arm.
                   <button
                     type="button"
                     key={entry.hexcode}
                     className="mlb-poi-swatch"
-                    draggable={!coarse}
                     title={entry.name}
-                    aria-label={coarse ? `${entry.name} — tap to pick up, or drag onto the map` : `${entry.name} — press Enter to place`}
-                    data-dragging={entry.hexcode === draggingIcon}
+                    aria-label={coarse ? `${entry.name} — tap to pick up, or drag onto the map` : `${entry.name} — drag onto the map, or press Enter to place`}
+                    data-dragging={entry.hexcode === drag.current?.hexcode && drag.current?.started}
                     data-armed={entry.hexcode === armedIcon}
-                    // pan-y so an up/down swipe still scrolls the palette while a sideways pull
-                    // is left free to become a drag onto the map.
+                    // pan-y so an up/down swipe still scrolls the palette while a sideways pull is
+                    // left free to become a drag onto the map.
                     style={coarse ? { touchAction: 'pan-y' } : undefined}
-                    onDragStart={coarse ? undefined : e => startDrag(e, entry.hexcode, url)}
-                    onDragEnd={coarse ? undefined : endDrag}
-                    onPointerDown={coarse ? e => onSwatchPointerDown(e, entry.hexcode, url) : undefined}
-                    onPointerMove={coarse ? onSwatchPointerMove : undefined}
-                    onPointerUp={coarse ? onSwatchPointerUp : undefined}
-                    onPointerCancel={coarse ? onSwatchPointerCancel : undefined}
+                    onPointerDown={e => onSwatchPointerDown(e, entry.hexcode, url)}
+                    onPointerMove={onSwatchPointerMove}
+                    onPointerUp={onSwatchPointerUp}
+                    onPointerCancel={onSwatchPointerCancel}
                     onClick={e => {
-                      // A tap picks the symbol up and the next tap on the map puts it down;
-                      // tapping the armed one again puts it back. A drag that just happened
-                      // isn't a tap, so it doesn't also arm.
-                      if (coarse) {
-                        if (dragged.current) { dragged.current = false; return }
-                        onArm(entry.hexcode === armedIcon ? null : entry.hexcode)
-                      } else if (e.detail === 0) onPlaceByKeyboard(entry.hexcode)
+                      // A drag that just happened isn't a tap, so it neither arms nor places.
+                      if (dragged.current) { dragged.current = false; return }
+                      if (coarse) onArm(entry.hexcode === armedIcon ? null : entry.hexcode)
+                      else if (e.detail === 0) onPlaceByKeyboard(entry.hexcode)
                     }}
                   >
-                    {/* No draggable={false} on the img: the pointer usually goes down on the
-                        artwork rather than the padding around it, and opting the img out would
-                        kill the drag before it started. */}
-                    {url && <img src={url} alt="" width={34} height={34} />}
+                    {/* draggable={false} so the browser's own image drag can't hijack the pointer
+                        gesture before our handlers see it. */}
+                    {url && <img src={url} alt="" width={34} height={34} draggable={false} />}
                   </button>
                 )
               })}

@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { Badge, Button, Divider, Input, Tag, Toggle } from 'metro-ds'
+import { Button, Divider, Input, Tag, Toggle } from 'metro-ds'
 import { ParkIcon, PenIcon, PoiIcon, RiverIcon, TrashIcon } from '../icons'
 import { LINE_COLORS } from '../lineColors'
 import { isUsableLineNumber, MAX_LINE_NUMBER } from '../lineNumber'
 import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
+import type { RideProgress } from '../canvas/trainMotion'
 import { COMPANY_SYMBOLS } from '../types'
+import { TrainIcon } from '../icons'
 import { CompanySymbolIcon, SYMBOL_LABEL } from '../companySymbols'
 import { CompanySelect } from './CompanySelect'
 import { DeleteStationsDialog } from './DeleteStationsDialog'
 import { HoverTip } from './HoverTip'
+import { LineTripView } from './LineTripView'
 import { openMojiBySubgroup, openMojiUrl, SUBGROUP_LABELS } from '../openmoji'
 import { connectedLineCount, exclusiveStationIds, isTransferStation, lineHasStation, lineRouteIndexThrough, stationIdsOfLine } from '../canvas/lineNodes'
 
@@ -125,6 +128,10 @@ interface InspectorProps {
   lines: Record<string, Line>
   companyList: Company[]
   authorityDisplayName: string
+  /** The live ride, or null. When its line is the one open, the trip view tracks the train. */
+  ride: RideProgress | null
+  onRideLine: (lineId: string) => void
+  onStopRide: () => void
   onRenameLine: (lineId: string, name: string) => void
   onSetLineNumber: (lineId: string, number: number) => void
   onRecolorLine: (lineId: string, color: string) => void
@@ -159,6 +166,9 @@ export function Inspector({
   lines,
   companyList,
   authorityDisplayName,
+  ride,
+  onRideLine,
+  onStopRide,
   onRenameLine,
   onSetLineNumber,
   onRecolorLine,
@@ -417,6 +427,7 @@ export function Inspector({
   if (selectedLine) {
     const line = selectedLine
     const lineStations = stationIdsOfLine(line).map(id => stations[id]).filter((s): s is Station => Boolean(s))
+    const riding = ride?.lineId === line.id
 
     return (
       <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
@@ -492,34 +503,24 @@ export function Inspector({
           onChange={companyId => onSetLineCompany(line.id, companyId === '' ? null : companyId)}
         />
 
-        <Divider label="Stations" />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          {/* Keyed by position as well as id: a ring line legitimately calls at its terminus
-              twice, and the id alone collides on exactly the routes most worth looking at. */}
-          {lineStations.map((s, index) => {
-            const transfer = isTransferStation(s, Object.values(lines))
-            return (
-              <div key={`${s.id}-${index}`} style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-tight)', padding: '4px 0' }}>
-                <div
-                  style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: 'var(--radius-full)',
-                    border: `2px solid ${line.color}`,
-                    background: transfer ? line.color : 'var(--bg-surface)',
-                    flexShrink: 0,
-                  }}
-                />
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', flex: 1 }}>{s.name}</span>
-                {transfer && (
-                  <Badge variant="primary" style={{ fontSize: '9px', padding: '1px 5px' }}>
-                    Transfer
-                  </Badge>
-                )}
-              </div>
-            )
-          })}
-        </div>
+        <Divider label={riding ? 'Trip' : 'Stations'} />
+        {/* Board the line's train, or step off it. Needs at least two stops to be a journey. */}
+        {lineStations.length >= 2 && (
+          <Button
+            variant={riding ? 'secondary' : 'primary'}
+            size="sm"
+            icon={<TrainIcon />}
+            onClick={() => (riding ? onStopRide() : onRideLine(line.id))}
+            style={{ width: '100%' }}
+          >
+            {riding ? 'Stop riding' : 'Ride this line'}
+          </Button>
+        )}
+        <LineTripView
+          color={line.color}
+          stops={lineStations.map(s => ({ id: s.id, name: s.name, transfer: isTransferStation(s, Object.values(lines)) }))}
+          ride={riding ? ride : null}
+        />
 
         <Divider />
         <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>

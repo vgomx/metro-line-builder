@@ -88,7 +88,7 @@ type Action =
   | { type: 'insertLineStation'; lineId: string; x: number; y: number; index: number }
   | { type: 'addStationToLine'; lineId: string; stationId: string }
   | { type: 'startExtendLine'; lineId: string; end: 'start' | 'end' }
-  | { type: 'finishDraftLine' }
+  | { type: 'finishDraftLine'; createdAt: number }
   | { type: 'cancelDraftLine' }
   | { type: 'addGeoPoint'; x: number; y: number }
   | { type: 'startExtendGeoFeature'; geoFeatureId: string; end: 'start' | 'end' }
@@ -950,6 +950,7 @@ function reducer(rawState: MapState, action: Action): MapState {
         nodes: state.draftLineNodes,
         visible: true,
         companyId: null,
+        createdAt: action.createdAt,
       }
       return {
         ...state,
@@ -1489,7 +1490,7 @@ export function useMapState() {
     (lineId: string, end: 'start' | 'end') => dispatch({ type: 'startExtendLine', lineId, end }),
     [],
   )
-  const finishDraftLine = useCallback(() => dispatch({ type: 'finishDraftLine' }), [])
+  const finishDraftLine = useCallback(() => dispatch({ type: 'finishDraftLine', createdAt: Date.now() }), [])
   const popDraftLineNode = useCallback(() => dispatch({ type: 'popDraftLineNode' }), [])
   const popDraftGeoPoint = useCallback(() => dispatch({ type: 'popDraftGeoPoint' }), [])
   const cancelDraftLine = useCallback(() => dispatch({ type: 'cancelDraftLine' }), [])
