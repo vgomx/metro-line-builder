@@ -834,3 +834,15 @@ svg ::selection {
   transform-origin: center;
   animation: mlb-train-ring 1600ms ease-out infinite;
 }
+
+/* The trip view's travelling leg: the full-colour remainder of the current leg recedes toward
+   the next stop, uncovering the muted "already travelled" tint behind it. Its shrinking edge is
+   where the train is. */
+@keyframes mlb-trip-recede {
+  from {
+    transform: scaleY(1);
+  }
+  to {
+    transform: scaleY(0);
+  }
+}

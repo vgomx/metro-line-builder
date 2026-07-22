@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react'
 import { Badge } from 'metro-ds'
-import { TrainIcon } from '../icons'
 import { prefersReducedMotion } from '../useReducedMotion'
 import type { RideProgress } from '../canvas/trainMotion'
 
@@ -17,8 +16,8 @@ interface LineTripViewProps {
   ride: RideProgress | null
 }
 
-/** Fixed so the spine geometry is predictable: the glyph slides exactly one row per hop, and the
- * connectors can be single elements rather than two half-height pieces. */
+/** Fixed so the spine geometry is predictable: each leg is a single element spanning exactly one
+ * row, and the travelling leg's fade can sweep it end to end. */
 const ROW_H = 32
 
 /**
@@ -26,13 +25,14 @@ const ROW_H = 32
  * station nodes top to bottom, the way a carriage's line diagram reads. At rest it's just a
  * nicer way to see the route. During a ride it becomes a live trip — the stops behind the train
  * dim (in solid colour, so nothing shows through), the one it's pulling into is called out, and
- * a train glyph slides down the spine to the next stop over the real travel time, arriving as
- * the actual train does.
+ * the leg the train is on fades from full colour to the passed tint as it crosses, the fading
+ * edge marking where the train is, landing muted exactly as it pulls in.
  */
 export function LineTripView({ color, stops, ride }: LineTripViewProps) {
   const currentIndex = ride ? stops.findIndex(s => s.id === ride.nextStationId) : -1
   const riding = ride !== null && currentIndex >= 0
   const dir = riding ? ride!.direction : 1
+  const reduce = prefersReducedMotion()
 
   // A solid, opaque dim — a wash of the line colour over the surface, never see-through, so a
   // passed leg can't reveal whatever sits behind the panel.
@@ -42,16 +42,28 @@ export function LineTripView({ color, stops, ride }: LineTripViewProps) {
   // direction of travel. The current stop itself is the highlight; everything the other way is
   // the journey still ahead, drawn in full colour.
   const isPassed = (i: number) => riding && (dir === 1 ? i < currentIndex : i > currentIndex)
-  // A leg is dim only once the train has cleared both its ends; the leg being travelled and the
-  // road ahead stay full colour, so nothing flips to dim under the sliding glyph.
-  const legPassed = (a: number) => riding && (dir === 1 ? a + 1 < currentIndex : a > currentIndex)
+
+  // The state of the leg leaving row `a` (the connector from node a down to node a+1). 'active'
+  // is the one leg the train is on right now — full colour, with a fade sweeping across it; the
+  // moment it arrives that leg is 'passed' and simply muted.
+  const legState = (a: number): 'passed' | 'active' | 'ahead' => {
+    if (!riding) return 'ahead'
+    if (dir === 1) {
+      if (a + 1 < currentIndex) return 'passed'
+      if (a + 1 === currentIndex) return ride!.atStation ? 'passed' : 'active'
+      return 'ahead'
+    }
+    if (a > currentIndex) return 'passed'
+    if (a === currentIndex) return ride!.atStation ? 'passed' : 'active'
+    return 'ahead'
+  }
 
   // Auto-follow: keep the current stop in view as the trip advances.
   const currentRowRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!riding) return
-    currentRowRef.current?.scrollIntoView({ block: 'center', behavior: prefersReducedMotion() ? 'auto' : 'smooth' })
-  }, [currentIndex, riding])
+    currentRowRef.current?.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' })
+  }, [currentIndex, riding, reduce])
 
   const terminusIndex = riding ? (dir === -1 ? 0 : stops.length - 1) : -1
   const terminusName = terminusIndex >= 0 ? stops[terminusIndex]?.name : null
@@ -85,19 +97,22 @@ export function LineTripView({ color, stops, ride }: LineTripViewProps) {
         </div>
       )}
 
-      {/* position:relative so the sliding train glyph can be laid over the whole spine. */}
       <div style={{ position: 'relative' }}>
         {stops.map((stop, i) => {
           const passed = isPassed(i)
           const current = riding && i === currentIndex
           const nodeColor = passed ? muted : color
-          // The leg leaving this row (to the next node): dim only once fully behind the train.
-          const legColor = legPassed(i) ? muted : color
+          const state = i < stops.length - 1 ? legState(i) : 'ahead'
+          // Base of the leg: full colour ahead, muted once passed. The active leg's base is the
+          // *muted* trail — the full-colour overlay sits on top of it and recedes toward the next
+          // stop, so what's revealed behind is already the passed tint (no flip on arrival).
+          // Under reduced motion there's no sweep, so the active leg just stays full until it's passed.
+          const legBase = state === 'ahead' ? color : state === 'passed' ? muted : reduce ? color : muted
+          const sweeping = state === 'active' && !reduce
           return (
             <div key={`${stop.id}-${i}`} ref={current ? currentRowRef : undefined} style={{ display: 'flex', alignItems: 'center', height: ROW_H }}>
               <div style={{ position: 'relative', width: '22px', height: '100%', flex: 'none' }}>
-                {/* One connector per gap, drawn from this node down into the next row — so a leg is
-                    a single element that recolours as a whole, with a soft fade when it dims. */}
+                {/* One connector per gap, drawn from this node down into the next row. */}
                 {i < stops.length - 1 && (
                   <div
                     style={{
@@ -106,10 +121,31 @@ export function LineTripView({ color, stops, ride }: LineTripViewProps) {
                       top: '50%',
                       width: '2px',
                       height: `${ROW_H}px`,
-                      background: legColor,
+                      background: legBase,
+                      overflow: 'hidden',
                       transition: 'background-color 400ms ease',
                     }}
-                  />
+                  >
+                    {/* The un-travelled remainder of the leg the train is on: full colour, anchored
+                        at the next-stop end, receding toward it over the real travel time. As it
+                        collapses it uncovers the muted base behind, and its shrinking edge is where
+                        the train is. Keyed by leg so each new hop restarts the sweep from full. */}
+                    {sweeping && (
+                      <div
+                        key={`sweep-${currentIndex}-${dir}`}
+                        style={{
+                          position: 'absolute',
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          ...(dir === 1 ? { bottom: 0 } : { top: 0 }),
+                          background: color,
+                          transformOrigin: dir === 1 ? 'bottom' : 'top',
+                          animation: `mlb-trip-recede ${Math.max(120, ride!.msToNextStation)}ms linear forwards`,
+                        }}
+                      />
+                    )}
+                  </div>
                 )}
                 <div
                   style={{
@@ -154,34 +190,6 @@ export function LineTripView({ color, stops, ride }: LineTripViewProps) {
             </div>
           )
         })}
-
-        {/* The train itself, sliding down the spine to the stop it's pulling into. Its target is the
-            current node; a persistent element means each new leg transitions from where it already
-            is — the previous stop — over exactly the travel time the sample reported, so it lands
-            in step with the real train. ease-in-out mirrors how the train accelerates out of a
-            station and decelerates into the next. */}
-        {riding && (
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              left: '4px',
-              top: 0,
-              width: '13px',
-              height: '13px',
-              marginTop: '-6.5px',
-              transform: `translateY(${currentIndex * ROW_H + ROW_H / 2}px)`,
-              transition: ride!.atStation || prefersReducedMotion() ? 'none' : `transform ${Math.max(120, ride!.msToNextStation)}ms ease-in-out`,
-              color,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              pointerEvents: 'none',
-            }}
-          >
-            <TrainIcon />
-          </div>
-        )}
       </div>
     </div>
   )
