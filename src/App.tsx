@@ -35,6 +35,9 @@ import { useTheme } from './useTheme'
 import { useSound } from './useSound'
 import { useNotifications } from './state/useNotifications'
 import { useMapNotifications } from './state/useMapNotifications'
+import { useScore } from './state/useScore'
+import { useScoreEvents } from './state/useScoreEvents'
+import { ScoreBadge } from './components/ScoreBadge'
 import { playSequence, playSound } from './sound'
 import type { SoundName } from './sound'
 import type { Line, Tool } from './types'
@@ -131,14 +134,26 @@ function App() {
   // a burst of separate events.
   const notifications = useNotifications()
   const { suppress: suppressNotifications } = useMapNotifications(state, notifications.announce)
+  // The Approval score rides the same event detection, but keeps its own tally and history.
+  const score = useScore()
+  const { suppress: suppressScore } = useScoreEvents(state, score.award)
+  // Load, undo/redo and generate move the whole map at once — neither the Gazette nor the score
+  // should treat that as a burst of things the user built, so both detectors are silenced first.
+  const suppressEvents = useCallback(
+    (reason: 'silent' | 'foundation') => {
+      suppressNotifications(reason)
+      suppressScore()
+    },
+    [suppressNotifications, suppressScore],
+  )
   const handleUndo = useCallback(() => {
-    suppressNotifications('silent')
+    suppressEvents('silent')
     undo()
-  }, [undo, suppressNotifications])
+  }, [undo, suppressEvents])
   const handleRedo = useCallback(() => {
-    suppressNotifications('silent')
+    suppressEvents('silent')
     redo()
-  }, [redo, suppressNotifications])
+  }, [redo, suppressEvents])
   const [zoom, setZoom] = useState(1)
   const [showGrid, setShowGrid] = useState(true)
   const [showTrains, setShowTrains] = useState(false)
@@ -187,7 +202,7 @@ function App() {
       data => {
         // A file is a different map from the one it replaces, whatever it's called.
         mapId.current = startNewMapId()
-        suppressNotifications('silent')
+        suppressEvents('silent')
         const ok = loadMap(data)
         setToast(
           ok
@@ -209,7 +224,7 @@ function App() {
     setShowWelcome(false)
     playSound('generate')
     mapId.current = startNewMapId()
-    suppressNotifications('foundation')
+    suppressEvents('foundation')
     generateMap()
     // Same two frames the Surprise button waits: React has to commit the new line paths and
     // the browser has to lay out the fresh SVG before there's anything to frame.
@@ -257,7 +272,7 @@ function App() {
     // The city about to be replaced keeps its place in the library under its own id; the new
     // one gets a new identity, so the two are two maps rather than one map that changed.
     mapId.current = startNewMapId()
-    suppressNotifications('foundation')
+    suppressEvents('foundation')
     generateMap()
     setToast({ message: SURPRISE_LINES[Math.floor(Math.random() * SURPRISE_LINES.length)], variant: 'success' })
     // Frame the new city once React has committed the fresh line paths (two frames is
@@ -618,11 +633,14 @@ function App() {
               </div>
             )}
 
+            <ScoreBadge api={score} />
+
             {toast && (
               <div
                 style={{
                   position: 'absolute',
-                  bottom: 'var(--space-3)',
+                  // Sits above the score badge in the same corner rather than on top of it.
+                  bottom: 'calc(var(--space-3) + 46px)',
                   right: 'var(--space-3)',
                   pointerEvents: 'auto',
                 }}
@@ -661,7 +679,7 @@ function App() {
             // switching is only a matter of adopting the other one's.
             adoptMapId(id)
             mapId.current = id
-            suppressNotifications('silent')
+            suppressEvents('silent')
             loadMap(saved)
             requestAnimationFrame(() => requestAnimationFrame(() => mapCanvasRef.current?.fitContent()))
           }}
@@ -684,7 +702,7 @@ function App() {
           onBlank={() => {
             setShowWelcome(false)
             if (hasContent) {
-              suppressNotifications('silent')
+              suppressEvents('silent')
               clearMap()
             }
           }}

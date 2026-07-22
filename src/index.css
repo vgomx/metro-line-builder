@@ -835,6 +835,51 @@ svg ::selection {
   animation: mlb-train-ring 1600ms ease-out infinite;
 }
 
+/* Approval: the badge pops when the score climbs, and hearts (the likes) rise off it and fade. */
+@keyframes mlb-score-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.16);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.mlb-score-pop {
+  animation: mlb-score-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes mlb-heart-float {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.6);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx, 0), -46px) scale(1);
+  }
+}
+@keyframes mlb-gain-float {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-22px);
+  }
+}
+
 /* A Gazette headline dropping in at the top of the canvas. */
 @keyframes mlb-banner-in {
   from {
