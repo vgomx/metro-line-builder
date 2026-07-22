@@ -76,6 +76,9 @@ export interface Line {
   visible: boolean
   /** Owning operator, or null if unassigned (falls back to the Local Transport Authority). */
   companyId: string | null
+  /** When the line was drawn, for the "Created" sort. Optional: lines saved before this existed
+   * have none, and fall back to their position in the manual order. */
+  createdAt?: number
 }
 
 export type GeoFeatureType = 'river' | 'park'
