@@ -565,7 +565,7 @@ function App() {
               pointerEvents: 'none',
             }}
           >
-            <NotificationBanner items={notifications.bannerItems} onDismiss={notifications.dismiss} />
+            <NotificationBanner items={notifications.bannerItems} cityName={state.mapName} onDismiss={notifications.dismiss} />
 
             {selectionLabel && <SelectionLabel label={selectionLabel} />}
 
