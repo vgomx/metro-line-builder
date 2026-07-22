@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, Divider, Input, Tag, Toggle } from 'metro-ds'
 import { ParkIcon, PenIcon, PoiIcon, RiverIcon, TrashIcon } from '../icons'
-import { LINE_COLORS } from '../lineColors'
 import { isUsableLineNumber, MAX_LINE_NUMBER } from '../lineNumber'
 import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
 import type { RideProgress } from '../canvas/trainMotion'
@@ -9,6 +8,7 @@ import { COMPANY_SYMBOLS } from '../types'
 import { TrainIcon } from '../icons'
 import { CompanySymbolIcon, SYMBOL_LABEL } from '../companySymbols'
 import { CompanySelect } from './CompanySelect'
+import { LineColorSelect } from './LineColorSelect'
 import { DeleteStationsDialog } from './DeleteStationsDialog'
 import { HoverTip } from './HoverTip'
 import { LineTripView } from './LineTripView'
@@ -431,77 +431,31 @@ export function Inspector({
 
     return (
       <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)' }}>
-          <div style={{ width: '20px', height: '20px', borderRadius: 'var(--radius-sm)', background: line.color, flexShrink: 0 }} />
-          <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-primary)' }}>Line properties</span>
-        </div>
-        <Divider />
-
-        <LineNumberField key={line.id} line={line} lines={lines} onSetLineNumber={onSetLineNumber} />
-
-        <Input label="Line name" value={line.name} onChange={e => onRenameLine(line.id, e.target.value)} />
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-          <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--text-secondary)' }}>Color</label>
-          <div style={{ display: 'flex', gap: 'var(--gap-tight)', flexWrap: 'wrap' }}>
-            {/* The ten are the palette a transit map is usually drawn from — distinguishable
-                from each other and from the page in both themes. The custom swatch is last
-                because it's the exception: a colour nobody vetted, which is the map-maker's
-                right and their risk. */}
-            {LINE_COLORS.map(color => (
-              <button
-                key={color}
-                type="button"
-                className="mlb-swatch"
-                aria-label={`Set line color ${color}`}
-                onClick={() => onRecolorLine(line.id, color)}
-                style={{
-                  width: '22px',
-                  height: '22px',
-                  borderRadius: 'var(--radius-sm)',
-                  background: color,
-                  border: 'none',
-                  cursor: 'pointer',
-                  outline: line.color === color ? `2px solid ${color}` : 'none',
-                  outlineOffset: '2px',
-                  transition: 'outline 100ms ease',
-                }}
-              />
-            ))}
-            <label
-              className="mlb-swatch"
-              style={{
-                width: '22px',
-                height: '22px',
-                borderRadius: 'var(--radius-sm)',
-                border: LINE_COLORS.includes(line.color) ? '1px dashed var(--border-strong)' : 'none',
-                outline: LINE_COLORS.includes(line.color) ? 'none' : `2px solid ${line.color}`,
-                outlineOffset: '2px',
-                background: LINE_COLORS.includes(line.color)
-                  ? 'conic-gradient(#C62828, #F9A825, #2E7D32, #0277BD, #6A1B9A, #C62828)'
-                  : line.color,
-                cursor: 'pointer',
-                display: 'block',
-                overflow: 'hidden',
-              }}
-            >
-              <input
-                type="color"
-                aria-label="Custom line colour"
-                value={line.color}
-                onChange={e => onRecolorLine(line.id, e.target.value.toUpperCase())}
-                style={{ opacity: 0, width: '100%', height: '100%', cursor: 'pointer', display: 'block' }}
-              />
-            </label>
+        {/* Identity on one row: the colour as a chip that opens the palette, then the name. No
+            "Line properties" heading above it — the panel's own subheader already names the line,
+            and the space it cost pushed the route below the fold. */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 'var(--gap-sm)' }}>
+          <LineColorSelect value={line.color} onChange={color => onRecolorLine(line.id, color)} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Input label="Line name" value={line.name} onChange={e => onRenameLine(line.id, e.target.value)} />
           </div>
         </div>
 
-        <CompanySelect
-          value={line.companyId ?? ''}
-          companies={companyList}
-          authorityLabel={`${authorityDisplayName} (Local Transport Authority)`}
-          onChange={companyId => onSetLineCompany(line.id, companyId === '' ? null : companyId)}
-        />
+        {/* The two attributes that aren't the name, sharing a row: the number a rider knows the
+            line by, and who runs it. */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--gap-sm)' }}>
+          <div style={{ width: '92px', flexShrink: 0 }}>
+            <LineNumberField key={line.id} line={line} lines={lines} onSetLineNumber={onSetLineNumber} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <CompanySelect
+              value={line.companyId ?? ''}
+              companies={companyList}
+              authorityLabel={`${authorityDisplayName} (Local Transport Authority)`}
+              onChange={companyId => onSetLineCompany(line.id, companyId === '' ? null : companyId)}
+            />
+          </div>
+        </div>
 
         <Divider label={riding ? 'Trip' : 'Stations'} />
         {/* Board the line's train, or step off it. Needs at least two stops to be a journey. */}
