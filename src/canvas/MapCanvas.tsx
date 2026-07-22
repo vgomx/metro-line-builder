@@ -118,6 +118,10 @@ interface MapCanvasProps {
   onLineSnap?: () => void
   /** A line was picked on the canvas — the arrival chime, matching the list's. */
   onLineSelected?: () => void
+  /** Journey planning: the two chosen ends, and the click that sets them. */
+  journeyFromId?: string | null
+  journeyToId?: string | null
+  onJourneyPick?: (stationId: string) => void
   /** A dragged station or landmark crossed a snap point — the soft detent tick. */
   onDetent?: () => void
   onUndo: () => void
@@ -255,6 +259,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onLineReroute,
     onLineSnap,
     onLineSelected,
+    journeyFromId,
+    journeyToId,
+    onJourneyPick,
     onDetent,
     onUndo,
     onRedo,
@@ -659,6 +666,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     if (spaceHeld) return
     if (tool === 'draw-line') {
       onAppendDraftLineNode({ kind: 'station', stationId: station.id })
+    } else if (tool === 'plan-journey') {
+      onJourneyPick?.(station.id)
     }
   }
 
@@ -1402,6 +1411,22 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
                 />
               ))
             })}
+
+        {/* The journey's two ends, ringed in the world so the map and the panel are obviously
+            talking about the same two stations. Drawn under the station nodes, so the ring reads
+            as something around the station rather than something covering it. */}
+        {[journeyFromId, journeyToId].map((id, index) => {
+          const station = id ? stations[id] : null
+          if (!station) return null
+          return (
+            <g key={`journey-end-${index}`} pointerEvents="none">
+              {/* A soft disc of the page's own background first, so the ring stays legible where
+                  it crosses a line, then the ring itself. */}
+              <circle cx={station.x} cy={station.y} r={15} fill="var(--bg-canvas)" opacity={0.55} />
+              <circle cx={station.x} cy={station.y} r={15} fill="none" stroke="var(--text-primary)" strokeWidth={2} />
+            </g>
+          )
+        })}
 
         {stationList.map(station => (
           <StationNode

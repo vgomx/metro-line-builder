@@ -90,4 +90,4 @@ export interface GeoFeature {
   points: Point[]
 }
 
-export type Tool = 'select' | 'add-station' | 'draw-line' | 'draw-river' | 'draw-park' | 'add-poi' | 'pan'
+export type Tool = 'select' | 'plan-journey' | 'add-station' | 'draw-line' | 'draw-river' | 'draw-park' | 'add-poi' | 'pan'

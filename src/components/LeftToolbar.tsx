@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { IconButton, Toolbar, ToolbarSeparator } from 'metro-ds'
-import { CursorIcon, HandIcon, ParkIcon, PenIcon, PoiIcon, RiverIcon, StationIcon } from '../icons'
+import { CursorIcon, HandIcon, JourneyIcon, ParkIcon, PenIcon, PoiIcon, RiverIcon, StationIcon } from '../icons'
 import type { Tool } from '../types'
 import type { Theme } from '../useTheme'
 import { MoreMenu } from './MoreMenu'
@@ -28,6 +28,11 @@ const GEO_TOOLS: { tool: Tool; label: string; icon: JSX.Element; key: string }[]
   { tool: 'add-poi', label: 'Point of interest (I)', icon: <PoiIcon />, key: 'i' },
 ]
 
+/** Reading the map rather than drawing it, so it sits apart from the tools that change things. */
+const READ_TOOLS: { tool: Tool; label: string; icon: JSX.Element; key: string }[] = [
+  { tool: 'plan-journey', label: 'Plan a journey (J)', icon: <JourneyIcon />, key: 'j' },
+]
+
 export function LeftToolbar({ tool, onSetTool, theme, onStartOver }: LeftToolbarProps) {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -35,7 +40,7 @@ export function LeftToolbar({ tool, onSetTool, theme, onStartOver }: LeftToolbar
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
       if (e.metaKey || e.ctrlKey || e.altKey) return
 
-      const match = [...TOOLS, ...GEO_TOOLS].find(t => t.key === e.key.toLowerCase())
+      const match = [...TOOLS, ...GEO_TOOLS, ...READ_TOOLS].find(t => t.key === e.key.toLowerCase())
       if (match) onSetTool(match.tool)
     }
     window.addEventListener('keydown', onKeyDown)
@@ -70,6 +75,12 @@ export function LeftToolbar({ tool, onSetTool, theme, onStartOver }: LeftToolbar
         ))}
         <ToolbarSeparator orientation="horizontal" />
         {GEO_TOOLS.map(({ tool: t, label, icon }) => (
+          <HoverTip key={t} label={label}>
+            <IconButton icon={icon} label={label} active={tool === t} onClick={() => onSetTool(t)} />
+          </HoverTip>
+        ))}
+        <ToolbarSeparator orientation="horizontal" />
+        {READ_TOOLS.map(({ tool: t, label, icon }) => (
           <HoverTip key={t} label={label}>
             <IconButton icon={icon} label={label} active={tool === t} onClick={() => onSetTool(t)} />
           </HoverTip>

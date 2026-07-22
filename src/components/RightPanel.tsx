@@ -7,11 +7,21 @@ import { StationsPanel } from './StationsPanel'
 import { GeoPanel } from './GeoPanel'
 import { CompaniesPanel } from './CompaniesPanel'
 import { Inspector } from './Inspector'
+import { JourneyPanel } from './JourneyPanel'
 import { HoverTip } from './HoverTip'
 import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
 import type { RideProgress } from '../canvas/trainMotion'
 
 interface RightPanelProps {
+  /** The journey planner takes the whole panel while its tool is up — it is a different question
+   * from "what is this thing", so it replaces the tabs rather than becoming another one. */
+  journeyMode: boolean
+  journeyFromId: string | null
+  journeyToId: string | null
+  onSetJourneyFrom: (id: string | null) => void
+  onSetJourneyTo: (id: string | null) => void
+  onSwapJourney: () => void
+  onExitJourney: () => void
   mapName: string
   authorityName: string
   authorityDisplayName: string
@@ -86,6 +96,13 @@ const TAB_ORDER = [...TABS, 'Properties']
 export const RIGHT_PANEL_WIDTH = 272
 
 export function RightPanel({
+  journeyMode,
+  journeyFromId,
+  journeyToId,
+  onSetJourneyFrom,
+  onSetJourneyTo,
+  onSwapJourney,
+  onExitJourney,
   mapName,
   authorityName,
   authorityDisplayName,
@@ -213,9 +230,11 @@ export function RightPanel({
     >
       {/* Tighter than the design system's own padding, which is sized for a wider column than
           this panel has. Even four tabs overflow at 16px a side. */}
-      <div className="mlb-tabs" style={{ borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-        <Tabs tabs={TABS} activeTab={tab} onChange={setTab} />
-      </div>
+      {!journeyMode && (
+        <div className="mlb-tabs" style={{ borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+          <Tabs tabs={TABS} activeTab={tab} onChange={setTab} />
+        </div>
+      )}
 
       {/* Says where you are on every tab, and on Properties offers the way back out. The
           selection is left alone on the way back — the list highlights whatever you were
@@ -227,12 +246,17 @@ export function RightPanel({
           gap: 'var(--gap-tight)',
           // Tighter on the left when the button is there: its own padding supplies the rest,
           // so the title starts in the same place either way.
-          padding: showBack ? '5px 12px 5px 6px' : '5px 12px',
+          padding: showBack || journeyMode ? '5px 12px 5px 6px' : '5px 12px',
           minHeight: '34px',
           borderBottom: '1px solid var(--border-subtle)',
           flexShrink: 0,
         }}
       >
+        {journeyMode && (
+          <HoverTip label="Back to the map" placement="bottom">
+            <IconButton icon={<BackIcon />} label="Back to the map" size="sm" onClick={onExitJourney} />
+          </HoverTip>
+        )}
         {showBack && (
           <HoverTip label={`Back to ${detail.from}`} placement="bottom">
             <IconButton icon={<BackIcon />} label={`Back to ${detail.from}`} size="sm" onClick={() => setTab(detail.from)} />
@@ -248,11 +272,11 @@ export function RightPanel({
             whiteSpace: 'nowrap',
           }}
         >
-          {detail && tab === 'Properties' ? detail.title : tab}
+          {journeyMode ? 'Journey' : detail && tab === 'Properties' ? detail.title : tab}
         </span>
         {/* The lines' sort control rides the title row rather than sitting a line below it. Only
             on the Lines tab — it's the one list that sorts. Pushed to the right edge. */}
-        {tab === 'Lines' && (
+        {tab === 'Lines' && !journeyMode && (
           <div style={{ marginLeft: 'auto' }}>
             <LineSortControl value={lineSort} onChange={setLineSort} />
           </div>
@@ -260,6 +284,19 @@ export function RightPanel({
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
+        {journeyMode ? (
+          <JourneyPanel
+            fromId={journeyFromId}
+            toId={journeyToId}
+            stationList={stationList}
+            lineList={lineList}
+            stations={stations}
+            onSetFrom={onSetJourneyFrom}
+            onSetTo={onSetJourneyTo}
+            onSwap={onSwapJourney}
+          />
+        ) : (
+        <>
         {/* Keyed by tab so switching remounts and replays the slide; the class carries the
             direction frozen above. */}
         <div key={tab} className={slide.current.dir === 'right' ? 'mlb-tab-in-right' : 'mlb-tab-in-left'}>
@@ -347,6 +384,8 @@ export function RightPanel({
           />
         )}
         </div>
+        </>
+        )}
       </div>
     </div>
   )
