@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Point } from '../types'
+import { buildTimeline, sampleTrain } from './trainMotion'
 
 interface TrainMarkerProps {
   lineId: string
@@ -74,16 +75,6 @@ export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths
         return
       }
 
-      // Visits every stop forward then back, e.g. [0,1,2,1,0] for a 3-stop line —
-      // the shared terminus at each end gets two consecutive dwells across the loop
-      // seam, reading as a brief layover before reversing. Waypoints (stopFlags=false)
-      // get zero dwell, so the train passes through them without pausing.
-      const stopSequence: number[] = []
-      for (let i = 0; i < stopPoints.length; i++) stopSequence.push(i)
-      for (let i = stopPoints.length - 2; i >= 0; i--) stopSequence.push(i)
-
-      const dwellFor = (idx: number) => (stopFlags[idx] ? dwellMs : 0)
-
       const applied = appliedPathsRef.current
       const segmentLengths = segmentLengthsRef.current
       for (let i = 0; i < segmentPaths.length; i++) {
@@ -99,77 +90,38 @@ export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths
         }
       }
 
-      const travelDurations: number[] = []
-      let cycleDuration = 0
-      for (let i = 0; i < stopSequence.length; i++) cycleDuration += dwellFor(stopSequence[i])
-      for (let i = 0; i < stopSequence.length - 1; i++) {
-        const segIndex = Math.min(stopSequence[i], stopSequence[i + 1])
-        const duration = (segmentLengths[segIndex] ?? 0) / speed
-        travelDurations.push(duration)
-        cycleDuration += duration
-      }
-      if (cycleDuration <= 0) {
+      const timeline = buildTimeline({ stopPoints, stopFlags }, segmentLengths, dwellMs, speed)
+      const sample = sampleTrain({ stopPoints, stopFlags }, timeline, now - startTime, phase)
+      if (!sample) {
         frameId = requestAnimationFrame(tick)
         return
       }
 
-      // phase shifts where in the shared cycle this car sits; the two services on a line run
-      // half a cycle apart so they cross going opposite ways.
-      let remaining = (now - startTime + phase * cycleDuration) % cycleDuration
-      let x = stopPoints[stopSequence[0]].x
-      let y = stopPoints[stopSequence[0]].y
+      let x: number
+      let y: number
+      if (sample.kind === 'dwell') {
+        x = stopPoints[sample.stopIndex].x
+        y = stopPoints[sample.stopIndex].y
+      } else {
+        // The pure sample gives the eased position along the segment; only here, with the live
+        // path element, does it become a point and a heading.
+        const segLength = segmentLengths[sample.segIndex] ?? 0
+        const distance = sample.forward ? sample.travelled * segLength : (1 - sample.travelled) * segLength
+        const segPath = segmentRefs.current[sample.segIndex]
+        if (segPath && segLength > 0) {
+          const point = segPath.getPointAtLength(distance)
+          x = point.x
+          y = point.y
 
-      for (let i = 0; i < stopSequence.length; i++) {
-        const dwell = dwellFor(stopSequence[i])
-        if (remaining < dwell) {
-          const p = stopPoints[stopSequence[i]]
-          x = p.x
-          y = p.y
-          break
-        }
-        remaining -= dwell
-
-        if (i < stopSequence.length - 1) {
-          const duration = travelDurations[i]
-          if (remaining < duration) {
-            const from = stopSequence[i]
-            const to = stopSequence[i + 1]
-            const segIndex = Math.min(from, to)
-            const forward = to > from
-            const segLength = segmentLengths[segIndex] ?? 0
-            const frac = duration > 0 ? remaining / duration : 0
-            // Accelerate away from a station and decelerate into one, but glide through
-            // waypoints at speed. easeIn ends and easeOut begins at the same rate, so a
-            // waypoint between two segments is crossed with continuous speed, no lurch.
-            const departingStation = stopFlags[from]
-            const arrivingStation = stopFlags[to]
-            const travelled =
-              departingStation && arrivingStation
-                ? frac < 0.5
-                  ? 2 * frac * frac
-                  : 1 - (-2 * frac + 2) ** 2 / 2
-                : departingStation
-                  ? frac * frac
-                  : arrivingStation
-                    ? frac * (2 - frac)
-                    : frac
-            const distance = forward ? travelled * segLength : (1 - travelled) * segLength
-            const segPath = segmentRefs.current[segIndex]
-            if (segPath && segLength > 0) {
-              const point = segPath.getPointAtLength(distance)
-              x = point.x
-              y = point.y
-
-              const eps = 1
-              const a = segPath.getPointAtLength(Math.max(0, distance - eps))
-              const b = segPath.getPointAtLength(Math.min(segLength, distance + eps))
-              let angle = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI
-              if (!forward) angle += 180
-              lastAngleRef.current = angle
-            }
-            break
-          }
-          remaining -= duration
+          const eps = 1
+          const a = segPath.getPointAtLength(Math.max(0, distance - eps))
+          const b = segPath.getPointAtLength(Math.min(segLength, distance + eps))
+          let angle = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI
+          if (!sample.forward) angle += 180
+          lastAngleRef.current = angle
+        } else {
+          x = stopPoints[sample.from].x
+          y = stopPoints[sample.from].y
         }
       }
 
