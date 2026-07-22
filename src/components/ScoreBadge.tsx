@@ -53,7 +53,7 @@ export function ScoreBadge({ api }: { api: ScoreApi }) {
   }, [open])
 
   return (
-    <div ref={ref} style={{ position: 'relative', pointerEvents: 'auto' }}>
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0, pointerEvents: 'auto' }}>
       {/* The likes, taking flight off the badge — a little stream of hearts per award, anchored to
           the heart icon so they lift right off it. */}
       <div style={{ position: 'absolute', left: '12px', bottom: '14px', width: 0, height: 0, pointerEvents: 'none', zIndex: 30 }}>

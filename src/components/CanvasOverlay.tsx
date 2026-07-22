@@ -25,6 +25,11 @@ export function CanvasStats({ lineCount, stationCount, zoom }: CanvasStatsProps)
         fontSize: 'var(--text-xs)',
         color: 'var(--text-secondary)',
         whiteSpace: 'nowrap',
+        // Yields to the score badge beside it rather than pushing the row past the panel edge:
+        // shrinks, and clips its own content (the zoom % goes first) before it would overflow.
+        flexShrink: 1,
+        minWidth: 0,
+        overflow: 'hidden',
         // Read-only chrome — never swallow a click meant for the map underneath.
         pointerEvents: 'none',
       }}

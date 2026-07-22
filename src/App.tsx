@@ -829,10 +829,11 @@ function App() {
             />
           </div>
 
-          {/* Beneath the panel: the score badge on the left, the map stats on the right. Sized to
-              its content and pinned to the panel's right edge, so a long tally spills left over
-              the map rather than stretching the column. */}
-          <div style={{ alignSelf: 'flex-end', display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)', pointerEvents: 'none' }}>
+          {/* Beneath the panel: the score badge on the left, the map stats on the right, kept
+              inside the panel's own width. The badge never gives (it's the score); if a long
+              tally leaves no room, the stats is what yields, rather than the row spilling over
+              the map. */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 'var(--gap-sm)', minWidth: 0, pointerEvents: 'none' }}>
             <ScoreBadge api={score} />
             <CanvasStats lineCount={lineList.length} stationCount={stationList.length} zoom={zoom} />
           </div>
