@@ -11,6 +11,7 @@ import { JourneyPanel } from './JourneyPanel'
 import { HoverTip } from './HoverTip'
 import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
 import type { RideProgress } from '../canvas/trainMotion'
+import type { Journey } from '../journey'
 
 interface RightPanelProps {
   /** The journey planner takes the whole panel while its tool is up — it is a different question
@@ -22,6 +23,8 @@ interface RightPanelProps {
   onSetJourneyTo: (id: string | null) => void
   onSwapJourney: () => void
   onExitJourney: () => void
+  /** Planned in App so the canvas highlight and this itinerary are the same answer. */
+  journey: Journey | null
   mapName: string
   authorityName: string
   authorityDisplayName: string
@@ -103,6 +106,7 @@ export function RightPanel({
   onSetJourneyTo,
   onSwapJourney,
   onExitJourney,
+  journey,
   mapName,
   authorityName,
   authorityDisplayName,
@@ -288,6 +292,7 @@ export function RightPanel({
           <JourneyPanel
             fromId={journeyFromId}
             toId={journeyToId}
+            journey={journey}
             stationList={stationList}
             lineList={lineList}
             stations={stations}

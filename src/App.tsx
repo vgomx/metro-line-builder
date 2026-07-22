@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Toast } from 'metro-ds'
 import { hasSavedMap, useMapState } from './state/useMapState'
+import { planJourney } from './journey'
 import { MapCanvas } from './canvas/MapCanvas'
 import type { MapCanvasHandle } from './canvas/MapCanvas'
 import type { RideProgress } from './canvas/trainMotion'
@@ -132,6 +133,22 @@ function App() {
   // isn't undoable, and doesn't belong in a snapshot.
   const [journeyFromId, setJourneyFromId] = useState<string | null>(null)
   const [journeyToId, setJourneyToId] = useState<string | null>(null)
+
+  /**
+   * Whether the journey tool is up.
+   *
+   * The chosen stations outlive it, so coming back resumes where you left off — but the map's
+   * highlight does not. A dimmed network and a glowing route with no panel explaining them is a
+   * state the interface has stopped accounting for, and it reads as the map being stuck.
+   */
+  const planningJourney = state.tool === 'plan-journey'
+
+  // Planned once and shared: the panel lists the itinerary and the canvas draws it, and two
+  // separate calls could drift apart the moment either input changed.
+  const journey = useMemo(
+    () => (journeyFromId && journeyToId ? planJourney(journeyFromId, journeyToId, lineList, state.stations) : null),
+    [journeyFromId, journeyToId, lineList, state.stations],
+  )
 
   /**
    * A click on a station while the journey tool is up.
@@ -548,9 +565,10 @@ function App() {
             onPoiLand={() => playSound('drop')}
             onMovePois={movePois}
             onMoveGeoFeature={moveGeoFeature}
-            journeyFromId={journeyFromId}
-            journeyToId={journeyToId}
+            journeyFromId={planningJourney ? journeyFromId : null}
+            journeyToId={planningJourney ? journeyToId : null}
             onJourneyPick={handleJourneyPick}
+            journeyLegs={planningJourney ? journey?.legs ?? null : null}
             onReturnToSelect={() => handleSetTool('select')}
             onFinishGeoFeature={withSound('lineDone', finishGeoFeature)}
             onCancelGeoFeature={cancelGeoFeature}
@@ -803,7 +821,7 @@ function App() {
             style={{ flex: 1, minHeight: 0, display: 'flex', pointerEvents: showPanel ? 'auto' : 'none' }}
           >
             <RightPanel
-              journeyMode={state.tool === 'plan-journey'}
+              journeyMode={planningJourney}
               journeyFromId={journeyFromId}
               journeyToId={journeyToId}
               onSetJourneyFrom={setJourneyFromId}
@@ -813,6 +831,7 @@ function App() {
                 setJourneyToId(journeyFromId)
               }}
               onExitJourney={() => handleSetTool('select')}
+              journey={journey}
               mapName={state.mapName}
               authorityName={state.authorityName}
               authorityDisplayName={authorityDisplayName}

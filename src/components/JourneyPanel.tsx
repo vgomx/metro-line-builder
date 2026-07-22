@@ -1,11 +1,13 @@
 import { Select } from 'metro-ds'
 import type { Line, Station } from '../types'
-import { planJourney } from '../journey'
+import type { Journey } from '../journey'
 import { HoverTip } from './HoverTip'
 
 interface JourneyPanelProps {
   fromId: string | null
   toId: string | null
+  /** Planned upstream, so the map's highlight and this itinerary can't disagree. */
+  journey: Journey | null
   stationList: Station[]
   lineList: Line[]
   stations: Record<string, Station>
@@ -31,6 +33,7 @@ function stops(count: number): string {
 export function JourneyPanel({
   fromId,
   toId,
+  journey,
   stationList,
   lineList,
   stations,
@@ -42,7 +45,6 @@ export function JourneyPanel({
     .map(s => ({ label: s.name.trim() || 'Unnamed station', value: s.id }))
     .sort((a, b) => a.label.localeCompare(b.label))
 
-  const journey = fromId && toId ? planJourney(fromId, toId, lineList, stations) : null
   const nameOf = (id: string) => stations[id]?.name?.trim() || 'Unnamed station'
 
   return (
