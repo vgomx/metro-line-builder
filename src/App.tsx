@@ -528,16 +528,14 @@ function App() {
                 onStopRide={stopRide}
                 scrollText={(() => {
                   const ids = stationIdsOfLine(selectedLine)
-                  // While riding, the sign reads like a real service display: the next stop, then
-                  // where this direction ends. Otherwise it's the line and its terminus.
-                  if (ride?.lineId === selectedLine.id && ride.nextStationId) {
-                    const next = state.stations[ride.nextStationId]?.name
-                    const terminusId = ride.direction === 1 ? ids[ids.length - 1] : ids[0]
-                    const terminus = terminusId ? state.stations[terminusId]?.name : null
-                    const lead = ride.atStation ? 'AT' : 'NEXT'
-                    return next ? `${lead} ${next}${terminus ? `  •  TO ${terminus}` : ''}` : selectedLine.name
-                  }
-                  const terminus = ids.length > 0 ? state.stations[ids[ids.length - 1]]?.name : null
+                  // Like a real destination sign, the LED shows where this service is bound, not
+                  // the next stop — so it holds steady the whole ride and only re-scrolls when the
+                  // train reverses at a terminus and its destination genuinely changes. (The live
+                  // next-stop lives in the trip view.) Rewriting it per departure made the marquee
+                  // blank and restart at every station.
+                  const riding = ride?.lineId === selectedLine.id
+                  const terminusId = riding && ride.direction === -1 ? ids[0] : ids[ids.length - 1]
+                  const terminus = terminusId ? state.stations[terminusId]?.name : null
                   return terminus ? `${selectedLine.name}  •  TO ${terminus}` : selectedLine.name
                 })()}
               />
