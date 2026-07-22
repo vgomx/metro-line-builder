@@ -22,6 +22,8 @@ import type { Theme } from '../useTheme'
 import type { ImageFormat } from '../exportImage'
 import { ExportMenu } from './ExportMenu'
 import { HoverTip } from './HoverTip'
+import { NotificationCenter } from './NotificationCenter'
+import type { NotificationsApi } from '../state/useNotifications'
 
 /**
  * Slides a toggle's icon into place when its state changes: up when it comes on, down when it
@@ -72,6 +74,7 @@ interface TopBarProps {
   onRedo: () => void
   canUndo: boolean
   canRedo: boolean
+  notifications: NotificationsApi
 }
 
 export function TopBar({
@@ -99,6 +102,7 @@ export function TopBar({
   onRedo,
   canUndo,
   canRedo,
+  notifications,
 }: TopBarProps) {
   const [focused, setFocused] = useState(false)
 
@@ -250,6 +254,7 @@ export function TopBar({
             onClick={onToggleTheme}
           />
         </HoverTip>
+        <NotificationCenter api={notifications} />
       </div>
 
       <div style={{ width: 'var(--space-2)' }} />

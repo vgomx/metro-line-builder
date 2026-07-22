@@ -835,6 +835,17 @@ svg ::selection {
   animation: mlb-train-ring 1600ms ease-out infinite;
 }
 
+/* A Gazette headline dropping in at the top of the canvas. */
+@keyframes mlb-banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+.mlb-banner-in {
+  animation: mlb-banner-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 /* The trip view's travelling leg: the full-colour remainder of the current leg recedes toward
    the next stop, uncovering the muted "already travelled" tint behind it. Its shrinking edge is
    where the train is. */

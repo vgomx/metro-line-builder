@@ -25,6 +25,7 @@ import {
 import { DeleteStationsDialog } from './components/DeleteStationsDialog'
 import { CanvasLegend } from './components/CanvasLegend'
 import { LineAnnouncer } from './components/LineAnnouncer'
+import { NotificationBanner } from './components/NotificationBanner'
 import { exportMapAsJson, pickMapFile } from './export'
 import { exportMapAsImage } from './exportImage'
 import type { ImageFormat } from './exportImage'
@@ -32,6 +33,8 @@ import { exclusiveStationIds, stationIdsOfLine } from './canvas/lineNodes'
 import { geoTypeOfTool, MIN_GEO_POINTS } from './geoDraft'
 import { useTheme } from './useTheme'
 import { useSound } from './useSound'
+import { useNotifications } from './state/useNotifications'
+import { useMapNotifications } from './state/useMapNotifications'
 import { playSequence, playSound } from './sound'
 import type { SoundName } from './sound'
 import type { Line, Tool } from './types'
@@ -123,6 +126,19 @@ function App() {
   const mapCanvasRef = useRef<MapCanvasHandle>(null)
   const { theme, toggleTheme } = useTheme()
   const { soundEnabled, toggleSound } = useSound()
+  // The Gazette: a running feed of the map's big moments (see useMapNotifications for what earns
+  // a headline). `suppress` keeps a whole-map move — load, undo/redo, generate — from reading as
+  // a burst of separate events.
+  const notifications = useNotifications()
+  const { suppress: suppressNotifications } = useMapNotifications(state, notifications.announce)
+  const handleUndo = useCallback(() => {
+    suppressNotifications('silent')
+    undo()
+  }, [undo, suppressNotifications])
+  const handleRedo = useCallback(() => {
+    suppressNotifications('silent')
+    redo()
+  }, [redo, suppressNotifications])
   const [zoom, setZoom] = useState(1)
   const [showGrid, setShowGrid] = useState(true)
   const [showTrains, setShowTrains] = useState(false)
@@ -171,6 +187,7 @@ function App() {
       data => {
         // A file is a different map from the one it replaces, whatever it's called.
         mapId.current = startNewMapId()
+        suppressNotifications('silent')
         const ok = loadMap(data)
         setToast(
           ok
@@ -192,6 +209,7 @@ function App() {
     setShowWelcome(false)
     playSound('generate')
     mapId.current = startNewMapId()
+    suppressNotifications('foundation')
     generateMap()
     // Same two frames the Surprise button waits: React has to commit the new line paths and
     // the browser has to lay out the fresh SVG before there's anything to frame.
@@ -239,6 +257,7 @@ function App() {
     // The city about to be replaced keeps its place in the library under its own id; the new
     // one gets a new identity, so the two are two maps rather than one map that changed.
     mapId.current = startNewMapId()
+    suppressNotifications('foundation')
     generateMap()
     setToast({ message: SURPRISE_LINES[Math.floor(Math.random() * SURPRISE_LINES.length)], variant: 'success' })
     // Frame the new city once React has committed the fresh line paths (two frames is
@@ -439,10 +458,11 @@ function App() {
         onExportImage={handleExportImage}
         exporting={exporting}
         onSurprise={handleSurprise}
-        onUndo={undo}
-        onRedo={redo}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
         canUndo={canUndo}
         canRedo={canRedo}
+        notifications={notifications}
       />
 
       <div style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'hidden' }}>
@@ -503,8 +523,8 @@ function App() {
             onLineSnap={() => playSound('snap')}
             onLineSelected={chimeIfEnteringLine}
             onDetent={() => playSound('detent')}
-            onUndo={undo}
-            onRedo={redo}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
             onTransformChange={t => setZoom(t.k)}
             ridingLineId={ride?.lineId ?? null}
             onRideLine={startRide}
@@ -526,6 +546,8 @@ function App() {
               pointerEvents: 'none',
             }}
           >
+            <NotificationBanner items={notifications.bannerItems} onDismiss={notifications.dismiss} />
+
             {selectionLabel && <SelectionLabel label={selectionLabel} />}
 
             {selectedLine && (
@@ -639,6 +661,7 @@ function App() {
             // switching is only a matter of adopting the other one's.
             adoptMapId(id)
             mapId.current = id
+            suppressNotifications('silent')
             loadMap(saved)
             requestAnimationFrame(() => requestAnimationFrame(() => mapCanvasRef.current?.fitContent()))
           }}
@@ -660,7 +683,10 @@ function App() {
           onGenerate={handleWelcomeGenerate}
           onBlank={() => {
             setShowWelcome(false)
-            if (hasContent) clearMap()
+            if (hasContent) {
+              suppressNotifications('silent')
+              clearMap()
+            }
           }}
         />
 
