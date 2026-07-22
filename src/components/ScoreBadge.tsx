@@ -64,6 +64,7 @@ export function ScoreBadge({ api }: { api: ScoreApi }) {
 
       <button
         type="button"
+        className="mlb-score-btn"
         onClick={() => setOpen(o => !o)}
         aria-label={`Approval score ${api.points}`}
         style={{
@@ -75,7 +76,7 @@ export function ScoreBadge({ api }: { api: ScoreApi }) {
           padding: '0 11px 0 9px',
           background: 'var(--bg-surface)',
           border: '1px solid var(--border-subtle)',
-          borderRadius: '999px',
+          borderRadius: 'var(--radius-lg)',
           boxShadow: 'var(--shadow-sm)',
           cursor: 'pointer',
         }}
