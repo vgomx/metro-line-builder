@@ -59,8 +59,11 @@ const PATCHES = {
   /** A landmark landing on the map. The one weighty sound in the set: low, with a fast
    * downward slide and a touch of noise, so it reads as something with mass settling rather
    * than another pip. It answers a gesture that ends by letting go, and it can't be mistaken
-   * for the station pip an octave and a half above it. */
-  drop: [0.55, 0.05, 150, 0.001, 0.04, 0.14, 0, 1.4, -6, 0, 0, 0, 0, 0.12, 0, 0, 0, 0.35, 0.06],
+   * for the station pip well above it. Pitched at 150 it sat under what a laptop or tablet
+   * speaker reproduces and read as faint beside the brighter pickup and detent ticks it now
+   * follows — so it's up to 190 (still a thud, just one that carries) and louder, its slide
+   * eased so it doesn't dive straight back into the sub-bass it climbed out of. */
+  drop: [0.8, 0.05, 190, 0.001, 0.05, 0.14, 0, 1.4, -4, 0, 0, 0, 0, 0.1, 0, 0, 0, 0.4, 0.06],
   /** The elastic snap when a dropped line springs into its new shape. Answers `reroute` — that
    * one bends upward as the route gives, this one dips and comes back (slide down, deltaSlide
    * up) the way the easing overshoots and settles. Released on the drop, so the pair brackets
