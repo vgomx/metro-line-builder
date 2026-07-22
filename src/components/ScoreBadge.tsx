@@ -54,8 +54,9 @@ export function ScoreBadge({ api }: { api: ScoreApi }) {
 
   return (
     <div ref={ref} style={{ position: 'relative', pointerEvents: 'auto' }}>
-      {/* The likes, rising off the badge. Each award is its own little flight. */}
-      <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 0, pointerEvents: 'none' }}>
+      {/* The likes, taking flight off the badge — a little stream of hearts per award, anchored to
+          the heart icon so they lift right off it. */}
+      <div style={{ position: 'absolute', left: '12px', bottom: '14px', width: 0, height: 0, pointerEvents: 'none', zIndex: 30 }}>
         {api.bursts.map(burst => (
           <BurstFlight key={burst.id} burst={burst} onDone={() => api.clearBurst(burst.id)} />
         ))}
@@ -68,19 +69,23 @@ export function ScoreBadge({ api }: { api: ScoreApi }) {
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '7px',
-          height: '34px',
-          padding: '0 12px 0 10px',
+          gap: '6px',
+          height: '28px',
+          boxSizing: 'border-box',
+          padding: '0 11px 0 9px',
           background: 'var(--bg-surface)',
           border: '1px solid var(--border-subtle)',
           borderRadius: '999px',
-          boxShadow: 'var(--shadow-md)',
+          boxShadow: 'var(--shadow-sm)',
           cursor: 'pointer',
         }}
       >
-        <Heart size={15} />
-        <span key={api.points} className="mlb-score-pop" style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', display: 'inline-block' }}>
-          {api.points.toLocaleString()}
+        <Heart size={13} />
+        <span key={api.points} className="mlb-score-pop" style={{ display: 'inline-flex', alignItems: 'baseline', gap: '3px' }}>
+          <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+            {api.points.toLocaleString()}
+          </span>
+          <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-muted)' }}>pts</span>
         </span>
       </button>
 
@@ -89,49 +94,59 @@ export function ScoreBadge({ api }: { api: ScoreApi }) {
   )
 }
 
+// A warm spread of like-reds, so a burst isn't one flat colour.
+const HEART_COLORS = ['#e0245e', '#ff4d6d', '#ff6b8a', '#f0347a', '#ff8fab']
+
 function BurstFlight({ burst, onDone }: { burst: Burst; onDone: () => void }) {
+  // Fix each heart's random path once, on mount — re-rolling every render would make them jitter.
+  const hearts = useRef(
+    Array.from({ length: Math.max(6, Math.min(20, Math.round(burst.likes / 32))) }, () => ({
+      dx: Math.round((Math.random() - 0.5) * 84),
+      dy: -70 - Math.round(Math.random() * 70),
+      rot: Math.round((Math.random() - 0.5) * 60),
+      size: 11 + Math.round(Math.random() * 11),
+      delay: Math.round(Math.random() * 480),
+      duration: 1100 + Math.round(Math.random() * 900),
+      startX: Math.round((Math.random() - 0.5) * 16),
+      color: HEART_COLORS[Math.floor(Math.random() * HEART_COLORS.length)],
+    })),
+  ).current
+
   useEffect(() => {
-    const timer = window.setTimeout(onDone, 1500)
+    const timer = window.setTimeout(onDone, 2200)
     return () => window.clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // More likes, more hearts (a bigger crowd) — capped so a huge award doesn't fill the screen.
-  const count = Math.max(3, Math.min(14, Math.round(burst.likes / 45)))
-  const hearts = Array.from({ length: count })
-
   return (
-    <div style={{ position: 'absolute', right: '14px', top: '-6px', width: 0, height: 0 }}>
+    <>
       <div
         className="mlb-gain-float"
-        style={{ position: 'absolute', right: 0, bottom: 0, whiteSpace: 'nowrap', fontSize: '13px', fontWeight: 700, color: 'var(--heart, #e0245e)' }}
+        style={{ position: 'absolute', left: '-2px', bottom: '2px', whiteSpace: 'nowrap', fontSize: '13px', fontWeight: 800, color: 'var(--heart, #e0245e)' }}
       >
         +{burst.points}
       </div>
-      {hearts.map((_, i) => {
-        // Fan the hearts out left of the number so they read as a little flock lifting off.
-        const dx = -6 - Math.round(Math.random() * 60)
-        const delay = i * 55
-        const size = 9 + Math.round(Math.random() * 6)
-        return (
-          <span
-            key={i}
-            className="mlb-heart-float"
-            style={{
-              position: 'absolute',
-              right: `${Math.round(Math.random() * 24)}px`,
-              bottom: 0,
-              // @ts-expect-error CSS custom property
-              '--dx': `${dx}px`,
-              animationDelay: `${delay}ms`,
-              display: 'flex',
-            }}
-          >
-            <Heart size={size} />
-          </span>
-        )
-      })}
-    </div>
+      {hearts.map((h, i) => (
+        <span
+          key={i}
+          className="mlb-heart-rise"
+          style={{
+            position: 'absolute',
+            left: `${h.startX}px`,
+            bottom: 0,
+            display: 'flex',
+            // @ts-expect-error CSS custom properties
+            '--dx': `${h.dx}px`,
+            '--dy': `${h.dy}px`,
+            '--rot': `${h.rot}deg`,
+            animationDelay: `${h.delay}ms`,
+            animationDuration: `${h.duration}ms`,
+          }}
+        >
+          <Heart size={h.size} color={h.color} />
+        </span>
+      ))}
+    </>
   )
 }
 
