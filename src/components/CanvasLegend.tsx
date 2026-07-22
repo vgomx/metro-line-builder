@@ -21,7 +21,7 @@ export function CanvasLegend({ mapName, authorityName }: CanvasLegendProps) {
       style={{
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'flex-end',
+        alignItems: 'flex-start',
         gap: 'var(--gap-sm)',
         flexShrink: 0,
         pointerEvents: 'none',

@@ -285,3 +285,16 @@ export const GripIcon = () => (
     <circle cx="10" cy="12" r="1.15" />
   </svg>
 )
+
+export const NewspaperIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path
+      d="M3 4.25A1 1 0 0 1 4 3.25h6.5a1 1 0 0 1 1 1v7.25a1.5 1.5 0 0 1-1.5 1.5H4.5A1.5 1.5 0 0 1 3 11.5V4.25Z"
+      stroke="currentColor"
+      strokeWidth="1.2"
+    />
+    <path d="M11.5 6H13v5.25a1.5 1.5 0 0 1-1.5 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+    <rect x="4.6" y="5.2" width="2.9" height="2.4" rx="0.4" fill="currentColor" />
+    <path d="M8.4 5.6h1.6M8.4 7.1h1.6M4.6 9.2h5.4M4.6 10.8h5.4" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+  </svg>
+)
