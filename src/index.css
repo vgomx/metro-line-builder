@@ -753,6 +753,14 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+
+  /* The one exception, because it isn't motion — it's a clock. The Gazette headline is dismissed
+     when this bar finishes, so collapsing its duration wouldn't remove an animation, it would make
+     every headline vanish the instant it arrived. It keeps its real duration; a bar that shortens
+     over seven seconds is hardly the kind of movement the preference is asking us to stop. */
+  .mlb-gazette-timer {
+    animation-duration: var(--gazette-hold, 7000ms) !important;
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -907,6 +915,25 @@ svg ::selection {
   animation-name: mlb-gain-float;
   animation-duration: 1200ms;
   animation-timing-function: ease-out;
+  animation-fill-mode: forwards;
+}
+
+/* The Gazette headline's countdown: a bar that runs down over the time the headline is held, and
+   whose end *is* the dismissal (see NotificationBanner) — so hovering, which pauses the animation,
+   pauses the clock with it. Anchored left so it empties rightward. */
+@keyframes mlb-gazette-timer {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+.mlb-gazette-timer {
+  transform-origin: left center;
+  animation-name: mlb-gazette-timer;
+  animation-duration: var(--gazette-hold, 7000ms);
+  animation-timing-function: linear;
   animation-fill-mode: forwards;
 }
 

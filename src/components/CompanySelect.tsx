@@ -69,7 +69,9 @@ export function CompanySelect({ value, companies, authorityLabel, onChange }: Co
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
-          height: '28px',
+          // The design system's field height, so this lines up with the Inputs it sits beside.
+          height: '34px',
+          boxSizing: 'border-box',
           padding: '0 12px',
           fontSize: '12px',
           fontFamily: "'Barlow', system-ui, sans-serif",
@@ -104,7 +106,7 @@ export function CompanySelect({ value, companies, authorityLabel, onChange }: Co
           role="listbox"
           style={{
             position: 'absolute',
-            top: 'calc(28px + 9px + 22px)',
+            top: 'calc(34px + 9px + 22px)',
             left: 0,
             right: 0,
             zIndex: 200,
