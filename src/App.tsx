@@ -293,6 +293,12 @@ function App() {
     clearSelection()
     setSelectedCompanyId(companyId)
   }
+  // The arrival chime marks arriving at a line, not hopping between them: clicking down a list of
+  // lines would otherwise machine-gun the ding-dong. So it sounds only when no line was selected
+  // before this one — the first pick, not the ones that just move the selection along.
+  const chimeIfEnteringLine = () => {
+    if (state.selectedLineIds.length === 0) playSequence('lineSelect')
+  }
 
   // Start riding a line's train: trains have to be on the map to be ridden, the panel has to be
   // open to show the trip, and the line has to be the selection so its Properties (the trip view)
@@ -495,7 +501,7 @@ function App() {
             onStationGrab={() => playSound('grab')}
             onLineReroute={() => playSound('reroute')}
             onLineSnap={() => playSound('snap')}
-            onLineSelected={() => playSequence('lineSelect')}
+            onLineSelected={chimeIfEnteringLine}
             onDetent={() => playSound('detent')}
             onUndo={undo}
             onRedo={redo}
@@ -735,7 +741,7 @@ function App() {
               onRideLine={startRide}
               onStopRide={stopRide}
               onSelectLine={id => {
-                playSequence('lineSelect')
+                chimeIfEnteringLine()
                 handleSetSelection([], [id], [])
                 // Fly to the line only when picked from the list; a click on the canvas
                 // leaves the viewport alone (the line is already where the user is looking).

@@ -142,7 +142,8 @@ export function RightPanel({
 }: RightPanelProps) {
   const [tab, setTab] = useState('Lines')
   // Owned here rather than in LinesPanel so the "Sort by" control can sit on the title row.
-  const [lineSort, setLineSort] = useState<SortKey>('manual')
+  // Number by default — how riders know the lines, and the order most lists want to open in.
+  const [lineSort, setLineSort] = useState<SortKey>('number')
 
   // Which way the content slides when the tab changes: rightward through the strip (and on to
   // Properties, which is the deepest view) enters from the right, back the other way from the
