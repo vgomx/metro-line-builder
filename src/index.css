@@ -635,6 +635,14 @@ body {
   .mlb-authority-mark {
     opacity: 1;
   }
+
+  /* The score badge lines up with the stats pill beside it, so it keeps that pill's height
+     rather than the 44px touch target the rule above would give it — it's a wide pill, easy
+     enough to hit at its own size. Placed after that rule so it wins at equal specificity. */
+  button.mlb-score-btn {
+    min-height: 28px !important;
+    min-width: 0 !important;
+  }
 }
 
 /* ---------------------------------------------------------------------------
