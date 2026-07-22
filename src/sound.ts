@@ -110,6 +110,32 @@ function isTouchDevice(): boolean {
   return typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
 }
 
+/**
+ * iOS or iPadOS — the platforms whose audio session has to be talked round (see
+ * ensurePlaybackSession).
+ *
+ * Sniffed by hand rather than inferred from the pointer, because that inference is exactly what
+ * broke on iPad: iPadOS 13+ Safari presents itself as a desktop browser, and with a Magic Keyboard
+ * or any pointer attached it reports `(pointer: fine)`. The coarse-pointer test then said "not a
+ * touch device", the playback session was never opened, and the sounds stayed in the category the
+ * iPad's speaker ignores — audible on earphones, silent otherwise. An iPhone always reports coarse,
+ * which is why it was only ever the iPad.
+ *
+ * A real Mac has no touch points, so a "Macintosh" claiming several is an iPad wearing a disguise.
+ */
+function isIOS(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent || ''
+  if (/iPad|iPhone|iPod/.test(ua)) return true
+  return /Macintosh/.test(ua) && (navigator.maxTouchPoints ?? 0) > 1
+}
+
+/** Devices that need the silent-clip session: every iOS device, plus any other touch device, since
+ * opening one there costs nothing. */
+function needsPlaybackSession(): boolean {
+  return isIOS() || isTouchDevice()
+}
+
 function loadEnabled(): boolean {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
@@ -177,30 +203,43 @@ function silentWavUri(): string {
 }
 
 /**
- * Makes the app's sounds audible on an iPad with its silent switch on.
+ * Makes the app's sounds come out of an iOS device's speaker rather than only its earphones.
  *
- * iOS plays Web Audio in a session category the hardware mute governs, so on a silenced device
- * the synthesised sounds reach earphones but never the speaker — which is exactly the report.
- * There's no web API to change the category directly, but a rule of the platform does it for
- * us: while an HTMLMediaElement is playing, the whole page's session becomes "playback", which
- * the mute switch doesn't touch, and every sound the AudioContext makes rides along.
+ * iOS plays Web Audio in a session category the ringer governs, so on that category the
+ * synthesised sounds reach earphones but never the speaker. There's no web API to change the
+ * category directly, but a rule of the platform does it for us: while an HTMLMediaElement is
+ * playing, the whole page's session becomes "playback", which the ringer doesn't touch, and every
+ * sound the AudioContext makes rides along.
  *
- * So a silent clip loops quietly in the background for as long as sound is on. It must be
- * started inside a user gesture, like the context resume, and only on touch: on the desktop
- * there's no silent switch to beat, and a forever-playing media element would light the "this
- * tab is playing audio" indicator over nothing.
+ * So a silent clip loops in the background for as long as sound is on. It must be started inside a
+ * user gesture, and only where it's needed: on the desktop there's nothing to beat, and a
+ * forever-playing media element would light the "this tab is playing audio" indicator over nothing.
+ *
+ * Two details this depends on. The clip is digital silence rather than a muted or zero-volume one,
+ * because iOS ignores a media element's volume and a *muted* element doesn't promote the session at
+ * all — the silence has to be in the samples. And the session only counts as opened once play()
+ * actually resolves: an attempt the autoplay policy refuses leaves it unset, so the next gesture
+ * tries again instead of leaving the device silent for the rest of the visit.
  */
 function ensurePlaybackSession() {
-  if (playbackSession || !isTouchDevice()) return
+  if (playbackSession || !needsPlaybackSession()) return
   try {
     const audio = new Audio(silentWavUri())
     audio.loop = true
-    audio.volume = 0
-    void audio.play().catch(() => {
-      // Refused outside a gesture, or no autoplay for media. Try again on the next gesture.
-      playbackSession = null
-    })
-    playbackSession = audio
+    audio.setAttribute('playsinline', '')
+    const started = audio.play()
+    if (started && typeof started.then === 'function') {
+      void started.then(
+        () => {
+          playbackSession = audio
+        },
+        () => {
+          // Refused outside a gesture, or no autoplay for media. The next gesture retries.
+        },
+      )
+    } else {
+      playbackSession = audio
+    }
   } catch {
     playbackSession = null
   }
@@ -240,11 +279,17 @@ function unlockAudio() {
 
 if (typeof window !== 'undefined') {
   const events: (keyof WindowEventMap)[] = ['pointerdown', 'touchend', 'keydown']
-  const onFirstGesture = () => {
+  const onGesture = () => {
     unlockAudio()
-    for (const event of events) window.removeEventListener(event, onFirstGesture)
+    // Keep trying to open the playback session on later gestures too: the first attempt can be
+    // refused by the autoplay policy, and giving up after one would leave an iOS speaker mute for
+    // the rest of the visit. Stop listening only once there's nothing left to open.
+    if (enabled) ensurePlaybackSession()
+    if (playbackSession || !needsPlaybackSession()) {
+      for (const event of events) window.removeEventListener(event, onGesture)
+    }
   }
-  for (const event of events) window.addEventListener(event, onFirstGesture, { passive: true })
+  for (const event of events) window.addEventListener(event, onGesture, { passive: true })
 }
 
 /**
