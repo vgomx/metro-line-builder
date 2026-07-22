@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
-import { NewspaperIcon } from '../icons'
+import { useState } from 'react'
 import type { Notification } from '../state/useNotifications'
 
 /** How long a headline holds at the top of the canvas before retiring itself to the panel. Long
- * enough to read a sentence, short enough that a run of edits doesn't build a wall. Hovering
- * pauses it, so a headline being read is never yanked away. */
+ * enough to read a sentence, short enough that a run of edits doesn't build a wall. This is also
+ * the countdown bar's duration — the bar finishing is what dismisses the headline, so hovering,
+ * which pauses the bar, pauses the clock with it and never yanks away something being read. */
 const HOLD_MS = 7000
 
 interface NotificationBannerProps {
@@ -14,9 +14,9 @@ interface NotificationBannerProps {
 
 /**
  * The Gazette's front page: the most recent headlines, stacked at the top of the canvas. Each
- * retires itself after a spell (and can be dismissed at once with the ×), dropping back to the
- * panel behind the top-bar icon where the whole run stays readable. Non-interactive except for
- * the dismiss button, so it never eats a click meant for the map beneath it.
+ * counts itself down and retires to the panel behind the top-bar icon, where the whole run stays
+ * readable. Non-interactive except for the dismiss button, so it never eats a click meant for the
+ * map beneath it.
  */
 export function NotificationBanner({ items, onDismiss }: NotificationBannerProps) {
   if (items.length === 0) return null
@@ -43,14 +43,6 @@ export function NotificationBanner({ items, onDismiss }: NotificationBannerProps
 
 function BannerCard({ item, onDismiss }: { item: Notification; onDismiss: (id: string) => void }) {
   const [paused, setPaused] = useState(false)
-  const dismissRef = useRef(onDismiss)
-  dismissRef.current = onDismiss
-
-  useEffect(() => {
-    if (paused) return
-    const timer = window.setTimeout(() => dismissRef.current(item.id), HOLD_MS)
-    return () => window.clearTimeout(timer)
-  }, [item.id, paused])
 
   return (
     <div
@@ -58,61 +50,81 @@ function BannerCard({ item, onDismiss }: { item: Notification; onDismiss: (id: s
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       style={{
+        position: 'relative',
+        // Clips the countdown bar to the card's rounded corners.
+        overflow: 'hidden',
         display: 'flex',
-        alignItems: 'flex-start',
-        gap: '10px',
-        padding: '10px 12px',
+        flexDirection: 'column',
+        gap: '3px',
+        padding: '9px 12px 12px',
         background: 'var(--bg-surface)',
         border: '1px solid var(--border-subtle)',
-        borderLeft: '3px solid var(--interactive-primary)',
         borderRadius: 'var(--radius-lg)',
         boxShadow: 'var(--shadow-lg)',
         pointerEvents: 'auto',
       }}
     >
-      <span style={{ color: 'var(--interactive-primary)', display: 'flex', marginTop: '1px', flexShrink: 0 }}>
-        <NewspaperIcon />
-      </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+        {/* The masthead is the Gazette's logo — a blackletter, set in title case, because
+            blackletter capitals are near-illegible and the whole point is that it reads as a
+            newspaper's nameplate rather than a UI label. */}
+        <span
           style={{
-            fontSize: '9px',
-            fontWeight: 700,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-            color: 'var(--text-muted)',
-            marginBottom: '2px',
+            fontFamily: "'UnifrakturMaguntia', 'Times New Roman', serif",
+            fontSize: '16px',
+            lineHeight: 1.1,
+            color: 'var(--text-primary)',
           }}
         >
           The Transit Gazette
-        </div>
-        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.35 }}>
-          {item.text}
-        </div>
+        </span>
+        <button
+          type="button"
+          aria-label="Dismiss"
+          onClick={() => onDismiss(item.id)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '20px',
+            height: '20px',
+            flexShrink: 0,
+            background: 'none',
+            border: 'none',
+            borderRadius: '4px',
+            color: 'var(--text-muted)',
+            cursor: 'pointer',
+            padding: 0,
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        </button>
       </div>
-      <button
-        type="button"
-        aria-label="Dismiss"
-        onClick={() => onDismiss(item.id)}
+
+      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.35 }}>
+        {item.text}
+      </div>
+
+      {/* The clock. Its end is the dismissal, so the two can't drift apart, and pausing it on
+          hover pauses the headline's life with it. */}
+      <div
+        aria-hidden
+        className="mlb-gazette-timer"
+        onAnimationEnd={() => onDismiss(item.id)}
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: '20px',
-          height: '20px',
-          flexShrink: 0,
-          background: 'none',
-          border: 'none',
-          borderRadius: '4px',
-          color: 'var(--text-muted)',
-          cursor: 'pointer',
-          padding: 0,
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: '3px',
+          background: 'var(--text-muted)',
+          opacity: 0.45,
+          animationPlayState: paused ? 'paused' : 'running',
+          ['--gazette-hold' as string]: `${HOLD_MS}ms`,
         }}
-      >
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-          <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
-      </button>
+      />
     </div>
   )
 }

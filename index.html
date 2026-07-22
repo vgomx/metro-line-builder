@@ -11,6 +11,14 @@
       content="Draw a transit map for a city that doesn't exist yet. A schematic metro map editor in the browser — lines, stations, interchanges, rivers, parks and landmarks."
     />
 
+    <!-- The Gazette's masthead face. A blackletter is wrong for anything else in the app, so it's
+         loaded here rather than added to the design system's type tokens — it dresses one element.
+         Linked instead of @imported so it downloads alongside the stylesheet rather than after it;
+         the rest of the type comes through metro-ds's own @import. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&display=swap" rel="stylesheet" />
+
     <!-- Installable web app. Every URL inside the manifest is relative, because this is served
          from the domain root in development and from /metro-line-builder/ on GitHub Pages —
          relative URLs resolve against the manifest's own location and are right in both. -->
