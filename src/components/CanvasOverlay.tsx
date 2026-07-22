@@ -7,18 +7,13 @@ interface CanvasStatsProps {
 }
 
 /**
- * Map stats, pinned to the canvas's bottom-left corner. Sits on the same margin as the
- * floating toolbar directly above it, so the two read as one left-hand column rather than
- * as chrome at two different depths — which is why this anchors to the canvas itself
- * instead of the inset layer the centred chrome uses.
+ * Map stats — lines, stations, zoom. Laid out by whatever places it (it now rides the foot of
+ * the right-hand column, beneath the panel) rather than pinning itself to a corner.
  */
 export function CanvasStats({ lineCount, stationCount, zoom }: CanvasStatsProps) {
   return (
     <div
       style={{
-        position: 'absolute',
-        bottom: 'var(--space-3)',
-        left: 'var(--space-3)',
         display: 'flex',
         alignItems: 'center',
         gap: 'var(--gap-sm)',
@@ -29,6 +24,7 @@ export function CanvasStats({ lineCount, stationCount, zoom }: CanvasStatsProps)
         boxShadow: 'var(--shadow-sm)',
         fontSize: 'var(--text-xs)',
         color: 'var(--text-secondary)',
+        whiteSpace: 'nowrap',
         // Read-only chrome — never swallow a click meant for the map underneath.
         pointerEvents: 'none',
       }}

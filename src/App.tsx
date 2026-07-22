@@ -547,7 +547,11 @@ function App() {
             onRideProgress={handleRideProgress}
           />
 
-          <CanvasStats lineCount={lineList.length} stationCount={stationList.length} zoom={zoom} />
+          {/* The authority mark sits at the foot of the left edge now — it reads as the map's
+              own nameplate, so it lives with the map rather than under the panel. */}
+          <div style={{ position: 'absolute', bottom: 'var(--space-3)', left: 'var(--space-3)', pointerEvents: 'none', zIndex: 10 }}>
+            <CanvasLegend mapName={state.mapName} authorityName={state.authorityName} />
+          </div>
 
           <div
             style={{
@@ -633,14 +637,11 @@ function App() {
               </div>
             )}
 
-            <ScoreBadge api={score} />
-
             {toast && (
               <div
                 style={{
                   position: 'absolute',
-                  // Sits above the score badge in the same corner rather than on top of it.
-                  bottom: 'calc(var(--space-3) + 46px)',
+                  bottom: 'var(--space-3)',
                   right: 'var(--space-3)',
                   pointerEvents: 'auto',
                 }}
@@ -828,7 +829,13 @@ function App() {
             />
           </div>
 
-          <CanvasLegend mapName={state.mapName} authorityName={state.authorityName} />
+          {/* Beneath the panel: the score badge on the left, the map stats on the right. Sized to
+              its content and pinned to the panel's right edge, so a long tally spills left over
+              the map rather than stretching the column. */}
+          <div style={{ alignSelf: 'flex-end', display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)', pointerEvents: 'none' }}>
+            <ScoreBadge api={score} />
+            <CanvasStats lineCount={lineList.length} stationCount={stationList.length} zoom={zoom} />
+          </div>
         </div>
       </div>
     </div>

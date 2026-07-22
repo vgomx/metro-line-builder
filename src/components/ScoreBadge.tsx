@@ -53,10 +53,7 @@ export function ScoreBadge({ api }: { api: ScoreApi }) {
   }, [open])
 
   return (
-    <div
-      ref={ref}
-      style={{ position: 'absolute', bottom: 'var(--space-3)', right: 'var(--space-3)', pointerEvents: 'auto' }}
-    >
+    <div ref={ref} style={{ position: 'relative', pointerEvents: 'auto' }}>
       {/* The likes, rising off the badge. Each award is its own little flight. */}
       <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 0, pointerEvents: 'none' }}>
         {api.bursts.map(burst => (
