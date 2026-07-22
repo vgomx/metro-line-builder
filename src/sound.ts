@@ -72,11 +72,10 @@ const PATCHES = {
   generate: [0.5, 0.03, 523, 0.01, 0.16, 0.2, 0, 1, 0, 0, 262, 0.12, 0, 0, 0, 0, 0, 0.6, 0.12],
   /** Pulling into a stop while riding a line. The lineSelect chime says the same thing, but at
    * half a second it was made for a deliberate one-off pick, not for a stop that can come every
-   * second or two on a short hop — a run of them turned into a drone. This is the same idea told
-   * in a fifth of the time: one soft note with a quick fall built in (pitchJump down partway
-   * through), a compact "ding-dong" that lands and is gone before the next stop, so a busy line
-   * stays a series of light announcements rather than an overlapping chord. */
-  arrive: [0.45, 0.02, 880, 0.002, 0.03, 0.09, 0, 1, 0, 0, -160, 0.045, 0, 0, 0, 0, 0, 0.5, 0.06],
+   * second or two on a short hop — a run of them turned into a drone. So a single bright "ding"
+   * instead: one struck bell tone, no second note, that rings out and is gone before the next
+   * stop, keeping a busy line a series of light announcements rather than an overlapping chord. */
+  arrive: [0.5, 0.02, 1046, 0.001, 0.0, 0.09, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.3, 0.06],
   /** The detent under a drag: the near-silent tick a dragged station or landmark makes each
    * time it crosses a snap point, like the notch you feel turning a dial or straightening a
    * photo in iOS. The quietest, shortest thing in the set by some way — it fires many times
