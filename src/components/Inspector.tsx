@@ -431,14 +431,15 @@ export function Inspector({
 
     return (
       <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
-        {/* Identity on one row: the colour as a chip that opens the palette, then the name. No
+        {/* Identity on one row: the name, then the colour as a chip that opens the palette. No
             "Line properties" heading above it — the panel's own subheader already names the line,
-            and the space it cost pushed the route below the fold. */}
+            and the space it cost pushed the route below the fold. Aligned to the bottom so the
+            chip sits level with the field rather than with the label above it. */}
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 'var(--gap-sm)' }}>
-          <LineColorSelect value={line.color} onChange={color => onRecolorLine(line.id, color)} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <Input label="Line name" value={line.name} onChange={e => onRenameLine(line.id, e.target.value)} />
           </div>
+          <LineColorSelect value={line.color} onChange={color => onRecolorLine(line.id, color)} />
         </div>
 
         {/* The two attributes that aren't the name, sharing a row: the number a rider knows the

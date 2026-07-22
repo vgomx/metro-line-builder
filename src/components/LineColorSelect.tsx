@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { LINE_COLORS } from '../lineColors'
 
-const SWATCH = 22
+/** The height of a metro-ds field's visible box: it borders a wrapper around the 32px input, so
+ * anything sitting beside one has to be 34 to line up. */
+const FIELD_HEIGHT = 34
 
 /**
  * The line's colour, as a single chip that opens the palette.
@@ -41,8 +43,11 @@ export function LineColorSelect({ value, onChange }: { value: string; onChange: 
         onClick={() => setOpen(o => !o)}
         style={{
           display: 'block',
-          width: '28px',
-          height: '28px',
+          // Square, at the height of the field's *visible* box beside it. The design system's
+          // Input draws its border on a wrapper around the 32px input, so the box to match is 34.
+          width: `${FIELD_HEIGHT}px`,
+          height: `${FIELD_HEIGHT}px`,
+          boxSizing: 'border-box',
           padding: 0,
           background: value,
           border: '1px solid var(--border-default)',
@@ -54,21 +59,25 @@ export function LineColorSelect({ value, onChange }: { value: string; onChange: 
         <div
           style={{
             position: 'absolute',
-            top: '32px',
-            left: 0,
+            top: `${FIELD_HEIGHT + 6}px`,
+            // Hung from the right, since the chip now sits at the right end of its row.
+            right: 0,
             zIndex: 60,
-            width: '150px',
+            width: '212px',
             boxSizing: 'border-box',
-            padding: '8px',
+            padding: '10px',
             background: 'var(--bg-surface)',
             border: '1px solid var(--border-default)',
             borderRadius: 'var(--radius-lg)',
             boxShadow: 'var(--shadow-lg)',
           }}
         >
-          {/* Wrapped rather than a fixed grid: on a touchscreen the swatches grow to 32px and
-              need to re-flow rather than overrun the popover. */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          {/* Four to a row, each tile taking an equal share of the width and squared off by its
+              aspect ratio — so the palette fills the popover instead of huddling in a corner, and
+              the tiles are big enough to tell two dark blues apart. Sized by fraction rather than
+              pixels, which also means a touchscreen needs no special case: they're already well
+              past a comfortable tap target. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
             {/* The ten are the palette a transit map is usually drawn from — distinguishable from
                 each other and from the page in both themes. The custom swatch is last because it's
                 the exception: a colour nobody vetted, which is the map-maker's right and risk. */}
@@ -76,16 +85,15 @@ export function LineColorSelect({ value, onChange }: { value: string; onChange: 
               <button
                 key={color}
                 type="button"
-                className="mlb-swatch"
                 aria-label={`Set line color ${color}`}
                 onClick={() => {
                   onChange(color)
                   setOpen(false)
                 }}
                 style={{
-                  width: `${SWATCH}px`,
-                  height: `${SWATCH}px`,
-                  borderRadius: 'var(--radius-sm)',
+                  width: '100%',
+                  aspectRatio: '1',
+                  borderRadius: 'var(--radius-md)',
                   background: color,
                   border: 'none',
                   cursor: 'pointer',
@@ -97,11 +105,11 @@ export function LineColorSelect({ value, onChange }: { value: string; onChange: 
             ))}
             {/* Stays open while the native picker is used — it fires as the user drags. */}
             <label
-              className="mlb-swatch"
               style={{
-                width: `${SWATCH}px`,
-                height: `${SWATCH}px`,
-                borderRadius: 'var(--radius-sm)',
+                width: '100%',
+                aspectRatio: '1',
+                boxSizing: 'border-box',
+                borderRadius: 'var(--radius-md)',
                 border: custom ? 'none' : '1px dashed var(--border-strong)',
                 outline: custom ? `2px solid ${value}` : 'none',
                 outlineOffset: '2px',
