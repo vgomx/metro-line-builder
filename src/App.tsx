@@ -663,7 +663,14 @@ function App() {
             scale={zoom}
             armedIcon={armedPoi}
             onArm={setArmedPoi}
-            onDragPlace={(icon, x, y) => mapCanvasRef.current?.dropPoiAtClient(icon, x, y)}
+            onPlacementBegin={icon => mapCanvasRef.current?.beginPoiPreview(icon)}
+            onPlacementMove={(x, y, over) =>
+              over ? mapCanvasRef.current?.movePoiPreview(x, y) : mapCanvasRef.current?.hidePoiPreview()
+            }
+            onPlacementEnd={(icon, x, y, over) => {
+              if (over) mapCanvasRef.current?.dropPoiAtClient(icon, x, y)
+              mapCanvasRef.current?.endPoiPreview()
+            }}
             onPlaceByKeyboard={icon => {
               const centre = mapCanvasRef.current?.viewportCentre()
               if (!centre) return
