@@ -303,7 +303,7 @@ function App() {
     setShowTrains(true)
     setShowPanel(true)
     handleSetSelection([], [lineId], [])
-    setRide({ lineId, nextStationId: null, direction: 1, atStation: false })
+    setRide({ lineId, nextStationId: null, direction: 1, atStation: false, msToNextStation: 0 })
   }
   const stopRide = useCallback(() => {
     setRide(null)

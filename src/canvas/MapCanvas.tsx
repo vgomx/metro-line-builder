@@ -440,7 +440,13 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     const key = `${stationId}|${atStation}|${sample.direction}`
     if (key !== lastRideStopRef.current) {
       lastRideStopRef.current = key
-      onRideProgress({ lineId, nextStationId: stationId, direction: sample.direction, atStation })
+      onRideProgress({
+        lineId,
+        nextStationId: stationId,
+        direction: sample.direction,
+        atStation,
+        msToNextStation: sample.msToNextStation,
+      })
     }
   }
 

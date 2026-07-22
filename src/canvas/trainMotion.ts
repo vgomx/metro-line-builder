@@ -20,6 +20,9 @@ export interface RideProgress {
   direction: 1 | -1
   /** True while dwelling at a station, false while running between them. */
   atStation: boolean
+  /** Milliseconds until the train reaches nextStationId, captured at departure — the trip view
+   * runs its approach-fill over exactly this long so the line lands as the train does. */
+  msToNextStation: number
 }
 
 export interface TrainGeometry {
@@ -101,6 +104,8 @@ export type TrainSample =
       direction: 1 | -1
       /** The real-station stopPoints index the train is arriving at / sitting at (== stopIndex here). */
       nextStationStop: number
+      /** Milliseconds until the train reaches its next real station. Zero while dwelling. */
+      msToNextStation: number
     }
   | {
       kind: 'travel'
@@ -115,6 +120,9 @@ export type TrainSample =
       direction: 1 | -1
       /** The next real-station stopPoints index the train will dwell at (skips waypoints). */
       nextStationStop: number
+      /** Milliseconds until the train reaches that next real station — lets a trip view run a
+       * fill animation that lands exactly as the train pulls in, rather than guessing a duration. */
+      msToNextStation: number
     }
 
 /** The next real station at or after sequence position `seqPos`, following the cycle's wrap. */
@@ -150,7 +158,7 @@ export function sampleTrain(
     const legSign: 1 | -1 = directionAt(stopSequence, i)
     if (remaining < dwell) {
       const stopIndex = stopSequence[i]
-      return { kind: 'dwell', stopIndex, direction: legSign, nextStationStop: stopIndex }
+      return { kind: 'dwell', stopIndex, direction: legSign, nextStationStop: stopIndex, msToNextStation: 0 }
     }
     remaining -= dwell
 
@@ -164,14 +172,22 @@ export function sampleTrain(
         const frac = duration > 0 ? remaining / duration : 0
         const travelled = easedTravel(frac, stopFlags[from], stopFlags[to])
         const nextStationStop = nextStationStopFrom(stopSequence, stopFlags, i + 1)
-        return { kind: 'travel', segIndex, from, to, forward, travelled, direction: legSign, nextStationStop }
+        // Time left to the next real station: finish this hop, then glide through any waypoints
+        // (which don't dwell) until a station flag comes up.
+        let msToNextStation = duration - remaining
+        let k = i + 1
+        while (k < stopSequence.length - 1 && !stopFlags[stopSequence[k]]) {
+          msToNextStation += travelDurations[k]
+          k++
+        }
+        return { kind: 'travel', segIndex, from, to, forward, travelled, direction: legSign, nextStationStop, msToNextStation }
       }
       remaining -= duration
     }
   }
 
   // Numerical fallback: sit at the sequence's first stop.
-  return { kind: 'dwell', stopIndex: stopSequence[0], direction: 1, nextStationStop: stopSequence[0] }
+  return { kind: 'dwell', stopIndex: stopSequence[0], direction: 1, nextStationStop: stopSequence[0], msToNextStation: 0 }
 }
 
 /** Sign of the leg leaving sequence position `seqPos` (wrapping at the seam). */
