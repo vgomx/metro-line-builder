@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { Point } from '../types'
 import { buildTimeline, sampleTrain } from './trainMotion'
+import type { TrainSample } from './trainMotion'
 
 interface TrainMarkerProps {
   lineId: string
@@ -19,6 +20,13 @@ interface TrainMarkerProps {
    * line run at phase 0 and 0.5 — half a cycle apart is a mirror in time, so one is heading
    * out wherever the other is heading back: a train from each direction, passing at the middle. */
   phase?: number
+  /** The train being ridden: wears a pulsing ring so it reads as the one under the camera. */
+  highlighted?: boolean
+  /** Called every frame with the car's live world position and its motion sample. Read through a
+   * ref so it never restarts the loop; used to drive the follow-camera and the trip view. */
+  onFrame?: (x: number, y: number, sample: TrainSample) => void
+  /** When set, an enlarged invisible hit-area lets a click on the moving car start a ride. */
+  onSelect?: () => void
 }
 
 /**
@@ -40,7 +48,7 @@ const CAR_HEIGHT = 3.4
  * LinePath draws, so a train always sits on its own line's lane rather than on a
  * neighbour's rails wherever lines fan out along a shared stretch.
  */
-export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths, dwellMs = 1400, speed = 0.12, phase = 0 }: TrainMarkerProps) {
+export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths, dwellMs = 1400, speed = 0.12, phase = 0, highlighted = false, onFrame, onSelect }: TrainMarkerProps) {
   const groupRef = useRef<SVGGElement>(null)
   const segmentRefs = useRef<(SVGPathElement | null)[]>([])
   const lastAngleRef = useRef(0)
@@ -51,9 +59,11 @@ export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths
   const stopPointsRef = useRef(stopPoints)
   const stopFlagsRef = useRef(stopFlags)
   const segmentPathsRef = useRef(segmentPaths)
+  const onFrameRef = useRef(onFrame)
   stopPointsRef.current = stopPoints
   stopFlagsRef.current = stopFlags
   segmentPathsRef.current = segmentPaths
+  onFrameRef.current = onFrame
 
   // The rails only move when a station does. Re-stamping `d` every frame would
   // invalidate each path's cached geometry and force getTotalLength to re-measure
@@ -128,6 +138,7 @@ export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths
       // Both services ride the centreline; the two just pass through each other where they
       // cross, which reads fine at this size.
       group.setAttribute('transform', `translate(${x}, ${y}) rotate(${lastAngleRef.current})`)
+      onFrameRef.current?.(x, y, sample)
       frameId = requestAnimationFrame(tick)
     }
 
@@ -155,6 +166,28 @@ export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths
         />
       ))}
       <g ref={groupRef} data-export="exclude" style={{ pointerEvents: 'none' }}>
+        {/* The ridden car wears a pulsing halo in its line colour so the eye can hold onto it
+            while the camera tracks — and so its twin, hidden during a ride, isn't missed. The
+            circle is rotation-symmetric, so the group's heading rotation leaves it be. */}
+        {highlighted && (
+          <circle className="mlb-train-ring" cx={0} cy={0} r={9} fill="none" stroke={color} strokeWidth={1.5} />
+        )}
+        {/* An enlarged, invisible target so a click can catch the moving car and start a ride —
+            the visible body alone is far too small and fast to hit. */}
+        {onSelect && (
+          <rect
+            x={-13}
+            y={-9}
+            width={26}
+            height={18}
+            rx={9}
+            fill="transparent"
+            style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+            onClick={onSelect}
+          >
+            <title>Ride this train</title>
+          </rect>
+        )}
         {/* Capsule body with a colored outline (line color), echoing a real train-car
             silhouette — trim lines and portholes instead of a solid-fill blob.
 

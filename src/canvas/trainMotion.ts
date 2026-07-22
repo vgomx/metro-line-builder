@@ -11,6 +11,17 @@ import type { Point } from '../types'
  * a car or light up its next stop.
  */
 
+/** What the panel and the chime need to know about a ride — updated only when it changes, not
+ * every frame. Direction is in station order: +1 heads toward the last station, -1 toward the first. */
+export interface RideProgress {
+  lineId: string
+  /** The station the train is pulling into or sitting at, or null between-stops with none resolved. */
+  nextStationId: string | null
+  direction: 1 | -1
+  /** True while dwelling at a station, false while running between them. */
+  atStation: boolean
+}
+
 export interface TrainGeometry {
   /** Ordered stops along the lane — where the train dwells or turns. */
   stopPoints: Point[]

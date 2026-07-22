@@ -8,6 +8,7 @@ import { CompaniesPanel } from './CompaniesPanel'
 import { Inspector } from './Inspector'
 import { HoverTip } from './HoverTip'
 import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
+import type { RideProgress } from '../canvas/trainMotion'
 
 interface RightPanelProps {
   mapName: string
@@ -26,6 +27,11 @@ interface RightPanelProps {
   selectedPoi: PointOfInterest | null
   selectedCompany: Company | null
   onSelectLine: (lineId: string) => void
+  /** The active ride's live position, or null. Drives the trip view when its line is open. */
+  ride: RideProgress | null
+  /** Board a line's train — from the ride glyph on a list row or the button in its Properties. */
+  onRideLine: (lineId: string) => void
+  onStopRide: () => void
   onSelectStation: (stationId: string) => void
   onSelectGeoFeature: (geoFeatureId: string) => void
   onSelectPoi: (poiId: string) => void
@@ -95,6 +101,9 @@ export function RightPanel({
   selectedPoi,
   selectedCompany,
   onSelectLine,
+  ride,
+  onRideLine,
+  onStopRide,
   onSelectStation,
   onSelectGeoFeature,
   onSelectPoi,
@@ -247,7 +256,9 @@ export function RightPanel({
           <LinesPanel
             lines={lineList}
             selectedLineId={selectedLine?.id ?? null}
+            ridingLineId={ride?.lineId ?? null}
             onSelect={openDetail(onSelectLine)}
+            onRide={onRideLine}
             onToggleVisibility={onToggleLineVisibility}
             onAddLine={onAddLine}
             onReorder={onReorderLine}
@@ -296,6 +307,9 @@ export function RightPanel({
             lines={lines}
             companyList={companyList}
             authorityDisplayName={authorityDisplayName}
+            ride={ride}
+            onRideLine={onRideLine}
+            onStopRide={onStopRide}
             onRenameLine={onRenameLine}
             onSetLineNumber={onSetLineNumber}
             onRecolorLine={onRecolorLine}

@@ -3,6 +3,7 @@ import { Button, Toast } from 'metro-ds'
 import { hasSavedMap, useMapState } from './state/useMapState'
 import { MapCanvas } from './canvas/MapCanvas'
 import type { MapCanvasHandle } from './canvas/MapCanvas'
+import type { RideProgress } from './canvas/trainMotion'
 import { TopBar } from './components/TopBar'
 import { LeftToolbar, LEFT_TOOLBAR_WIDTH } from './components/LeftToolbar'
 import { RightPanel, RIGHT_PANEL_WIDTH } from './components/RightPanel'
@@ -125,6 +126,11 @@ function App() {
   const [zoom, setZoom] = useState(1)
   const [showGrid, setShowGrid] = useState(true)
   const [showTrains, setShowTrains] = useState(false)
+  // The line whose train the viewport is riding, plus its live position along the route, or null
+  // when no ride is on. One object so the camera, the trip view, and the announcer all read the
+  // same source. `trainsBeforeRide` remembers whether trains were showing, to put the toggle back.
+  const [ride, setRide] = useState<RideProgress | null>(null)
+  const trainsBeforeRideRef = useRef(false)
   // Open by default, except where it would cover half the map: the rail and the panel come
   // to 372px, which is most of a 768px tablet held in portrait. The toggle in the top bar is
   // the way back. The threshold is the same 900px the tablet styles use — a laptop window at
@@ -287,6 +293,37 @@ function App() {
     clearSelection()
     setSelectedCompanyId(companyId)
   }
+
+  // Start riding a line's train: trains have to be on the map to be ridden, the panel has to be
+  // open to show the trip, and the line has to be the selection so its Properties (the trip view)
+  // are what's on screen. The ding-dong doubles as the "boarding" cue.
+  const startRide = (lineId: string) => {
+    playSequence('lineSelect')
+    trainsBeforeRideRef.current = showTrains
+    setShowTrains(true)
+    setShowPanel(true)
+    handleSetSelection([], [lineId], [])
+    setRide({ lineId, nextStationId: null, direction: 1, atStation: false })
+  }
+  const stopRide = useCallback(() => {
+    setRide(null)
+    // Leave the map as we found it: if trains weren't showing before the ride, hide them again.
+    if (!trainsBeforeRideRef.current) setShowTrains(false)
+  }, [])
+  // Each stop the train reaches (or sets out from) updates the trip view; an arrival also rings
+  // the chime, the same announcement a real platform makes.
+  const handleRideProgress = useCallback((progress: RideProgress) => {
+    setRide(progress)
+    if (progress.atStation) playSequence('lineSelect')
+  }, [])
+  // A ride belongs to exactly one selected line. The moment the selection moves off it — picking
+  // another line, clearing, deleting the line — the ride ends rather than tracking a train the
+  // panel no longer describes.
+  useEffect(() => {
+    if (!ride) return
+    const stillRiding = state.selectedLineIds.length === 1 && state.selectedLineIds[0] === ride.lineId
+    if (!stillRiding) stopRide()
+  }, [ride, state.selectedLineIds, stopRide])
 
   // Sound is a presentation concern, so it's attached to the callbacks here at the
   // interaction layer rather than fired from the reducer — the state layer stays unaware
@@ -461,6 +498,10 @@ function App() {
             onUndo={undo}
             onRedo={redo}
             onTransformChange={t => setZoom(t.k)}
+            ridingLineId={ride?.lineId ?? null}
+            onRideLine={startRide}
+            onStopRide={stopRide}
+            onRideProgress={handleRideProgress}
           />
 
           <CanvasStats lineCount={lineList.length} stationCount={stationList.length} zoom={zoom} />
@@ -483,8 +524,19 @@ function App() {
               <LineAnnouncer
                 key={selectedLine.id}
                 line={selectedLine}
+                riding={ride?.lineId === selectedLine.id}
+                onStopRide={stopRide}
                 scrollText={(() => {
                   const ids = stationIdsOfLine(selectedLine)
+                  // While riding, the sign reads like a real service display: the next stop, then
+                  // where this direction ends. Otherwise it's the line and its terminus.
+                  if (ride?.lineId === selectedLine.id && ride.nextStationId) {
+                    const next = state.stations[ride.nextStationId]?.name
+                    const terminusId = ride.direction === 1 ? ids[ids.length - 1] : ids[0]
+                    const terminus = terminusId ? state.stations[terminusId]?.name : null
+                    const lead = ride.atStation ? 'AT' : 'NEXT'
+                    return next ? `${lead} ${next}${terminus ? `  •  TO ${terminus}` : ''}` : selectedLine.name
+                  }
                   const terminus = ids.length > 0 ? state.stations[ids[ids.length - 1]]?.name : null
                   return terminus ? `${selectedLine.name}  •  TO ${terminus}` : selectedLine.name
                 })()}
@@ -672,6 +724,9 @@ function App() {
               selectedPoi={selectedPoi}
               poiList={poiList}
               selectedCompany={selectedCompany}
+              ride={ride}
+              onRideLine={startRide}
+              onStopRide={stopRide}
               onSelectLine={id => {
                 playSequence('lineSelect')
                 handleSetSelection([], [id], [])

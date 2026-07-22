@@ -811,3 +811,26 @@ svg ::selection {
 .mlb-tab-in-left {
   animation: mlb-tab-in-left 190ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+/* The halo around the train you're riding: a slow breath of radius and fade, so it reads as a
+   live "you are here" without ever competing with the map. transform-box keeps the scale centred
+   on the circle itself rather than the SVG root. */
+@keyframes mlb-train-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.9;
+  }
+  70% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+}
+.mlb-train-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mlb-train-ring 1600ms ease-out infinite;
+}

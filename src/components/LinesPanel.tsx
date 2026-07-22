@@ -1,13 +1,17 @@
 import { useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { Button, LineIndicator } from 'metro-ds'
-import { EyeIcon, EyeOffIcon, GripIcon, PlusIcon } from '../icons'
+import { EyeIcon, EyeOffIcon, GripIcon, PlusIcon, TrainIcon } from '../icons'
 import type { Line } from '../types'
 
 interface LinesPanelProps {
   lines: Line[]
   selectedLineId: string | null
+  /** The line currently being ridden, so its row can show the ride as live. */
+  ridingLineId: string | null
   onSelect: (lineId: string) => void
+  /** Board this line's train — the camera follows it and the trip view lights up. */
+  onRide: (lineId: string) => void
   onToggleVisibility: (lineId: string) => void
   onAddLine: () => void
   /** Move a line to a new position in the list. */
@@ -26,7 +30,7 @@ interface LinesPanelProps {
  * the same reason the landmark palette had to be rebuilt. The handle is a real button, so the
  * whole thing also works from the keyboard: focus it and use the arrow keys.
  */
-export function LinesPanel({ lines, selectedLineId, onSelect, onToggleVisibility, onAddLine, onReorder }: LinesPanelProps) {
+export function LinesPanel({ lines, selectedLineId, ridingLineId, onSelect, onRide, onToggleVisibility, onAddLine, onReorder }: LinesPanelProps) {
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -145,6 +149,27 @@ export function LinesPanel({ lines, selectedLineId, onSelect, onToggleVisibility
             >
               {line.name}
             </span>
+            {/* Board this line's train. Disabled while the line is hidden — there's no car on the
+                map to follow. When this is the line being ridden, the glyph lights up in its colour. */}
+            <button
+              type="button"
+              aria-label={ridingLineId === line.id ? `Riding ${line.name}` : `Ride ${line.name}`}
+              disabled={!line.visible}
+              onClick={e => {
+                e.stopPropagation()
+                onRide(line.id)
+              }}
+              style={{
+                display: 'flex',
+                background: 'none',
+                border: 'none',
+                cursor: line.visible ? 'pointer' : 'default',
+                padding: '2px',
+                color: ridingLineId === line.id ? line.color : line.visible ? 'var(--text-muted)' : 'var(--text-disabled)',
+              }}
+            >
+              <TrainIcon />
+            </button>
             <button
               type="button"
               aria-label={line.visible ? `Hide ${line.name}` : `Show ${line.name}`}

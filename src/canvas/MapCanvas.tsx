@@ -25,7 +25,8 @@ import {
   resolveLineNodes,
   stationIdsOfLine,
 } from './lineNodes'
-import type { RefanLine } from './lineNodes'
+import type { LineTrack, RefanLine } from './lineNodes'
+import type { RideProgress, TrainSample } from './trainMotion'
 import { computeLabelPlacements } from './labelPlacement'
 import { openMojiUrl, POI_DRAG_MIME } from '../openmoji'
 import { useAppearance } from './useAppearance'
@@ -115,6 +116,14 @@ interface MapCanvasProps {
   onUndo: () => void
   onRedo: () => void
   onTransformChange?: (transform: ZoomTransform) => void
+  /** The line whose train the camera is currently riding, or null. */
+  ridingLineId: string | null
+  /** Start riding a line's train — from a click on the moving car. */
+  onRideLine: (lineId: string) => void
+  /** End the ride — a click on empty canvas while riding. */
+  onStopRide: () => void
+  /** The ridden train reached a new stop or set out again — drives the trip view and the chime. */
+  onRideProgress: (progress: RideProgress) => void
 }
 
 function safeSetPointerCapture(target: Element, pointerId: number) {
@@ -243,11 +252,15 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onUndo,
     onRedo,
     onTransformChange,
+    ridingLineId,
+    onRideLine,
+    onStopRide,
+    onRideProgress,
   },
   ref,
 ) {
   const svgRef = useRef<SVGSVGElement>(null)
-  const { transform, zoomIn, zoomOut, spaceHeld, panning, frameBounds } = useZoomPan(
+  const { transform, zoomIn, zoomOut, spaceHeld, panning, frameBounds, centerOn, easeToTransform } = useZoomPan(
     svgRef,
     tool === 'pan',
     viewportInsets,
@@ -393,13 +406,52 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onTransformChange?.(transform)
   }, [transform, onTransformChange])
 
+  // --- Riding a train: the camera locks onto the followed car each frame, easing the zoom in at
+  // the start and back out at the end. The per-frame work happens in handleRideFrame (called by
+  // the ridden TrainMarker's own loop); this just brackets it — banking the pre-ride view to
+  // return to, and starting the zoom from wherever we were so it grows in rather than jumping.
+  const RIDE_SCALE = 2
+  const rideScaleRef = useRef(transform.k)
+  const preRideTransformRef = useRef<ZoomTransform | null>(null)
+  const lastRideStopRef = useRef<string | null>(null)
+  const centerOnRef = useRef(centerOn)
+  centerOnRef.current = centerOn
+
+  useEffect(() => {
+    if (ridingLineId) {
+      preRideTransformRef.current = transform
+      rideScaleRef.current = transform.k
+      lastRideStopRef.current = null
+    } else if (preRideTransformRef.current) {
+      easeToTransform(preRideTransformRef.current)
+      preRideTransformRef.current = null
+    }
+    // Keyed on the ride's identity alone: `transform` churns every frame *during* a ride and must
+    // not re-trigger this, or it would re-bank the ride view as the pre-ride one and never restore.
+  }, [ridingLineId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRideFrame = (track: LineTrack, lineId: string) => (x: number, y: number, sample: TrainSample) => {
+    rideScaleRef.current += (RIDE_SCALE - rideScaleRef.current) * 0.06
+    centerOnRef.current({ x, y }, rideScaleRef.current)
+    // Report only when the stop or heading actually changes — the panel and chime react to
+    // arrivals, not to every one of 60 frames a second.
+    const stationId = track.stopStationIds[sample.nextStationStop] ?? null
+    const atStation = sample.kind === 'dwell'
+    const key = `${stationId}|${atStation}|${sample.direction}`
+    if (key !== lastRideStopRef.current) {
+      lastRideStopRef.current = key
+      onRideProgress({ lineId, nextStationId: stationId, direction: sample.direction, atStation })
+    }
+  }
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
 
       if (e.key === 'Escape') {
-        if (draftLineNodes.length > 0) onCancelDraftLine()
+        if (ridingLineId) onStopRide()
+        else if (draftLineNodes.length > 0) onCancelDraftLine()
         else if (draftGeoPoints.length > 0) onCancelGeoFeature()
         // Nothing drafted, so Escape backs out of the tool itself rather than doing nothing
         // visible. A drawing tool you can't put down with the key that means "stop" is the
@@ -462,6 +514,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onFinishGeoFeature,
     onUndo,
     onRedo,
+    ridingLineId,
+    onStopRide,
   ])
 
   const toWorld = (clientX: number, clientY: number) => {
@@ -730,6 +784,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           .map(s => s.id)
         const ids = drag.union ? Array.from(new Set([...selectedStationIds, ...hitIds])) : hitIds
         onSetSelection(ids, [], [])
+      } else if (ridingLineId) {
+        // A tap on empty map steps out of the ride first; the line stays selected, so its trip
+        // view is still there to read. A second tap then clears the selection as usual.
+        onStopRide()
       } else if (!drag.union) {
         onClearSelection()
       }
@@ -1286,9 +1344,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
               const geometry = network.byLine.get(line.id)
               const track = geometry ? buildLineTrack(geometry, line.id, network.segmentLineMap) : null
               if (!track) return null
-              // Two services per line, half a cycle apart: one running each way, meeting and
-              // passing in the middle.
-              return [0, 0.5].map(phase => (
+              const riding = ridingLineId === line.id
+              // Riding a line drops it to a single car — the one under the camera — so there's no
+              // confusion about which train the trip view is tracking. Every other line keeps its
+              // two services, half a cycle apart, meeting and passing in the middle.
+              const phases = riding ? [0] : [0, 0.5]
+              return phases.map(phase => (
                 <TrainMarker
                   key={`${line.id}-${phase}`}
                   lineId={line.id}
@@ -1297,6 +1358,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
                   stopFlags={track.stopFlags}
                   segmentPaths={track.segmentPaths}
                   phase={phase}
+                  highlighted={riding}
+                  onFrame={riding ? handleRideFrame(track, line.id) : undefined}
+                  onSelect={ridingLineId ? undefined : () => onRideLine(line.id)}
                 />
               ))
             })}
