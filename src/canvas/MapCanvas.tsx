@@ -40,6 +40,8 @@ export interface MapCanvasHandle {
   frameLine: (lineId: string) => void
   /** Eases the viewport to frame every line — used after generating a fresh map. */
   fitContent: () => void
+  /** Eases the viewport to frame a set of stations — used to show a planned journey end to end. */
+  frameStations: (stationIds: string[]) => void
   /** The grid point at the middle of what's on screen. The palette places there when a symbol
    * is chosen by keyboard, since there's no pointer to say where. */
   viewportCentre: () => Point
@@ -386,6 +388,26 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         }
         if (box.width === 0 && box.height === 0) return
         frameBounds({ x: box.x, y: box.y, width: box.width, height: box.height })
+      },
+      frameStations: (stationIds: string[]) => {
+        // The stops themselves, not the track between them: a line that loops away from the
+        // route would drag the box out to include track nobody is riding. Every point of the
+        // journey is a station, so their extent is the journey's extent.
+        const points = stationIds.map(id => stations[id]).filter(Boolean)
+        if (points.length === 0) return
+        const xs = points.map(p => p.x)
+        const ys = points.map(p => p.y)
+        const minX = Math.min(...xs)
+        const minY = Math.min(...ys)
+        // A margin in world units so a two-stop journey isn't a zero-height box — and so the
+        // station circles and their labels sit inside the frame rather than on its edge.
+        const margin = 60
+        frameBounds({
+          x: minX - margin,
+          y: minY - margin,
+          width: Math.max(...xs) - minX + margin * 2,
+          height: Math.max(...ys) - minY + margin * 2,
+        })
       },
       viewportCentre: () => {
         const rect = svgRef.current?.getBoundingClientRect()

@@ -1,7 +1,11 @@
-import { Select } from 'metro-ds'
-import type { Line, Station } from '../types'
+import { Button } from 'metro-ds'
+import type { Company, Line, Station } from '../types'
 import type { Journey } from '../journey'
-import { HoverTip } from './HoverTip'
+import { CompanySymbolIcon } from '../companySymbols'
+import { AuthoritySealIcon } from '../authoritySeal'
+import { SwapIcon } from '../icons'
+import { LinePill } from './LinePill'
+import { StationSelect } from './StationSelect'
 
 interface JourneyPanelProps {
   fromId: string | null
@@ -10,6 +14,9 @@ interface JourneyPanelProps {
   journey: Journey | null
   stationList: Station[]
   lineList: Line[]
+  companyList: Company[]
+  /** What the authority is called on this map — the operator every unassigned line falls back to. */
+  authorityDisplayName: string
   stations: Record<string, Station>
   onSetFrom: (id: string | null) => void
   onSetTo: (id: string | null) => void
@@ -36,65 +43,75 @@ export function JourneyPanel({
   journey,
   stationList,
   lineList,
+  companyList,
+  authorityDisplayName,
   stations,
   onSetFrom,
   onSetTo,
   onSwap,
 }: JourneyPanelProps) {
-  const options = stationList
-    .map(s => ({ label: s.name.trim() || 'Unnamed station', value: s.id }))
-    .sort((a, b) => a.label.localeCompare(b.label))
+  // Which lines call at each station, in list order. Built once here rather than rescanned for
+  // every option — a select of 26 stations would otherwise walk the whole network 26 times.
+  const linesByStation = new Map<string, Line[]>()
+  for (const line of lineList) {
+    if (!line.visible) continue
+    for (const node of line.nodes) {
+      if (node.kind !== 'station') continue
+      const existing = linesByStation.get(node.stationId)
+      if (existing) {
+        if (!existing.includes(line)) existing.push(line)
+      } else {
+        linesByStation.set(node.stationId, [line])
+      }
+    }
+  }
 
   const nameOf = (id: string) => stations[id]?.name?.trim() || 'Unnamed station'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)', padding: '12px' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
-          <Select
-            label="From"
-            options={options}
-            value={fromId ?? ''}
-            placeholder="Pick a station…"
-            onChange={value => onSetFrom(value ? String(value) : null)}
-          />
-          <Select
-            label="To"
-            options={options}
-            value={toId ?? ''}
-            placeholder="Pick a station…"
-            onChange={value => onSetTo(value ? String(value) : null)}
-          />
-        </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        <StationSelect
+          label="From"
+          value={fromId}
+          stationList={stationList}
+          linesByStation={linesByStation}
+          onChange={onSetFrom}
+        />
+
         {/* Reversing a journey is the commonest second question a rider asks, and retyping both
-            ends to get there is busywork. Sits beside the pair it acts on, not under them. */}
-        <HoverTip label="Swap" placement="bottom">
-          <button
-            type="button"
-            aria-label="Swap from and to"
-            onClick={onSwap}
-            disabled={!fromId && !toId}
-            style={{
-              width: '34px',
-              height: '34px',
-              flexShrink: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border-default)',
-              borderRadius: '5px',
-              color: 'var(--text-secondary)',
-              cursor: fromId || toId ? 'pointer' : 'default',
-              opacity: fromId || toId ? 1 : 0.5,
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M4.5 2.5v9M4.5 2.5 2.5 4.6M4.5 2.5l2 2.1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M9.5 11.5v-9M9.5 11.5l2-2.1M9.5 11.5l-2-2.1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </HoverTip>
+            ends to get there is busywork. It sits in the gap between the two fields, which is
+            where the exchange it performs actually happens, and centred over the pair it acts on
+            rather than tucked against one edge.
+
+            Labelled rather than icon-only: two arrows passing each other is a shape you have to
+            already know, and a control that appears once in a panel doesn't get the repetition
+            that teaches it. The word also drops the tooltip and the aria-label, which existed to
+            say what the button can now simply say.
+
+            Rules either side, so it reads as something acting on the pair rather than a third
+            thing stacked between them — a divider between the two halves of the question, with the
+            control that reverses them sitting in it.
+
+            Both margins are set rather than relying on the column's 2px gap: that gap left the
+            button two pixels off the "To" label and twelve from the field above, so it read as
+            belonging to the field below instead of to the space between. A hair more above than
+            below, because the label's own leading already supplies some of the room underneath. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px', marginBottom: '8px' }}>
+          <Rule />
+          <Button variant="ghost" size="sm" icon={<SwapIcon />} disabled={!fromId && !toId} onClick={onSwap}>
+            Swap
+          </Button>
+          <Rule />
+        </div>
+
+        <StationSelect
+          label="To"
+          value={toId}
+          stationList={stationList}
+          linesByStation={linesByStation}
+          onChange={onSetTo}
+        />
       </div>
 
       <Hint fromId={fromId} toId={toId} journey={journey} />
@@ -159,22 +176,7 @@ export function JourneyPanel({
                         {nameOf(leg.stationIds[0])}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 0' }}>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            height: '18px',
-                            padding: '0 7px',
-                            borderRadius: '9px',
-                            background: color,
-                            color: '#fff',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {line ? line.name.trim() || `Line ${line.number}` : 'Line'}
-                        </span>
+                        {line && <LinePill line={line} size="sm" />}
                         <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
                           {stops(ridden)} · {formatMinutes(leg.minutes)}
                         </span>
@@ -188,10 +190,85 @@ export function JourneyPanel({
               )
             })}
           </div>
+
+          <Operators
+            journey={journey}
+            lineList={lineList}
+            companyList={companyList}
+            authorityDisplayName={authorityDisplayName}
+          />
         </>
       )}
     </div>
   )
+}
+
+/**
+ * Who runs the trains on this journey — the small print at the foot of a ticket.
+ *
+ * Deliberately quiet: it answers a question a rider only sometimes has, and it must not compete
+ * with the itinerary above it. Each operator appears once however many of the journey's lines it
+ * runs, in the order first ridden, so it reads as a list of companies rather than a list of legs.
+ */
+function Operators({
+  journey,
+  lineList,
+  companyList,
+  authorityDisplayName,
+}: {
+  journey: Journey
+  lineList: Line[]
+  companyList: Company[]
+  authorityDisplayName: string
+}) {
+  const seen = new Set<string>()
+  const operators: { key: string; name: string; company: Company | null }[] = []
+
+  for (const leg of journey.legs) {
+    const line = lineList.find(l => l.id === leg.lineId)
+    // An unassigned line is the authority's, which is what the map says everywhere else too.
+    const company = (line?.companyId ? companyList.find(c => c.id === line.companyId) : null) ?? null
+    const key = company?.id ?? 'authority'
+    if (seen.has(key)) continue
+    seen.add(key)
+    operators.push({ key, name: company ? company.name.trim() || 'Unnamed company' : authorityDisplayName, company })
+  }
+
+  if (operators.length === 0) return null
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        // Stacked, one operator per line. Wrapped inline they read as a run-on sentence, and with
+        // names this long the wrap point moved with every journey — so which company you were
+        // looking at depended on the panel's width rather than on the itinerary.
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: '3px',
+        marginTop: '10px',
+        paddingTop: '8px',
+        borderTop: '1px solid var(--border-subtle)',
+        fontSize: '10px',
+        color: 'var(--text-muted)',
+      }}
+    >
+      <span style={{ letterSpacing: '0.04em', textTransform: 'uppercase' }}>Operated by</span>
+      {operators.map(op => (
+        <span key={op.key} style={{ display: 'flex', alignItems: 'center', gap: '5px', maxWidth: '100%', minWidth: 0 }}>
+          {/* Every operator now leads with its own mark — the authority's included — and a mark is
+              a cleaner break between names than the separator that used to stand in for one. */}
+          {op.company ? <CompanySymbolIcon symbol={op.company.symbol} size={12} /> : <AuthoritySealIcon size={12} />}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{op.name}</span>
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/** A hairline running out to the panel's edge, flanking the control it belongs to. */
+function Rule() {
+  return <span aria-hidden style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
 }
 
 function Stop({ color, top, bottom }: { color: string; top?: string; bottom?: string }) {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Divider, Input, Tag, Toggle } from 'metro-ds'
+import { Button, Divider, Input, Toggle } from 'metro-ds'
 import { ParkIcon, PenIcon, PoiIcon, RiverIcon, TrashIcon } from '../icons'
 import { isUsableLineNumber, MAX_LINE_NUMBER } from '../lineNumber'
 import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
@@ -8,6 +8,7 @@ import { COMPANY_SYMBOLS } from '../types'
 import { TrainIcon } from '../icons'
 import { CompanySymbolIcon, SYMBOL_LABEL } from '../companySymbols'
 import { CompanySelect } from './CompanySelect'
+import { LinePill } from './LinePill'
 import { LineColorSelect } from './LineColorSelect'
 import { DeleteStationsDialog } from './DeleteStationsDialog'
 import { HoverTip } from './HoverTip'
@@ -49,7 +50,7 @@ function LineNumberField({
 
   return (
     <Input
-      label="Line number"
+      label="Number"
       type="number"
       value={draft}
       error={lineNumberError(draft, line, lines)}
@@ -282,9 +283,7 @@ export function Inspector({
             <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>No lines assigned yet</span>
           )}
           {companyLines.map(l => (
-            <Tag key={l.id} color={l.color}>
-              {l.name}
-            </Tag>
+            <LinePill key={l.id} line={l} />
           ))}
         </div>
 
@@ -445,14 +444,18 @@ export function Inspector({
         {/* The two attributes that aren't the name, sharing a row: the number a rider knows the
             line by, and who runs it. */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--gap-sm)' }}>
-          <div style={{ width: '92px', flexShrink: 0 }}>
+          {/* Sized for its content, not its label: a line number tops out at 99, so two digits
+              and the field's own padding are all it ever needs. Every pixel saved goes to the
+              company beside it, whose names are long and were being truncated for no reason. */}
+          <div style={{ width: '50px', flexShrink: 0 }}>
             <LineNumberField key={line.id} line={line} lines={lines} onSetLineNumber={onSetLineNumber} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <CompanySelect
               value={line.companyId ?? ''}
               companies={companyList}
-              authorityLabel={`${authorityDisplayName} (Local Transport Authority)`}
+              authorityLabel={authorityDisplayName}
+              authorityHint="Local Transport Authority"
               onChange={companyId => onSetLineCompany(line.id, companyId === '' ? null : companyId)}
             />
           </div>
@@ -565,9 +568,7 @@ export function Inspector({
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Not on a line yet</span>
             )}
             {stationLines.map(l => (
-              <Tag key={l.id} color={l.color}>
-                {l.name}
-              </Tag>
+              <LinePill key={l.id} line={l} />
             ))}
           </div>
         </div>

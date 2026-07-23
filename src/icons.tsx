@@ -307,3 +307,11 @@ export const JourneyIcon = () => (
     <circle cx="12" cy="13.1" r="1.9" fill="currentColor" />
   </svg>
 )
+
+/** Two arrows passing in opposite directions — the exchange a swap performs. */
+export const SwapIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <path d="M4.5 2.5v9M4.5 2.5 2.5 4.6M4.5 2.5l2 2.1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M9.5 11.5v-9M9.5 11.5l2-2.1M9.5 11.5l-2-2.1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
