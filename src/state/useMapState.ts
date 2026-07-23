@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer } from 'react'
-import type { Company, CompanySymbol, CompanyType, GeoFeature, GeoFeatureType, Line, LineNode, Point, PointOfInterest, Station, Tool } from '../types'
+import type { Company, CompanySymbol, CompanyType, GeoFeature, GeoFeatureType, Line, LineKind, LineNode, Point, PointOfInterest, Station, Tool } from '../types'
 import { COMPANY_SYMBOLS } from '../types'
 import { DEFAULT_COMPANY_SYMBOL } from '../companySymbols'
 import { nextLineColor } from '../lineColors'
@@ -112,6 +112,7 @@ type Action =
   | { type: 'renameLine'; lineId: string; name: string }
   | { type: 'reorderLine'; lineId: string; toIndex: number }
   | { type: 'setLineNumber'; lineId: string; number: number }
+  | { type: 'setLineKind'; lineId: string; kind: LineKind }
   | { type: 'recolorLine'; lineId: string; color: string }
   | { type: 'toggleLineVisibility'; lineId: string }
   | { type: 'checkpoint' }
@@ -162,6 +163,7 @@ const RECORDABLE_ACTIONS = new Set<Action['type']>([
   'renameLine',
   'reorderLine',
   'setLineNumber',
+  'setLineKind',
   'recolorLine',
   'toggleLineVisibility',
   'deleteLine',
@@ -1242,6 +1244,17 @@ function reducer(rawState: MapState, action: Action): MapState {
       return { ...state, lines: { ...state.lines, [action.lineId]: { ...line, number: action.number } } }
     }
 
+    case 'setLineKind': {
+      const line = state.lines[action.lineId]
+      if (!line) return state
+      // Metro is stored as an absent field rather than the string 'metro', so a map's JSON stays
+      // clean of the default and the absent-means-metro reading holds for saved and live maps alike.
+      const next = { ...line }
+      if (action.kind === 'metro') delete next.kind
+      else next.kind = action.kind
+      return { ...state, lines: { ...state.lines, [action.lineId]: next } }
+    }
+
     case 'recolorLine': {
       const line = state.lines[action.lineId]
       if (!line) return state
@@ -1543,6 +1556,7 @@ export function useMapState() {
   )
   const renameLine = useCallback((lineId: string, name: string) => dispatch({ type: 'renameLine', lineId, name }), [])
   const setLineNumber = useCallback((lineId: string, number: number) => dispatch({ type: 'setLineNumber', lineId, number }), [])
+  const setLineKind = useCallback((lineId: string, kind: LineKind) => dispatch({ type: 'setLineKind', lineId, kind }), [])
   const recolorLine = useCallback((lineId: string, color: string) => dispatch({ type: 'recolorLine', lineId, color }), [])
   const toggleLineVisibility = useCallback(
     (lineId: string) => dispatch({ type: 'toggleLineVisibility', lineId }),
@@ -1689,6 +1703,7 @@ export function useMapState() {
     renameLine,
     reorderLine,
     setLineNumber,
+    setLineKind,
     recolorLine,
     toggleLineVisibility,
     checkpoint,

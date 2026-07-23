@@ -118,6 +118,7 @@ function App() {
     renameLine,
     reorderLine,
     setLineNumber,
+    setLineKind,
     recolorLine,
     toggleLineVisibility,
     checkpoint,
@@ -911,6 +912,7 @@ function App() {
               onSetAuthorityName={setAuthorityName}
               onRenameLine={renameLine}
               onSetLineNumber={setLineNumber}
+              onSetLineKind={setLineKind}
               onRecolorLine={recolorLine}
               onSetLineCompany={setLineCompany}
               onExtendLine={startExtendLine}

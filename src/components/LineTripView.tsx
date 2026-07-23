@@ -11,6 +11,8 @@ export interface TripStop {
 
 interface LineTripViewProps {
   color: string
+  /** A rail line's stops are drawn as rounded squares, matching the mark they wear on the map. */
+  rail?: boolean
   stops: TripStop[]
   /** The live ride on this line, or null for the resting route diagram. */
   ride: RideProgress | null
@@ -28,7 +30,7 @@ const ROW_H = 32
  * the leg the train is on fades from full colour to the passed tint as it crosses, the fading
  * edge marking where the train is, landing muted exactly as it pulls in.
  */
-export function LineTripView({ color, stops, ride }: LineTripViewProps) {
+export function LineTripView({ color, rail = false, stops, ride }: LineTripViewProps) {
   const currentIndex = ride ? stops.findIndex(s => s.id === ride.nextStationId) : -1
   const riding = ride !== null && currentIndex >= 0
   const dir = riding ? ride!.direction : 1
@@ -156,7 +158,9 @@ export function LineTripView({ color, stops, ride }: LineTripViewProps) {
                     width: current ? '15px' : '13px',
                     height: current ? '15px' : '13px',
                     marginLeft: current ? '-1px' : 0,
-                    borderRadius: '50%',
+                    // A square (softly rounded) for rail, a disc for metro — the same shape language
+                    // the canvas marks use, so a stop reads the same in the strip as on the map.
+                    borderRadius: rail ? '4px' : '50%',
                     border: `2.5px solid ${nodeColor}`,
                     background: stop.transfer ? nodeColor : 'var(--bg-surface)',
                     boxShadow: current ? `0 0 0 3px color-mix(in srgb, ${color} 25%, transparent)` : 'none',

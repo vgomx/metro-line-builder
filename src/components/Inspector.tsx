@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Divider, Input, Toggle } from 'metro-ds'
+import { Button, Divider, Input, Select, Toggle } from 'metro-ds'
 import { ParkIcon, PenIcon, PoiIcon, RiverIcon, TrashIcon } from '../icons'
 import { isUsableLineNumber, MAX_LINE_NUMBER } from '../lineNumber'
-import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
+import type { Company, GeoFeature, Line, LineKind, PointOfInterest, Station } from '../types'
 import type { RideProgress } from '../canvas/trainMotion'
-import { COMPANY_SYMBOLS } from '../types'
+import { COMPANY_SYMBOLS, isRailLine, lineKind } from '../types'
 import { TrainIcon } from '../icons'
 import { CompanySymbolIcon, SYMBOL_LABEL } from '../companySymbols'
 import { CompanySelect } from './CompanySelect'
@@ -135,6 +135,7 @@ interface InspectorProps {
   onStopRide: () => void
   onRenameLine: (lineId: string, name: string) => void
   onSetLineNumber: (lineId: string, number: number) => void
+  onSetLineKind: (lineId: string, kind: LineKind) => void
   onRecolorLine: (lineId: string, color: string) => void
   onSetLineCompany: (lineId: string, companyId: string | null) => void
   onExtendLine: (lineId: string, end: 'start' | 'end') => void
@@ -172,6 +173,7 @@ export function Inspector({
   onStopRide,
   onRenameLine,
   onSetLineNumber,
+  onSetLineKind,
   onRecolorLine,
   onSetLineCompany,
   onExtendLine,
@@ -461,6 +463,18 @@ export function Inspector({
           </div>
         </div>
 
+        {/* What the line runs. A select rather than a toggle so the kinds are a list to grow, not a
+            binary to replace — and it reads as a peer of the number and company above it. */}
+        <Select
+          label="Type"
+          options={[
+            { label: 'Metro', value: 'metro' },
+            { label: 'Rail', value: 'rail' },
+          ]}
+          value={lineKind(line)}
+          onChange={value => onSetLineKind(line.id, value as LineKind)}
+        />
+
         <Divider label={riding ? 'Trip' : 'Stations'} />
         {/* Board the line's train, or step off it. Needs at least two stops to be a journey. */}
         {lineStations.length >= 2 && (
@@ -476,6 +490,7 @@ export function Inspector({
         )}
         <LineTripView
           color={line.color}
+          rail={isRailLine(line)}
           stops={lineStations.map(s => ({ id: s.id, name: s.name, transfer: isTransferStation(s, Object.values(lines)) }))}
           ride={riding ? ride : null}
         />

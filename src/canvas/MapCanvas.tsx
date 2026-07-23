@@ -1040,10 +1040,16 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   // "last" is also "only" — an interchange keeps black, which is what makes black mean
   // interchange rather than merely meaning station.
   const lineColorByStation: Record<string, string> = {}
+  // Stations any rail line calls at. Rail is a property of the line, but a stop is a shared node
+  // that can serve both a metro and a rail line — so "rail station" is "a rail line stops here",
+  // derived the same way interchange is, and a mixed metro/rail stop reads as rail.
+  const railStationIds = new Set<string>()
   for (const line of lineList) {
+    const isRail = line.kind === 'rail'
     for (const id of new Set(stationIdsOfLine(line))) {
       lineCountByStation[id] = (lineCountByStation[id] ?? 0) + 1
       if (line.visible) lineColorByStation[id] = line.color
+      if (isRail && line.visible) railStationIds.add(id)
     }
   }
 
@@ -1515,6 +1521,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             selected={selectedStationIds.includes(station.id)}
             inDraftLine={draftLineStationIdSet.has(station.id)}
             interchange={(lineCountByStation[station.id] ?? 0) >= 2}
+            rail={railStationIds.has(station.id)}
             lineColor={lineCountByStation[station.id] === 1 ? lineColorByStation[station.id] : undefined}
             dragging={draggingStationIdSet.has(station.id)}
             landing={

@@ -9,7 +9,7 @@ import { CompaniesPanel } from './CompaniesPanel'
 import { Inspector } from './Inspector'
 import { JourneyPanel } from './JourneyPanel'
 import { HoverTip } from './HoverTip'
-import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
+import type { Company, GeoFeature, Line, LineKind, PointOfInterest, Station } from '../types'
 import type { RideProgress } from '../canvas/trainMotion'
 import type { Journey } from '../journey'
 
@@ -60,6 +60,7 @@ interface RightPanelProps {
   onSetAuthorityName: (name: string) => void
   onRenameLine: (lineId: string, name: string) => void
   onSetLineNumber: (lineId: string, number: number) => void
+  onSetLineKind: (lineId: string, kind: LineKind) => void
   onRecolorLine: (lineId: string, color: string) => void
   onSetLineCompany: (lineId: string, companyId: string | null) => void
   onExtendLine: (lineId: string, end: 'start' | 'end') => void
@@ -140,6 +141,7 @@ export function RightPanel({
   onSetAuthorityName,
   onRenameLine,
   onSetLineNumber,
+  onSetLineKind,
   onRecolorLine,
   onSetLineCompany,
   onExtendLine,
@@ -372,6 +374,7 @@ export function RightPanel({
             onStopRide={onStopRide}
             onRenameLine={onRenameLine}
             onSetLineNumber={onSetLineNumber}
+            onSetLineKind={onSetLineKind}
             onRecolorLine={onRecolorLine}
             onSetLineCompany={onSetLineCompany}
             onExtendLine={onExtendLine}

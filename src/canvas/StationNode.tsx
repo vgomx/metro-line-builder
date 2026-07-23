@@ -10,6 +10,9 @@ interface StationNodeProps {
   inDraftLine: boolean
   /** True when the station sits on 2+ distinct lines — rendered as an interchange. */
   interchange: boolean
+  /** True when any rail line calls here — drawn as a rounded square rather than a circle, so the
+   * shape says the mode while the ink still says whether it's an interchange. */
+  rail: boolean
   /** The colour of the one line calling here, for a stop that serves exactly one. Interchanges
    * don't get one: black is what marks them out once the ordinary stops stop using it. */
   lineColor?: string
@@ -37,11 +40,62 @@ const LAND_MS = 320
 const DRAG_GROWTH = 2
 const HOVER_GROWTH = 1.5
 
+/**
+ * A station marker, drawn as a circle for metro and a rounded square for rail. Every one of the
+ * marker's rings routes through here, so the shape choice is made once — the fill/stroke logic
+ * above doesn't change, only what it draws onto. A square of side `2r` reads heavier than a circle
+ * of radius `r`, so rail is shrunk a touch to sit at the same visual weight as its metro neighbours.
+ *
+ * SVG geometry properties (r, x, y, width, height) are CSS-animatable, so the marker's hover/drag
+ * swell eases either way; the transition names differ because a circle grows `r` and a rect grows
+ * its box.
+ */
+function Mark({
+  rail,
+  r,
+  fill,
+  stroke,
+  strokeWidth,
+}: {
+  rail: boolean
+  r: number
+  fill: string
+  stroke: string
+  strokeWidth: number
+}) {
+  if (rail) {
+    const s = r * 0.9
+    return (
+      <rect
+        x={-s}
+        y={-s}
+        width={2 * s}
+        height={2 * s}
+        rx={Math.max(1.5, s * 0.34)}
+        fill={fill}
+        stroke={stroke === 'none' ? undefined : stroke}
+        strokeWidth={stroke === 'none' ? undefined : strokeWidth}
+        style={{ transition: 'x 150ms ease, y 150ms ease, width 150ms ease, height 150ms ease' }}
+      />
+    )
+  }
+  return (
+    <circle
+      r={r}
+      fill={fill}
+      stroke={stroke === 'none' ? undefined : stroke}
+      strokeWidth={stroke === 'none' ? undefined : strokeWidth}
+      style={{ transition: 'r 150ms ease' }}
+    />
+  )
+}
+
 export function StationNode({
   station,
   selected,
   inDraftLine,
   interchange,
+  rail,
   lineColor,
   dragging,
   landing,
@@ -119,35 +173,35 @@ export function StationNode({
         >
           {isInterchange ? (
             <>
-              <circle
+              <Mark
+                rail={rail}
                 r={drawnRadius}
                 fill={inDraftLine ? 'var(--brand-500)' : 'var(--bg-page)'}
                 stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
                 strokeWidth={3.5}
-                style={{ transition: 'r 150ms ease' }}
               />
-              <circle
+              <Mark
+                rail={rail}
                 r={drawnRadius - 4.5}
                 fill="none"
                 stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
                 strokeWidth={1.25}
-                style={{ transition: 'r 150ms ease' }}
               />
             </>
           ) : (
-            <circle
+            // A single-line stop wears its line's colour rather than black, so the map's black is
+            // spent on interchanges alone — the places where a decision is made.
+            //
+            // Not the raw colour, though: measured against the page, four of the ten line colours
+            // fall under 2:1 in one theme or the other — yellow disappears on a light page, purple
+            // and graphite on a dark one — and since the bead is a page-coloured hole inside that
+            // ring, low contrast means an invisible stop. Mixing a third of the ink in pulls every
+            // colour back to a legible edge while leaving the hue recognisable, and because the ink
+            // is themed, the mix darkens on light pages and lightens on dark ones without a second rule.
+            <Mark
+              rail={rail}
               r={drawnRadius}
               fill={inDraftLine ? 'var(--brand-500)' : 'var(--bg-page)'}
-              // A single-line stop wears its line's colour rather than black, so the map's
-              // black is spent on interchanges alone — the places where a decision is made.
-              //
-              // Not the raw colour, though: measured against the page, four of the ten line
-              // colours fall under 2:1 in one theme or the other — yellow disappears on a light
-              // page, purple and graphite on a dark one — and since the bead is a page-coloured
-              // hole inside that ring, low contrast means an invisible stop. Mixing a third of
-              // the ink in pulls every colour back to a legible edge while leaving the hue
-              // recognisable, and because the ink is themed, the mix darkens on light pages and
-              // lightens on dark ones without a second rule.
               stroke={
                 inDraftLine
                   ? 'var(--brand-500)'
@@ -156,7 +210,6 @@ export function StationNode({
                     : 'var(--text-primary)'
               }
               strokeWidth={2.5}
-              style={{ transition: 'r 150ms ease' }}
             />
           )}
         </g>
