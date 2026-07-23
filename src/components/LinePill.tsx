@@ -39,23 +39,18 @@ export function LinePill({ line, size = 'md' }: { line: Line; size?: 'sm' | 'md'
   }
 
   if (isRailLine(line)) {
-    // Unfilled and double-ruled — two concentric outlines in the line's colour, the pill's own
-    // echo of the double track. The colour is pulled toward the ink so the pale ones (yellow above
-    // all) stay legible on the panel, and the same tone rules and letters the pill so it reads as
-    // one object in the line's hue. The inner ring is a surface gap plus a colour ring, layered
-    // inside the border by box-shadow, so the digit or name in the middle stays perfectly crisp.
-    const ink = `color-mix(in srgb, ${line.color} 68%, var(--text-primary))`
+    // A white pill double-ruled in the line's colour — the pill's echo of the double track. The
+    // rings are painted entirely by box-shadow, not a border, so they take no layout space and the
+    // rail pill stands exactly as tall as the filled metro one beside it. The name is the line's
+    // colour pulled toward a fixed ink so the pale ones (yellow above all) stay legible on the
+    // white, and fixed rather than themed because the ground is always white now, in either mode.
     return (
       <span
         style={{
           ...base,
-          // A little more room than the filled pill, so the label clears the inner ring painted
-          // into the padding rather than sitting on top of it.
-          padding: small ? '2px 10px' : '4px 12px',
-          background: 'var(--bg-surface)',
-          color: ink,
-          border: `1.5px solid ${ink}`,
-          boxShadow: `inset 0 0 0 1.5px var(--bg-surface), inset 0 0 0 3px ${ink}`,
+          background: '#ffffff',
+          color: railInk(line.color),
+          boxShadow: railRings(line.color),
         }}
       >
         {label}
@@ -66,4 +61,15 @@ export function LinePill({ line, size = 'md' }: { line: Line; size?: 'sm' | 'md'
   return (
     <span style={{ ...base, background: line.color, color: '#fff' }}>{label}</span>
   )
+}
+
+/** The line's colour pulled dark enough to read as text on the white rail badge, in either theme. */
+export function railInk(color: string): string {
+  return `color-mix(in srgb, ${color} 70%, #18181b)`
+}
+
+/** Two concentric rings in the line's colour with a white gap, painted by box-shadow so they add
+ * no height — the rail badge stays level with the metro one. */
+export function railRings(color: string): string {
+  return `inset 0 0 0 1px ${color}, inset 0 0 0 2px #ffffff, inset 0 0 0 3px ${color}`
 }

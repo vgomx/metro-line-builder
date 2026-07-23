@@ -1,6 +1,7 @@
 import { LineIndicator } from 'metro-ds'
 import type { Line } from '../types'
 import { isRailLine } from '../types'
+import { railInk, railRings } from './LinePill'
 
 /**
  * A line's number, wearing its colour — the small badge the lists and pickers identify a line by.
@@ -17,16 +18,18 @@ export function LineBadge({ line, shape, size }: { line: Line; shape: 'pill' | '
     return <LineIndicator id={String(line.number)} color={line.color} shape={shape} size={size} />
   }
 
-  const ink = `color-mix(in srgb, ${line.color} 68%, var(--text-primary))`
+  // A white badge double-ruled in the line's colour: rings painted by box-shadow (no border, so
+  // they don't grow the box), number in a fixed-dark mix of the colour so it reads on the white in
+  // either theme. White throughout, so it stands the same on a light panel and on the dark
+  // announcer chip alike.
   const shared = {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
     boxSizing: 'border-box' as const,
-    background: 'var(--bg-surface)',
-    color: ink,
-    border: `1.5px solid ${ink}`,
-    boxShadow: `inset 0 0 0 1.5px var(--bg-surface), inset 0 0 0 3px ${ink}`,
+    background: '#ffffff',
+    color: railInk(line.color),
+    boxShadow: railRings(line.color),
     fontFamily: "'Barlow Condensed', system-ui, sans-serif",
     fontWeight: 700,
     flexShrink: 0,
@@ -41,12 +44,13 @@ export function LineBadge({ line, shape, size }: { line: Line; shape: 'pill' | '
     )
   }
 
-  // Matched to the design system's pill indicator — its size="sm" measures 22px tall, 35px min
-  // wide, 11px Barlow Condensed — so a rail badge sits level with the metro badges beside it in
-  // the list rather than reading as a smaller sibling.
+  // Matched to the design system's pill indicator at each size — sm is 22px tall / 35px min wide /
+  // 11px, xs is 18 / 29 / 9 — so a rail badge sits level with the metro badges beside it.
+  const pill =
+    size === 'xs'
+      ? { minWidth: '29px', height: '18px', padding: '0 8px', fontSize: '9px' }
+      : { minWidth: '35px', height: '22px', padding: '0 9px', fontSize: '11px' }
   return (
-    <span style={{ ...shared, minWidth: '35px', height: '22px', padding: '0 9px', borderRadius: '9999px', fontSize: '11px', letterSpacing: '-0.01em' }}>
-      {line.number}
-    </span>
+    <span style={{ ...shared, ...pill, borderRadius: '9999px', letterSpacing: '-0.01em' }}>{line.number}</span>
   )
 }
