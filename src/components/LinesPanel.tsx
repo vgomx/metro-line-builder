@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
-import { Button, LineIndicator } from 'metro-ds'
+import { Button } from 'metro-ds'
+import { LineBadge } from './LineBadge'
 import { EyeIcon, EyeOffIcon, GripIcon, PlusIcon, TrainIcon } from '../icons'
 import { stationIdsOfLine } from '../canvas/lineNodes'
 import type { Line } from '../types'
@@ -271,7 +272,7 @@ export function LinesPanel({ lines, selectedLineId, ridingLineId, sortBy, onSele
             )}
             {/* Carries the line's number rather than a bare swatch, so the list identifies a
                 line the same way the canvas does. */}
-            <LineIndicator id={String(line.number)} color={line.color} shape="pill" size="sm" />
+            <LineBadge line={line} shape="pill" size="sm" />
             <span
               style={{
                 flex: 1,
