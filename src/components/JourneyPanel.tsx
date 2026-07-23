@@ -1,7 +1,9 @@
+import { IconButton } from 'metro-ds'
 import type { Company, Line, Station } from '../types'
 import type { Journey } from '../journey'
 import { CompanySymbolIcon } from '../companySymbols'
 import { AuthoritySealIcon } from '../authoritySeal'
+import { SwapIcon } from '../icons'
 import { HoverTip } from './HoverTip'
 import { StationSelect } from './StationSelect'
 
@@ -68,52 +70,39 @@ export function JourneyPanel({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)', padding: '12px' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
-          <StationSelect
-            label="From"
-            value={fromId}
-            stationList={stationList}
-            linesByStation={linesByStation}
-            onChange={onSetFrom}
-          />
-          <StationSelect
-            label="To"
-            value={toId}
-            stationList={stationList}
-            linesByStation={linesByStation}
-            onChange={onSetTo}
-          />
-        </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        <StationSelect
+          label="From"
+          value={fromId}
+          stationList={stationList}
+          linesByStation={linesByStation}
+          onChange={onSetFrom}
+        />
+
         {/* Reversing a journey is the commonest second question a rider asks, and retyping both
-            ends to get there is busywork. Sits beside the pair it acts on, not under them. */}
-        <HoverTip label="Swap" placement="bottom">
-          <button
-            type="button"
-            aria-label="Swap from and to"
-            onClick={onSwap}
-            disabled={!fromId && !toId}
-            style={{
-              width: '34px',
-              height: '34px',
-              flexShrink: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border-default)',
-              borderRadius: '5px',
-              color: 'var(--text-secondary)',
-              cursor: fromId || toId ? 'pointer' : 'default',
-              opacity: fromId || toId ? 1 : 0.5,
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M4.5 2.5v9M4.5 2.5 2.5 4.6M4.5 2.5l2 2.1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M9.5 11.5v-9M9.5 11.5l2-2.1M9.5 11.5l-2-2.1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </HoverTip>
+            ends to get there is busywork. It sits in the gap between the two fields, which is
+            where the exchange it performs actually happens — and being between them, it no longer
+            has to borrow a field's height to stay level with one. */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '-2px 0' }}>
+          <HoverTip label="Swap" placement="bottom">
+            <IconButton
+              icon={<SwapIcon />}
+              label="Swap from and to"
+              variant="ghost"
+              size="sm"
+              disabled={!fromId && !toId}
+              onClick={onSwap}
+            />
+          </HoverTip>
+        </div>
+
+        <StationSelect
+          label="To"
+          value={toId}
+          stationList={stationList}
+          linesByStation={linesByStation}
+          onChange={onSetTo}
+        />
       </div>
 
       <Hint fromId={fromId} toId={toId} journey={journey} />
@@ -257,9 +246,12 @@ function Operators({
     <div
       style={{
         display: 'flex',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        gap: '4px 10px',
+        // Stacked, one operator per line. Wrapped inline they read as a run-on sentence, and with
+        // names this long the wrap point moved with every journey — so which company you were
+        // looking at depended on the panel's width rather than on the itinerary.
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: '3px',
         marginTop: '10px',
         paddingTop: '8px',
         borderTop: '1px solid var(--border-subtle)',
@@ -269,7 +261,7 @@ function Operators({
     >
       <span style={{ letterSpacing: '0.04em', textTransform: 'uppercase' }}>Operated by</span>
       {operators.map(op => (
-        <span key={op.key} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', minWidth: 0 }}>
+        <span key={op.key} style={{ display: 'flex', alignItems: 'center', gap: '5px', maxWidth: '100%', minWidth: 0 }}>
           {/* Every operator now leads with its own mark — the authority's included — and a mark is
               a cleaner break between names than the separator that used to stand in for one. */}
           {op.company ? <CompanySymbolIcon symbol={op.company.symbol} size={12} /> : <AuthoritySealIcon size={12} />}

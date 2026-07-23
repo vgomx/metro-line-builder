@@ -57,6 +57,7 @@ export function StationSelect({ label, value, stationList, linesByStation, onCha
       </label>
       <button
         type="button"
+        className="mlb-field-btn"
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         onClick={() => setOpen(o => !o)}

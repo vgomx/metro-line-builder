@@ -37,6 +37,7 @@ export function LineColorSelect({ value, onChange }: { value: string; onChange: 
     <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
       <button
         type="button"
+        className="mlb-field-btn"
         aria-label="Line colour"
         aria-haspopup="true"
         aria-expanded={open}
@@ -85,6 +86,7 @@ export function LineColorSelect({ value, onChange }: { value: string; onChange: 
               <button
                 key={color}
                 type="button"
+                className="mlb-field-btn"
                 aria-label={`Set line color ${color}`}
                 onClick={() => {
                   onChange(color)

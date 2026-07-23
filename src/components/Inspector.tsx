@@ -448,7 +448,7 @@ export function Inspector({
           {/* Sized for its content, not its label: a line number tops out at 99, so two digits
               and the field's own padding are all it ever needs. Every pixel saved goes to the
               company beside it, whose names are long and were being truncated for no reason. */}
-          <div style={{ width: '64px', flexShrink: 0 }}>
+          <div style={{ width: '50px', flexShrink: 0 }}>
             <LineNumberField key={line.id} line={line} lines={lines} onSetLineNumber={onSetLineNumber} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>

@@ -643,6 +643,22 @@ body {
     min-height: 28px !important;
     min-width: 0 !important;
   }
+
+  /* Controls that are part of a form row rather than a toolbar. A field's height is what lines it
+     up with the field beside it, and growing one of a pair to 44px leaves the row visibly crooked
+     — which is how this showed up on an iPad. The colour picker's swatches have it worse: they sit
+     four to a row in a 212px popover, so a 44px floor is wider than the column they're given and
+     the grid breaks apart. They stay finger-sized regardless (34px tall, 43px square), so nothing
+     here is a target anyone was struggling to hit.
+
+     Written as button.mlb-field-btn, not .mlb-field-btn: the rule it has to beat is
+     button[aria-label], and a bare class loses to an element-plus-attribute selector even with
+     !important on both. Matching its specificity and sitting later in the file is what makes this
+     win — the first attempt used a plain class and changed nothing at all. */
+  button.mlb-field-btn {
+    min-height: 0 !important;
+    min-width: 0 !important;
+  }
 }
 
 /* ---------------------------------------------------------------------------
