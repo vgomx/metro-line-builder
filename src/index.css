@@ -1,5 +1,21 @@
 @import 'metro-ds/styles.css';
 
+/* Form controls don't inherit type. Every browser hands button, input and friends a font of
+   its own — Arial here — so any control that doesn't name a face silently opts out of the
+   app's. It went unnoticed for as long as it did because almost every button in this app is
+   an icon, and an icon looks the same in Arial as in Barlow; the score badge is the one that
+   carries words, and it sat beside a Barlow pill in a different typeface entirely.
+
+   `inherit` rather than a named family, so a control takes the type of wherever it is placed.
+   Anything that sets its own face still wins — the design system's Button is deliberately
+   monospaced, and stays that way. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
 /* Frosted glass for the floating panels. They sit over a live map, so rather than hiding
    the city behind an opaque slab they thin the surface colour and blur what's underneath —
    sheer enough to read as glass, opaque enough that their own text stays legible over a
