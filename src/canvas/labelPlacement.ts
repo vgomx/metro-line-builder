@@ -187,22 +187,27 @@ export function labelGeometry(
   const textWidth = lines.length > 0 ? Math.max(...lines.map(measureLabelWidth)) : 0
   const cardW = textWidth + padX * 2
   const cardH = LABEL_FONT_SIZE * lines.length + CARD_PAD_Y * 2
+  // Space kept at the card's right for the mode glyphs, if any. The pad after the glyphs is smaller
+  // than the card's own: an OpenMoji glyph carries a wide margin inside its own box, so a full padX
+  // beyond it reads as a bigger gap than the name has on the left.
+  const reserve = glyphsWidth > 0 ? LABEL_GLYPH_GAP + glyphsWidth + GLYPH_EDGE_PAD - padX : 0
+  const fullW = cardW + reserve
+
+  // A stacked label (directly above or below the marker) centres the whole plate — glyphs and all —
+  // on the stop it names, so the reserve for the glyphs doesn't slide the plate off to one side of
+  // the marker. The name then shifts left by half the reserve to stay centred within the text half
+  // of the plate. A side label (start/end) is instead pinned to the marker at one edge and grows
+  // away from it, so its name and card both stay put whether or not glyphs are present.
   const cardX =
     placement.anchor === 'start'
       ? labelX - padX
       : placement.anchor === 'end'
         ? labelX - textWidth - padX
-        : labelX - cardW / 2
-  // Space kept at the card's right for the mode glyphs, if any — the name is positioned exactly as
-  // it would be without them, and the card simply grows to the right to hold them, so a station
-  // gaining or losing a glyph doesn't shift its name. The pad after the glyphs is smaller than the
-  // card's own: an OpenMoji glyph carries a wide margin inside its own box, so a full padX beyond
-  // it reads as a bigger gap than the name has on the left.
-  const reserve = glyphsWidth > 0 ? LABEL_GLYPH_GAP + glyphsWidth + GLYPH_EDGE_PAD - padX : 0
-  const fullW = cardW + reserve
+        : labelX - fullW / 2
+  const textX = placement.anchor === 'middle' ? labelX - reserve / 2 : labelX
 
   return {
-    labelX,
+    labelX: textX,
     labelY,
     cardX,
     cardY: labelY - cardH / 2,
