@@ -1,6 +1,7 @@
 import type { Company, Line, Station } from '../types'
 import type { Journey } from '../journey'
 import { CompanySymbolIcon } from '../companySymbols'
+import { AuthoritySealIcon } from '../authoritySeal'
 import { HoverTip } from './HoverTip'
 import { StationSelect } from './StationSelect'
 
@@ -267,13 +268,11 @@ function Operators({
       }}
     >
       <span style={{ letterSpacing: '0.04em', textTransform: 'uppercase' }}>Operated by</span>
-      {operators.map((op, index) => (
+      {operators.map(op => (
         <span key={op.key} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', minWidth: 0 }}>
-          {/* Separates two operators when the row wraps and the gap alone stops reading as a
-              break. The authority wears no seal — it isn't a company — so without this the
-              names can run together into one apparent title. */}
-          {index > 0 && <span aria-hidden style={{ opacity: 0.5 }}>·</span>}
-          {op.company && <CompanySymbolIcon symbol={op.company.symbol} size={12} />}
+          {/* Every operator now leads with its own mark — the authority's included — and a mark is
+              a cleaner break between names than the separator that used to stand in for one. */}
+          {op.company ? <CompanySymbolIcon symbol={op.company.symbol} size={12} /> : <AuthoritySealIcon size={12} />}
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{op.name}</span>
         </span>
       ))}

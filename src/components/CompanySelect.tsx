@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Company } from '../types'
 import { CompanySymbolIcon } from '../companySymbols'
+import { AuthoritySealIcon } from '../authoritySeal'
 
 interface CompanySelectProps {
   /** The line's operator, or '' for the local transport authority (no company). */
@@ -19,8 +20,9 @@ const ICON = 20
  * The design system's Select shows a plain text label per option, which for a set of companies
  * throws away the thing that tells them apart at a glance — their badge. This is that Select
  * rebuilt against the same tokens and sizing, with the operator's seal drawn beside its name in
- * the trigger and in every row. The authority is the exception: it isn't a company and wears no
- * seal, so it keeps a blank badge-width so the names still line up.
+ * the trigger and in every row. The authority isn't a company, but it is an operator and has a
+ * seal of its own — the mark from the map — so it sits in the same slot rather than leaving a gap
+ * that read as a missing answer.
  */
 export function CompanySelect({ value, companies, authorityLabel, onChange }: CompanySelectProps) {
   const [open, setOpen] = useState(false)
@@ -47,7 +49,7 @@ export function CompanySelect({ value, companies, authorityLabel, onChange }: Co
 
   const iconSlot = (company: Company | null) => (
     <span style={{ width: ICON, height: ICON, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      {company ? <CompanySymbolIcon symbol={company.symbol} size={ICON} /> : null}
+      {company ? <CompanySymbolIcon symbol={company.symbol} size={ICON} /> : <AuthoritySealIcon size={ICON} />}
     </span>
   )
 
