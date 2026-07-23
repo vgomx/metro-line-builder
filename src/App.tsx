@@ -150,6 +150,7 @@ function App() {
     [journeyFromId, journeyToId, lineList, state.stations],
   )
 
+
   /**
    * A click on a station while the journey tool is up.
    *
@@ -416,6 +417,42 @@ function App() {
     const stillRiding = state.selectedLineIds.length === 1 && state.selectedLineIds[0] === ride.lineId
     if (!stillRiding) stopRide()
   }, [ride, state.selectedLineIds, stopRide])
+
+  /**
+   * Bring the whole journey into view once it has one.
+   *
+   * Keyed on the pair of stations rather than on the journey object, so the camera moves when the
+   * question changes and stays put otherwise — re-planning the same trip because a line was
+   * recoloured shouldn't yank the map back, and neither should a re-render while someone is
+   * panning around the route they just asked for.
+   *
+   * Only while the tool is up, and never over a ride: the ride camera is tracking a train frame by
+   * frame, and two things steering the viewport at once is a fight the rider loses.
+   */
+  const framedJourneyRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!planningJourney || !journey || ride) {
+      // Forget it once the journey is gone, so coming back to the same pair frames it again.
+      if (!journey) framedJourneyRef.current = null
+      return
+    }
+    const key = `${journeyFromId}>${journeyToId}`
+    if (framedJourneyRef.current === key) return
+    framedJourneyRef.current = key
+    const stops = journey.legs.flatMap(leg => leg.stationIds)
+    // The same two frames every other framing call in this file waits for. Starting a d3
+    // transition from inside a commit means its first tick lands back in React while the commit
+    // is still unwinding, which showed up as an intermittent "maximum update depth" — and the
+    // route's own highlight needs to be laid out before there's anything to frame anyway.
+    let second = 0
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => mapCanvasRef.current?.frameStations(stops))
+    })
+    return () => {
+      cancelAnimationFrame(first)
+      cancelAnimationFrame(second)
+    }
+  }, [planningJourney, journey, ride, journeyFromId, journeyToId])
 
   // Sound is a presentation concern, so it's attached to the callbacks here at the
   // interaction layer rather than fired from the reducer — the state layer stays unaware
