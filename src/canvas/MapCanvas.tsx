@@ -3,6 +3,7 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent }
 import type { ZoomTransform } from 'd3-zoom'
 import type { GeoFeature, Line, LineKind, LineNode, Point, PointOfInterest, Station, Tool } from '../types'
 import { lineKind } from '../types'
+import { modeGlyphsWidth } from '../modeGlyphs'
 import { useZoomPan } from './useZoomPan'
 import { useReducedMotion } from '../useReducedMotion'
 import type { ViewportInsets } from './useZoomPan'
@@ -1070,6 +1071,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     lineList,
     stations,
     new Set(stationList.filter(s => (lineCountByStation[s.id] ?? 0) >= 2).map(s => s.id)),
+    // A main station that mixes two modes wears a glyph per mode inside its label, widening its
+    // card — the search reserves that width so a neighbour doesn't choose a spot the card will cover.
+    station => (station.main && (modesByStation.get(station.id)?.size ?? 0) >= 2 ? modeGlyphsWidth(modesByStation.get(station.id)!.size) : 0),
   )
 
   // One routing pass for the whole network: it subdivides every line's segments against

@@ -20,6 +20,15 @@ const MODE_HEX: Record<LineKind, string> = { metro: '1F687', rail: '1F686' }
 
 export const MODE_LABEL: Record<LineKind, string> = { metro: 'Metro', rail: 'Rail' }
 
+/** The glyph's drawn size in the label, and the gap between two of them. */
+export const MODE_GLYPH_SIZE = 12
+export const MODE_GLYPH_GAP = 2
+
+/** The width a row of `count` mode glyphs occupies — what the label card reserves for them. */
+export function modeGlyphsWidth(count: number): number {
+  return count > 0 ? count * MODE_GLYPH_SIZE + (count - 1) * MODE_GLYPH_GAP : 0
+}
+
 /** The glyph's inner markup, its outer <svg> stripped so it can nest under the map's own SVG with a
  * fresh viewBox. Computed once per mode at load. */
 const MODE_INNER: Partial<Record<LineKind, string>> = {}

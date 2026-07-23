@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { LineKind, Station } from '../types'
-import { ModeGlyphSvg } from '../modeGlyphs'
+import { MODE_GLYPH_GAP, MODE_GLYPH_SIZE, ModeGlyphSvg, modeGlyphsWidth } from '../modeGlyphs'
 import type { LabelPlacement } from './labelPlacement'
 import { BASELINE_CENTRE, labelGeometry, LABEL_FONT_SIZE } from './labelPlacement'
 
@@ -43,9 +43,6 @@ const LAND_MS = 320
  * answer the cursor by the same amount. */
 const DRAG_GROWTH = 2
 const HOVER_GROWTH = 1.5
-/** Modal glyphs above a main interchange's label: size and the gap between them. */
-const MODE_GLYPH = 13
-const MODE_GAP = 3
 
 /**
  * A station marker, drawn as a circle for metro and a rounded square for rail. Every one of the
@@ -132,7 +129,16 @@ export function StationNode({
   // Nothing about the marker changes: a principal station is one the eye should find by name,
   // and the map already spends its marker vocabulary on what the lines are doing.
   const isMain = station.main
-  const { labelX, labelY, cardX, cardY, cardW, cardH, lines } = labelGeometry(station, labelPlacement, isInterchange)
+  // A main station that mixes two modes carries a glyph for each inside its label; the card
+  // reserves the room so the placement search sizes the real box.
+  const showModes = isMain && modes.length >= 2
+  const glyphsWidth = showModes ? modeGlyphsWidth(modes.length) : 0
+  const { labelX, labelY, cardX, cardY, cardW, cardH, lines, glyphsX, glyphsY } = labelGeometry(
+    station,
+    labelPlacement,
+    isInterchange,
+    glyphsWidth,
+  )
 
   return (
     <g
@@ -259,20 +265,20 @@ export function StationNode({
           ))}
         </text>
 
-        {/* The modes that meet here, glyphed above the label — but only where a main station mixes
-            two of them, which is the modal interchange the icons are for. A single-mode stop shows
-            nothing: the whole map is one mode by default, so a lone glyph would say little. Sits
-            above the pill rather than inside it, so the placement search's card size stays honest. */}
-        {isMain && modes.length >= 2 && (
+        {/* The modes that meet here, glyphed inside the label's right end — but only where a main
+            station mixes two of them, which is the modal interchange the icons are for. A single-mode
+            stop shows nothing: the whole map is one mode by default, so a lone glyph would say little.
+            Inverted, because a main station's plate is a dark pill and the name on it is inverted too. */}
+        {showModes && (
           <g pointerEvents="none">
             {modes.map((mode, i) => (
               <ModeGlyphSvg
                 key={mode}
                 mode={mode}
-                x={cardX + cardW / 2 - (modes.length * MODE_GLYPH + (modes.length - 1) * MODE_GAP) / 2 + i * (MODE_GLYPH + MODE_GAP)}
-                y={cardY - MODE_GLYPH - 3}
-                size={MODE_GLYPH}
-                color="var(--text-primary)"
+                x={glyphsX + i * (MODE_GLYPH_SIZE + MODE_GLYPH_GAP)}
+                y={glyphsY - MODE_GLYPH_SIZE / 2}
+                size={MODE_GLYPH_SIZE}
+                color="var(--text-inverse)"
               />
             ))}
           </g>

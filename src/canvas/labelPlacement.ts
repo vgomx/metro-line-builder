@@ -143,7 +143,14 @@ export interface LabelGeometry {
   textWidth: number
   /** The name broken into the lines the card is sized for. */
   lines: string[]
+  /** Top-left of the mode-glyph row reserved inside the card's right end, and its row height —
+   * meaningful only when the caller passed a glyphsWidth. */
+  glyphsX: number
+  glyphsY: number
 }
+
+/** The gap between the name and the mode glyphs sharing its card. */
+const LABEL_GLYPH_GAP = 5
 
 /** A station name wraps past this, so one long name can't drive a card across its
  * neighbours. Wide enough that the names in the generator's own pool stay on one line. */
@@ -160,7 +167,12 @@ const STATION_LABEL_MAX_WIDTH = 84
  * dragged — a name that slid outward whenever the cursor grazed its marker would jitter, and
  * a label that moved mid-drag would invalidate every collision this module just resolved.
  */
-export function labelGeometry(station: Station, placement: LabelPlacement, isInterchange: boolean): LabelGeometry {
+export function labelGeometry(
+  station: Station,
+  placement: LabelPlacement,
+  isInterchange: boolean,
+  glyphsWidth = 0,
+): LabelGeometry {
   const radius = isInterchange ? INTERCHANGE_RADIUS : PLAIN_RADIUS
   const distance = radius + LABEL_OFFSET
   const labelX = Math.cos(placement.angle) * distance
@@ -170,6 +182,10 @@ export function labelGeometry(station: Station, placement: LabelPlacement, isInt
   const lines = wrapLabel(station.name, STATION_LABEL_MAX_WIDTH, LABEL_FONT_SIZE, 2)
   // The widest line sets the card, and every line has to fit inside it.
   const textWidth = lines.length > 0 ? Math.max(...lines.map(measureLabelWidth)) : 0
+  // Space kept at the card's right for the mode glyphs, if any — the name is positioned exactly as
+  // it would be without them, and the card simply grows to the right to hold them, so a station
+  // gaining or losing a glyph doesn't shift its name.
+  const reserve = glyphsWidth > 0 ? glyphsWidth + LABEL_GLYPH_GAP : 0
   const cardW = textWidth + padX * 2
   const cardH = LABEL_FONT_SIZE * lines.length + CARD_PAD_Y * 2
   const cardX =
@@ -178,8 +194,21 @@ export function labelGeometry(station: Station, placement: LabelPlacement, isInt
       : placement.anchor === 'end'
         ? labelX - textWidth - padX
         : labelX - cardW / 2
+  const fullW = cardW + reserve
 
-  return { labelX, labelY, cardX, cardY: labelY - cardH / 2, cardW, cardH, textWidth, lines }
+  return {
+    labelX,
+    labelY,
+    cardX,
+    cardY: labelY - cardH / 2,
+    cardW: fullW,
+    cardH,
+    textWidth,
+    lines,
+    // Right-aligned inside the card's padding; vertically centred.
+    glyphsX: cardX + fullW - padX - glyphsWidth,
+    glyphsY: labelY,
+  }
 }
 
 interface Box {
@@ -189,8 +218,8 @@ interface Box {
   height: number
 }
 
-function labelBox(station: Station, placement: LabelPlacement, isInterchange: boolean): Box {
-  const g = labelGeometry(station, placement, isInterchange)
+function labelBox(station: Station, placement: LabelPlacement, isInterchange: boolean, glyphsWidth: number): Box {
+  const g = labelGeometry(station, placement, isInterchange, glyphsWidth)
   return { x: station.x + g.cardX, y: station.y + g.cardY, width: g.cardW, height: g.cardH }
 }
 
@@ -266,6 +295,10 @@ export function computeLabelPlacements(
   lineList: Line[],
   stations: Record<string, Station>,
   interchangeIds: Set<string>,
+  /** The glyph-row width to reserve at a station's label, or 0. Threaded so the search sizes the
+   * exact card that will be drawn — a main modal interchange's card is wider, and its neighbours
+   * must know that when they choose where to sit. */
+  glyphsWidthOf: (station: Station) => number = () => 0,
 ): Record<string, LabelPlacement> {
   const isInterchange = (station: Station) => interchangeIds.has(station.id) || station.transfer
 
@@ -310,7 +343,7 @@ export function computeLabelPlacements(
       }
       if (!named) continue
 
-      const box = labelBox(station, direction, interchange)
+      const box = labelBox(station, direction, interchange, glyphsWidthOf(station))
       const hitsLabel = placed.some(other => overlaps(box, other, LABEL_GAP))
       // A station's own marker never reaches its label — the offset guarantees it — so the
       // only markers worth testing are everyone else's.
@@ -334,7 +367,7 @@ export function computeLabelPlacements(
 
     const chosen = bestFree ?? (named ? (bestBusy ?? best) : best)
     result[station.id] = chosen
-    if (named) placed.push(labelBox(station, chosen, interchange))
+    if (named) placed.push(labelBox(station, chosen, interchange, glyphsWidthOf(station)))
   }
 
   return result
