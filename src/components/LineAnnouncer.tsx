@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from 'react'
-import { LineIndicator } from 'metro-ds'
 import { buildTextBitmap, CHAR_HEIGHT } from '../canvas/ledFont'
 import type { Line } from '../types'
+import { LineBadge } from './LineBadge'
 
 interface LineAnnouncerProps {
   line: Line
@@ -171,7 +171,7 @@ export function LineAnnouncer({ line, scrollText, riding = false, onStopRide }: 
         }}
       >
         <span style={{ paddingLeft: '6px', paddingTop: '2px', paddingBottom: '2px', flexShrink: 0, display: 'flex' }}>
-          <LineIndicator id={String(line.number)} color={line.color} shape="pill" size="xs" />
+          <LineBadge line={line} shape="pill" size="xs" />
         </span>
         <span style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--ink-0)', paddingRight: riding ? '4px' : '12px' }}>
           {line.name}

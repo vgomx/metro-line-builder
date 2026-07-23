@@ -30,6 +30,7 @@ import {
 import type { LineTrack, RefanLine } from './lineNodes'
 import type { RideProgress, TrainSample } from './trainMotion'
 import { computeLabelPlacements } from './labelPlacement'
+import { useFontsReady } from './useFontsReady'
 import { openMojiUrl } from '../openmoji'
 import { useAppearance } from './useAppearance'
 import { useExit } from './useExit'
@@ -281,6 +282,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   ref,
 ) {
   const svgRef = useRef<SVGSVGElement>(null)
+  // Re-render once the label font settles so every placement below is measured from the real face,
+  // not the fallback the first paint may catch on a cold load — otherwise a mis-measured card can
+  // land across a marker and stay there on a map no one touches.
+  const fontsReady = useFontsReady()
   const { transform, zoomIn, zoomOut, spaceHeld, panning, frameBounds, centerOn, easeToTransform } = useZoomPan(
     svgRef,
     tool === 'pan',
@@ -1239,6 +1244,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       // Marks this element as the map for the window-level gesture blocker in main.tsx,
       // which has to let Safari's pinch through here and nowhere else.
       data-map-canvas=""
+      data-fonts-ready={fontsReady}
       width="100%"
       height="100%"
       className={drawingWithMarker ? 'mlb-drawing' : undefined}
