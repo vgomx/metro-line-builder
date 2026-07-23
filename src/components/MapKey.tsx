@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { ModeGlyphHtml } from '../modeGlyphs'
 
@@ -79,8 +80,15 @@ function InterchangeMark() {
 }
 
 export function MapKey() {
+  // Translucent at rest so it sits back from the map it explains, full strength on hover for when
+  // you're actually reading it — the same treatment, and the same touch fallback (a finger never
+  // hovers), as the authority mark it sits above.
+  const [hovered, setHovered] = useState(false)
   return (
     <div
+      className="mlb-map-key"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -93,6 +101,8 @@ export function MapKey() {
         borderRadius: 'var(--radius-lg)',
         boxShadow: 'var(--shadow-lg)',
         pointerEvents: 'auto',
+        opacity: hovered ? 1 : 0.6,
+        transition: 'opacity 150ms ease',
       }}
     >
       <Header>Lines</Header>
