@@ -49,7 +49,7 @@ function LineNumberField({
 
   return (
     <Input
-      label="Line number"
+      label="Number"
       type="number"
       value={draft}
       error={lineNumberError(draft, line, lines)}
@@ -445,14 +445,18 @@ export function Inspector({
         {/* The two attributes that aren't the name, sharing a row: the number a rider knows the
             line by, and who runs it. */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--gap-sm)' }}>
-          <div style={{ width: '92px', flexShrink: 0 }}>
+          {/* Sized for its content, not its label: a line number tops out at 99, so two digits
+              and the field's own padding are all it ever needs. Every pixel saved goes to the
+              company beside it, whose names are long and were being truncated for no reason. */}
+          <div style={{ width: '64px', flexShrink: 0 }}>
             <LineNumberField key={line.id} line={line} lines={lines} onSetLineNumber={onSetLineNumber} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <CompanySelect
               value={line.companyId ?? ''}
               companies={companyList}
-              authorityLabel={`${authorityDisplayName} (Local Transport Authority)`}
+              authorityLabel={authorityDisplayName}
+              authorityHint="Local Transport Authority"
               onChange={companyId => onSetLineCompany(line.id, companyId === '' ? null : companyId)}
             />
           </div>

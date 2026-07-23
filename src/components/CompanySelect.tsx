@@ -9,6 +9,11 @@ interface CompanySelectProps {
   companies: Company[]
   /** What the authority is called on this map — the default operator every line falls back to. */
   authorityLabel: string
+  /** What the authority *is*, spelled out. Only shown in the open list: there it distinguishes the
+   * authority from the companies beneath it, which matters when a map-maker has named it something
+   * that doesn't say so. In the closed field it is redundant beside a name that usually ends in
+   * "Transit Authority", and long enough to push that name out of view entirely. */
+  authorityHint?: string
   onChange: (companyId: string) => void
 }
 
@@ -24,7 +29,7 @@ const ICON = 20
  * seal of its own — the mark from the map — so it sits in the same slot rather than leaving a gap
  * that read as a missing answer.
  */
-export function CompanySelect({ value, companies, authorityLabel, onChange }: CompanySelectProps) {
+export function CompanySelect({ value, companies, authorityLabel, authorityHint, onChange }: CompanySelectProps) {
   const [open, setOpen] = useState(false)
   const [focused, setFocused] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -121,7 +126,16 @@ export function CompanySelect({ value, companies, authorityLabel, onChange }: Co
             overflowY: 'auto',
           }}
         >
-          <Row icon={iconSlot(null)} label={authorityLabel} active={value === ''} onSelect={() => { onChange(''); setOpen(false) }} />
+          <Row
+            icon={iconSlot(null)}
+            label={authorityLabel}
+            hint={authorityHint}
+            active={value === ''}
+            onSelect={() => {
+              onChange('')
+              setOpen(false)
+            }}
+          />
           {companies.map(company => (
             <Row
               key={company.id}
@@ -140,7 +154,19 @@ export function CompanySelect({ value, companies, authorityLabel, onChange }: Co
   )
 }
 
-function Row({ icon, label, active, onSelect }: { icon: React.ReactNode; label: string; active: boolean; onSelect: () => void }) {
+function Row({
+  icon,
+  label,
+  hint,
+  active,
+  onSelect,
+}: {
+  icon: React.ReactNode
+  label: string
+  hint?: string
+  active: boolean
+  onSelect: () => void
+}) {
   return (
     <div
       role="option"
@@ -163,7 +189,12 @@ function Row({ icon, label, active, onSelect }: { icon: React.ReactNode; label: 
       onMouseLeave={e => (e.currentTarget.style.background = active ? 'var(--color-info-bg)' : 'transparent')}
     >
       {icon}
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+      <span style={{ minWidth: 0, overflow: 'hidden' }}>
+        <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        {hint && (
+          <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)', lineHeight: 1.3 }}>{hint}</span>
+        )}
+      </span>
     </div>
   )
 }
