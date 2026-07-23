@@ -172,16 +172,21 @@ export function StationNode({
           }
         >
           {isInterchange ? (
+            // An interchange stays a circle whatever mode meets there. The double ring is the
+            // "change here" mark, and it's the more important thing to say at a junction than which
+            // kind of line it is — a metro/rail transfer reads as a transfer first. So the square is
+            // reserved for a single rail stop; the moment a station becomes an interchange it rejoins
+            // the circle vocabulary, and the rail lines through it already show themselves as rail.
             <>
               <Mark
-                rail={rail}
+                rail={false}
                 r={drawnRadius}
                 fill={inDraftLine ? 'var(--brand-500)' : 'var(--bg-page)'}
                 stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
                 strokeWidth={3.5}
               />
               <Mark
-                rail={rail}
+                rail={false}
                 r={drawnRadius - 4.5}
                 fill="none"
                 stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}

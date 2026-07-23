@@ -63,6 +63,48 @@ function LineNumberField({
   )
 }
 
+/**
+ * The line's identity at a glance, standing in for the edit fields while they're collapsed: its
+ * colour, its number, what it runs, and who runs it. The operator earns its line here because it's
+ * the one attribute not written anywhere else on this view or on the map — the colour is on the
+ * canvas, the number and name in the subheader, but a line's company is only ever seen here.
+ */
+function LineSummary({
+  line,
+  companyList,
+  authorityDisplayName,
+  onEdit,
+}: {
+  line: Line
+  companyList: Company[]
+  authorityDisplayName: string
+  onEdit: () => void
+}) {
+  const company = line.companyId ? companyList.find(c => c.id === line.companyId) : null
+  const operator = company ? company.name.trim() || 'Unnamed company' : authorityDisplayName
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)' }}>
+      <span
+        aria-hidden
+        style={{ width: '18px', height: '18px', borderRadius: '4px', background: line.color, flexShrink: 0 }}
+      />
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' }}>
+        <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>
+          Line {line.number} · {isRailLine(line) ? 'Rail' : 'Metro'}
+        </span>
+        <span
+          style={{ fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        >
+          {operator}
+        </span>
+      </div>
+      <Button variant="ghost" size="sm" icon={<PenIcon />} onClick={onEdit}>
+        Edit line
+      </Button>
+    </div>
+  )
+}
 
 /**
  * "Delete line", and the question that goes with it: a line's stations outlive it by default,
@@ -196,6 +238,10 @@ export function Inspector({
   onDeleteCompany,
 }: InspectorProps) {
   const nameField = useRef<HTMLDivElement>(null)
+  // Which line's edit fields are open. Held by id rather than a boolean so it collapses on its own
+  // when the selection moves to another line — editing is a deliberate act you opt into per line,
+  // not a mode that follows you around the map.
+  const [editingLineId, setEditingLineId] = useState<string | null>(null)
 
   // The design system's Input takes no ref and no autoFocus, so the field is reached through
   // the wrapper. One ref covers stations, landmarks and geography alike: the inspector shows
@@ -432,48 +478,58 @@ export function Inspector({
 
     return (
       <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
-        {/* Identity on one row: the name, then the colour as a chip that opens the palette. No
-            "Line properties" heading above it — the panel's own subheader already names the line,
-            and the space it cost pushed the route below the fold. Aligned to the bottom so the
-            chip sits level with the field rather than with the label above it. */}
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 'var(--gap-sm)' }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <Input label="Line name" value={line.name} onChange={e => onRenameLine(line.id, e.target.value)} />
-          </div>
-          <LineColorSelect value={line.color} onChange={color => onRecolorLine(line.id, color)} />
-        </div>
+        {/* The line's settings — name, colour, number, company, type — collapse behind one entry
+            point. Selecting a line is most often a step toward riding it or reading its stops, not
+            editing it, and five field rows pushed that route below the fold. Collapsed by default;
+            the summary keeps the colour, number and type in view so nothing has to be opened just
+            to be checked. */}
+        {editingLineId === line.id ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+            {/* Identity on one row: the name, then the colour as a chip that opens the palette.
+                Aligned to the bottom so the chip sits level with the field, not the label above it. */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 'var(--gap-sm)' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Input label="Line name" value={line.name} onChange={e => onRenameLine(line.id, e.target.value)} />
+              </div>
+              <LineColorSelect value={line.color} onChange={color => onRecolorLine(line.id, color)} />
+            </div>
 
-        {/* The two attributes that aren't the name, sharing a row: the number a rider knows the
-            line by, and who runs it. */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--gap-sm)' }}>
-          {/* Sized for its content, not its label: a line number tops out at 99, so two digits
-              and the field's own padding are all it ever needs. Every pixel saved goes to the
-              company beside it, whose names are long and were being truncated for no reason. */}
-          <div style={{ width: '50px', flexShrink: 0 }}>
-            <LineNumberField key={line.id} line={line} lines={lines} onSetLineNumber={onSetLineNumber} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <CompanySelect
-              value={line.companyId ?? ''}
-              companies={companyList}
-              authorityLabel={authorityDisplayName}
-              authorityHint="Local Transport Authority"
-              onChange={companyId => onSetLineCompany(line.id, companyId === '' ? null : companyId)}
+            {/* The number a rider knows the line by, and who runs it, sharing a row. */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--gap-sm)' }}>
+              {/* Sized for its content, not its label: a number tops out at 99, so two digits and
+                  the field's padding are all it needs; the pixels saved go to the company beside it. */}
+              <div style={{ width: '50px', flexShrink: 0 }}>
+                <LineNumberField key={line.id} line={line} lines={lines} onSetLineNumber={onSetLineNumber} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <CompanySelect
+                  value={line.companyId ?? ''}
+                  companies={companyList}
+                  authorityLabel={authorityDisplayName}
+                  authorityHint="Local Transport Authority"
+                  onChange={companyId => onSetLineCompany(line.id, companyId === '' ? null : companyId)}
+                />
+              </div>
+            </div>
+
+            {/* What the line runs. A select rather than a toggle so the kinds are a list to grow. */}
+            <Select
+              label="Type"
+              options={[
+                { label: 'Metro', value: 'metro' },
+                { label: 'Rail', value: 'rail' },
+              ]}
+              value={lineKind(line)}
+              onChange={value => onSetLineKind(line.id, value as LineKind)}
             />
-          </div>
-        </div>
 
-        {/* What the line runs. A select rather than a toggle so the kinds are a list to grow, not a
-            binary to replace — and it reads as a peer of the number and company above it. */}
-        <Select
-          label="Type"
-          options={[
-            { label: 'Metro', value: 'metro' },
-            { label: 'Rail', value: 'rail' },
-          ]}
-          value={lineKind(line)}
-          onChange={value => onSetLineKind(line.id, value as LineKind)}
-        />
+            <Button variant="secondary" size="sm" onClick={() => setEditingLineId(null)} style={{ width: '100%' }}>
+              Done
+            </Button>
+          </div>
+        ) : (
+          <LineSummary line={line} companyList={companyList} authorityDisplayName={authorityDisplayName} onEdit={() => setEditingLineId(line.id)} />
+        )}
 
         <Divider label={riding ? 'Trip' : 'Stations'} />
         {/* Board the line's train, or step off it. Needs at least two stops to be a journey. */}

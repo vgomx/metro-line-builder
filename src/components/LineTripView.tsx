@@ -159,8 +159,10 @@ export function LineTripView({ color, rail = false, stops, ride }: LineTripViewP
                     height: current ? '15px' : '13px',
                     marginLeft: current ? '-1px' : 0,
                     // A square (softly rounded) for rail, a disc for metro — the same shape language
-                    // the canvas marks use, so a stop reads the same in the strip as on the map.
-                    borderRadius: rail ? '4px' : '50%',
+                    // the canvas marks use, so a stop reads the same in the strip as on the map. A
+                    // transfer stays a disc even on a rail line, matching the canvas rule that an
+                    // interchange is a circle whatever mode meets there.
+                    borderRadius: rail && !stop.transfer ? '4px' : '50%',
                     border: `2.5px solid ${nodeColor}`,
                     background: stop.transfer ? nodeColor : 'var(--bg-surface)',
                     boxShadow: current ? `0 0 0 3px color-mix(in srgb, ${color} 25%, transparent)` : 'none',
