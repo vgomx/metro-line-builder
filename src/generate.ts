@@ -252,17 +252,57 @@ export function buildRandomMap(): DataSnapshot {
 
   const lines: Record<string, Line> = {}
   const lineOrder: string[] = []
+  const hubOfLine = new Map<string, number>()
   for (let i = 0; i < lineCount; i++) {
     const hubIndex = i % hubs.length
     let nodes: LineNode[] | null = null
     for (let attempt = 0; attempt < 6 && !nodes; attempt++) nodes = buildLineNodes(hubs[hubIndex], hubIndex)
     if (!nodes) continue
     const id = `line-${lineOrder.length + 1}`
-    // Built from nothing, so the lines number straight through 1..N — no gaps to fill. The
-    // stamp keeps them in generation order under a "Created" sort, and ahead of anything drawn
-    // afterwards (a later Date.now()).
-    lines[id] = { id, number: lineOrder.length + 1, name: '', color: nextLineColor(lineOrder.length), companyId: null, visible: true, nodes, createdAt: Date.now() + lineOrder.length }
+    // The stamp keeps them in generation order under a "Created" sort, and ahead of anything
+    // drawn afterwards (a later Date.now()). Number and mode are settled once every line exists,
+    // since numbering now runs per mode.
+    lines[id] = { id, number: 0, name: '', color: nextLineColor(lineOrder.length), companyId: null, visible: true, nodes, createdAt: Date.now() + lineOrder.length }
     lineOrder.push(id)
+    hubOfLine.set(id, hubIndex)
+  }
+
+  // Modes: a city built from nothing is mostly metro, with a rail line or two threaded through it.
+  // A hub two lines cross at becomes a modal interchange the moment one of them is rail — which is
+  // where the mode glyphs earn their place — so a shared hub is seeded rail first and one of its
+  // other lines held back as metro, guaranteeing the crossing is metro-meets-rail. The rest of the
+  // rail quota is filled from anywhere, always leaving metro the majority.
+  const railIds = new Set<string>()
+  const railQuota = lineOrder.length <= 1 ? 0 : Math.min(lineOrder.length - 1, Math.max(1, Math.round(lineOrder.length * 0.3)))
+  if (railQuota > 0) {
+    const byHub = new Map<number, string[]>()
+    for (const id of lineOrder) {
+      const h = hubOfLine.get(id)!
+      const bucket = byHub.get(h)
+      if (bucket) bucket.push(id)
+      else byHub.set(h, [id])
+    }
+    const sharedHub = [...byHub.values()].find(ids => ids.length >= 2)
+    const protectedMetro = sharedHub?.[1]
+    if (sharedHub) railIds.add(sharedHub[0])
+    for (const id of shuffle([...lineOrder])) {
+      if (railIds.size >= railQuota) break
+      if (id === protectedMetro) continue
+      railIds.add(id)
+    }
+  }
+
+  // Number per mode: metro 1..N, rail 1..N, each filling its own sequence. Metro keeps no `kind`
+  // field, holding to the absent-means-metro convention the rest of the app reads by.
+  let metroNumber = 0
+  let railNumber = 0
+  for (const id of lineOrder) {
+    if (railIds.has(id)) {
+      lines[id].kind = 'rail'
+      lines[id].number = ++railNumber
+    } else {
+      lines[id].number = ++metroNumber
+    }
   }
 
   // Name everything once the geometry is settled, keeping names unique within the map.
@@ -280,6 +320,35 @@ export function buildRandomMap(): DataSnapshot {
     lineNames.add(name)
     lines[id].name = name
   }
+
+  // Make the busiest metro-meets-rail crossing a principal station, so a generated map arrives
+  // showing the mode glyphs it now has the vocabulary for — the one place they'd appear. Read off
+  // the line nodes rather than hub coordinates, which is what the renderer itself derives modes
+  // from, so this can't disagree with where the glyphs actually land.
+  const modesAtStation = new Map<string, Set<string>>()
+  const linesAtStation = new Map<string, number>()
+  for (const id of lineOrder) {
+    const mode = railIds.has(id) ? 'rail' : 'metro'
+    const seen = new Set<string>()
+    for (const node of lines[id].nodes) {
+      if (node.kind !== 'station' || seen.has(node.stationId)) continue
+      seen.add(node.stationId)
+      const modes = modesAtStation.get(node.stationId) ?? new Set<string>()
+      modes.add(mode)
+      modesAtStation.set(node.stationId, modes)
+      linesAtStation.set(node.stationId, (linesAtStation.get(node.stationId) ?? 0) + 1)
+    }
+  }
+  let modalMainId: string | undefined
+  let busiest = 0
+  for (const [sid, modes] of modesAtStation) {
+    const count = linesAtStation.get(sid) ?? 0
+    if (modes.size >= 2 && count > busiest) {
+      busiest = count
+      modalMainId = sid
+    }
+  }
+  if (modalMainId && stations[modalMainId]) stations[modalMainId].main = true
 
 
   // Everything above is the network. What follows is the city it runs through: a river, a
