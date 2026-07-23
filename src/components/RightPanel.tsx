@@ -211,7 +211,11 @@ export function RightPanel({
 
   // Only Properties-with-a-selection has anywhere to go back to. Everywhere else the
   // subheader is just a title, rather than a dead arrow that reads as broken.
-  const showBack = tab === 'Properties' && detail !== null
+  //
+  // Never while planning a journey: that mode has its own way out, and the tabs behind it keep
+  // their state, so a selection made before opening the planner would otherwise put a second
+  // arrow beside it — two backs in one row, pointing at different places.
+  const showBack = !journeyMode && tab === 'Properties' && detail !== null
 
   return (
     <div

@@ -4,6 +4,7 @@ import type { Journey } from '../journey'
 import { CompanySymbolIcon } from '../companySymbols'
 import { AuthoritySealIcon } from '../authoritySeal'
 import { SwapIcon } from '../icons'
+import { LinePill } from './LinePill'
 import { StationSelect } from './StationSelect'
 
 interface JourneyPanelProps {
@@ -175,22 +176,7 @@ export function JourneyPanel({
                         {nameOf(leg.stationIds[0])}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 0' }}>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            height: '18px',
-                            padding: '0 7px',
-                            borderRadius: '9px',
-                            background: color,
-                            color: '#fff',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {line ? line.name.trim() || `Line ${line.number}` : 'Line'}
-                        </span>
+                        {line && <LinePill line={line} size="sm" />}
                         <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
                           {stops(ridden)} · {formatMinutes(leg.minutes)}
                         </span>
