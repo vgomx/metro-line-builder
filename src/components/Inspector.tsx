@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Divider, Input, Select, Toggle } from 'metro-ds'
+import { Button, Divider, Input, Toggle } from 'metro-ds'
 import { ParkIcon, PenIcon, PoiIcon, RiverIcon, TrashIcon } from '../icons'
 import { isUsableLineNumber, MAX_LINE_NUMBER } from '../lineNumber'
-import type { Company, GeoFeature, Line, LineKind, PointOfInterest, Station } from '../types'
+import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
 import type { RideProgress } from '../canvas/trainMotion'
 import { COMPANY_SYMBOLS, isRailLine, lineKind } from '../types'
 import { TrainIcon } from '../icons'
@@ -24,7 +24,7 @@ function lineNumberError(draft: string, line: Line, lines: Record<string, Line>)
   if (trimmed === '') return 'Enter a number'
   const parsed = Number(trimmed)
   if (!isUsableLineNumber(parsed)) return `Use a whole number from 1 to ${MAX_LINE_NUMBER}`
-  const clash = Object.values(lines).find(other => other.id !== line.id && other.number === parsed)
+  const clash = Object.values(lines).find(other => other.id !== line.id && other.number === parsed && lineKind(other) === lineKind(line))
   if (!clash) return undefined
   return `Already used by ${clash.name.trim() || `line ${clash.number}`}`
 }
@@ -177,7 +177,6 @@ interface InspectorProps {
   onStopRide: () => void
   onRenameLine: (lineId: string, name: string) => void
   onSetLineNumber: (lineId: string, number: number) => void
-  onSetLineKind: (lineId: string, kind: LineKind) => void
   onRecolorLine: (lineId: string, color: string) => void
   onSetLineCompany: (lineId: string, companyId: string | null) => void
   onExtendLine: (lineId: string, end: 'start' | 'end') => void
@@ -215,7 +214,6 @@ export function Inspector({
   onStopRide,
   onRenameLine,
   onSetLineNumber,
-  onSetLineKind,
   onRecolorLine,
   onSetLineCompany,
   onExtendLine,
@@ -511,17 +509,6 @@ export function Inspector({
                 />
               </div>
             </div>
-
-            {/* What the line runs. A select rather than a toggle so the kinds are a list to grow. */}
-            <Select
-              label="Type"
-              options={[
-                { label: 'Metro', value: 'metro' },
-                { label: 'Rail', value: 'rail' },
-              ]}
-              value={lineKind(line)}
-              onChange={value => onSetLineKind(line.id, value as LineKind)}
-            />
 
             <Button variant="secondary" size="sm" onClick={() => setEditingLineId(null)} style={{ width: '100%' }}>
               Done

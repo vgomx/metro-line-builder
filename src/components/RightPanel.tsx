@@ -52,7 +52,7 @@ interface RightPanelProps {
   onSelectCompany: (companyId: string) => void
   onToggleLineVisibility: (lineId: string) => void
   onReorderLine: (lineId: string, toIndex: number) => void
-  onAddLine: () => void
+  onAddLine: (kind: LineKind) => void
   onAddRiver: () => void
   onAddPark: () => void
   onAddPoi: () => void
@@ -60,7 +60,6 @@ interface RightPanelProps {
   onSetAuthorityName: (name: string) => void
   onRenameLine: (lineId: string, name: string) => void
   onSetLineNumber: (lineId: string, number: number) => void
-  onSetLineKind: (lineId: string, kind: LineKind) => void
   onRecolorLine: (lineId: string, color: string) => void
   onSetLineCompany: (lineId: string, companyId: string | null) => void
   onExtendLine: (lineId: string, end: 'start' | 'end') => void
@@ -141,7 +140,6 @@ export function RightPanel({
   onSetAuthorityName,
   onRenameLine,
   onSetLineNumber,
-  onSetLineKind,
   onRecolorLine,
   onSetLineCompany,
   onExtendLine,
@@ -374,7 +372,6 @@ export function RightPanel({
             onStopRide={onStopRide}
             onRenameLine={onRenameLine}
             onSetLineNumber={onSetLineNumber}
-            onSetLineKind={onSetLineKind}
             onRecolorLine={onRecolorLine}
             onSetLineCompany={onSetLineCompany}
             onExtendLine={onExtendLine}
