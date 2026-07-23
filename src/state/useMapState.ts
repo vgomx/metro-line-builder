@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer } from 'react'
-import type { Company, CompanySymbol, CompanyType, GeoFeature, GeoFeatureType, Line, LineNode, Point, PointOfInterest, Station, Tool } from '../types'
-import { COMPANY_SYMBOLS } from '../types'
+import type { Company, CompanySymbol, CompanyType, GeoFeature, GeoFeatureType, Line, LineKind, LineNode, Point, PointOfInterest, Station, Tool } from '../types'
+import { COMPANY_SYMBOLS, lineKind } from '../types'
 import { DEFAULT_COMPANY_SYMBOL } from '../companySymbols'
 import { nextLineColor } from '../lineColors'
 import { isUsableLineNumber, nextFreeLineNumber } from '../lineNumber'
@@ -75,7 +75,7 @@ type Action =
   | { type: 'setCompanySymbol'; companyId: string; symbol: CompanySymbol }
   | { type: 'deleteCompany'; companyId: string }
   | { type: 'setLineCompany'; lineId: string; companyId: string | null }
-  | { type: 'addStation'; x: number; y: number }
+  | { type: 'addStation'; x: number; y: number; mode: LineKind }
   | { type: 'moveStations'; ids: string[]; dx: number; dy: number }
   | { type: 'mergeStations'; survivorId: string; mergedId: string }
   | { type: 'renameStation'; stationId: string; name: string }
@@ -88,7 +88,7 @@ type Action =
   | { type: 'insertLineStation'; lineId: string; x: number; y: number; index: number }
   | { type: 'addStationToLine'; lineId: string; stationId: string }
   | { type: 'startExtendLine'; lineId: string; end: 'start' | 'end' }
-  | { type: 'finishDraftLine'; createdAt: number }
+  | { type: 'finishDraftLine'; createdAt: number; kind: LineKind }
   | { type: 'cancelDraftLine' }
   | { type: 'addGeoPoint'; x: number; y: number }
   | { type: 'startExtendGeoFeature'; geoFeatureId: string; end: 'start' | 'end' }
@@ -384,7 +384,7 @@ function normalizeSnapshot(parsed: DataSnapshot): DataSnapshot {
   // since a line the order array forgot still has to satisfy the type. Re-deriving the
   // taken set per line is what keeps a partially-numbered save from colliding.
   for (const line of [...parsed.lineOrder.map(id => parsed.lines[id]), ...Object.values(parsed.lines)]) {
-    if (line && typeof line.number !== 'number') line.number = nextFreeLineNumber(Object.values(parsed.lines))
+    if (line && typeof line.number !== 'number') line.number = nextFreeLineNumber(Object.values(parsed.lines), lineKind(line))
   }
 
   for (const line of Object.values(parsed.lines)) {
@@ -732,6 +732,8 @@ function reducer(rawState: MapState, action: Action): MapState {
         y: action.y,
         transfer: false,
         main: false,
+        // Metro is left absent so the JSON stays clean of the default; only rail is written.
+        ...(action.mode === 'rail' ? { mode: 'rail' as const } : {}),
       }
       return {
         ...state,
@@ -949,13 +951,15 @@ function reducer(rawState: MapState, action: Action): MapState {
       const id = `line-${state.nextLineNumber}`
       const line: Line = {
         id,
-        number: nextFreeLineNumber(Object.values(state.lines)),
+        number: nextFreeLineNumber(Object.values(state.lines), action.kind),
         name: pickLineName(new Set(Object.values(state.lines).map(l => l.name))),
         color: nextLineColor(state.lineOrder.length),
         nodes: state.draftLineNodes,
         visible: true,
         companyId: null,
         createdAt: action.createdAt,
+        // Metro is left absent so the JSON stays clean of the default; only rail is written.
+        ...(action.kind === 'rail' ? { kind: 'rail' as const } : {}),
       }
       return {
         ...state,
@@ -1238,7 +1242,9 @@ function reducer(rawState: MapState, action: Action): MapState {
       // invariant is enforced here rather than trusted to the caller — the UI blocks a
       // clash before it gets this far, but a bad number must not be able to land at all.
       if (!isUsableLineNumber(action.number)) return state
-      if (Object.values(state.lines).some(other => other.id !== line.id && other.number === action.number)) return state
+      // Same-kind clash only: a metro Line 1 and a rail Line 1 coexist, so a number is free
+      // as long as no line of the *same* type already wears it.
+      if (Object.values(state.lines).some(other => other.id !== line.id && other.number === action.number && lineKind(other) === lineKind(line))) return state
       return { ...state, lines: { ...state.lines, [action.lineId]: { ...line, number: action.number } } }
     }
 
@@ -1457,7 +1463,7 @@ export function useMapState() {
     (lineId: string, companyId: string | null) => dispatch({ type: 'setLineCompany', lineId, companyId }),
     [],
   )
-  const addStation = useCallback((x: number, y: number) => dispatch({ type: 'addStation', x, y }), [])
+  const addStation = useCallback((x: number, y: number, mode: LineKind) => dispatch({ type: 'addStation', x, y, mode }), [])
   const moveStations = useCallback(
     (ids: string[], dx: number, dy: number) => dispatch({ type: 'moveStations', ids, dx, dy }),
     [],
@@ -1495,7 +1501,7 @@ export function useMapState() {
     (lineId: string, end: 'start' | 'end') => dispatch({ type: 'startExtendLine', lineId, end }),
     [],
   )
-  const finishDraftLine = useCallback(() => dispatch({ type: 'finishDraftLine', createdAt: Date.now() }), [])
+  const finishDraftLine = useCallback((kind: LineKind) => dispatch({ type: 'finishDraftLine', createdAt: Date.now(), kind }), [])
   const popDraftLineNode = useCallback(() => dispatch({ type: 'popDraftLineNode' }), [])
   const popDraftGeoPoint = useCallback(() => dispatch({ type: 'popDraftGeoPoint' }), [])
   const cancelDraftLine = useCallback(() => dispatch({ type: 'cancelDraftLine' }), [])

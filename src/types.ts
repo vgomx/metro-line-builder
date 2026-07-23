@@ -9,6 +9,11 @@ export interface Station {
    * map without being one of the handful the city is organised around, so this is only ever
    * the map-maker's call. */
   main: boolean
+  /** The station's own transport mode, chosen when it's placed. Optional and absent-means-metro,
+   * so old maps load unchanged. It only decides the station's look — its square-or-circle shape —
+   * while it has no lines; once lines run through it, their modes are what it wears, so a metro
+   * stop on a rail line reads as rail regardless of how it was first placed. */
+  mode?: LineKind
 }
 
 /**
@@ -64,6 +69,11 @@ export interface Company {
   symbol: CompanySymbol
 }
 
+/** What a line runs. Metro is the default and the majority; rail is the mainline/suburban kind,
+ * drawn as a double track and stopping at square stations. An enum rather than a boolean so the
+ * next kind — tram, BRT — is a value here rather than a second flag to reconcile against this one. */
+export type LineKind = 'metro' | 'rail'
+
 export interface Line {
   id: string
   /** The line's public number, as riders know it — São Paulo's 1, 2, 3. Distinct from `id`,
@@ -79,6 +89,18 @@ export interface Line {
   /** When the line was drawn, for the "Created" sort. Optional: lines saved before this existed
    * have none, and fall back to their position in the manual order. */
   createdAt?: number
+  /** What the line runs. Optional and absent-means-metro, so every map saved before rail existed
+   * loads as all-metro without a migration — the same shape `createdAt` takes. */
+  kind?: LineKind
+}
+
+/** A line's kind, resolving the absent-means-metro default in one place so no caller has to. */
+export function lineKind(line: Line): LineKind {
+  return line.kind ?? 'metro'
+}
+
+export function isRailLine(line: Line): boolean {
+  return line.kind === 'rail'
 }
 
 export type GeoFeatureType = 'river' | 'park'

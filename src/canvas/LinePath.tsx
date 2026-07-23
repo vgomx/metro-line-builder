@@ -22,6 +22,13 @@ const HOVER_MS = 160
 const STROKE_WIDTH = 5
 const STROKE_WIDTH_SELECTED = 7
 /**
+ * Half the width of one rail — the gap the centre stripe eats out of each side of a rail line.
+ * Kept small on purpose: the rail line's total width has to match a metro line's, because shared
+ * corridors space their lanes LANE_WIDTH (7) apart assuming a ~5px stroke, and a rail line wider
+ * than that would overrun the lane beside it. So rail spends the same footprint, split into two.
+ */
+const RAIL_GAUGE = 1.6
+/**
  * How much a line thickens under the pointer. Kept to 1.5 by the fan as much as by taste: a
  * shared corridor spaces its lanes LANE_WIDTH (7) apart, so a 5px line has only 2px of air
  * either side, and swelling much past this would have a hovered line touch the one beside it.
@@ -38,9 +45,12 @@ export function LinePath({ line, geometry, selected, revealing, segmentLineMap, 
   const d = buildLinePath(geometry, line.id, segmentLineMap)
   if (!d) return null
 
+  const rail = line.kind === 'rail'
+
   // Held back while the line sketches itself on, so the swell doesn't fight the draw-on for
   // the same stroke.
   const lifted = hovered && !revealing
+  const fullWidth = (selected ? STROKE_WIDTH_SELECTED : STROKE_WIDTH) + (lifted ? HOVER_GROWTH : 0)
 
   const handleClick = (e: MouseEvent<SVGPathElement>) => {
     e.stopPropagation()
@@ -85,12 +95,30 @@ export function LinePath({ line, geometry, selected, revealing, segmentLineMap, 
         d={d}
         fill="none"
         stroke={line.color}
-        strokeWidth={(selected ? STROKE_WIDTH_SELECTED : STROKE_WIDTH) + (lifted ? HOVER_GROWTH : 0)}
+        strokeWidth={fullWidth}
         strokeLinecap="round"
         strokeLinejoin="round"
         opacity={selected || lifted ? 1 : 0.9}
         {...revealProps}
       />
+      {/* Rail is a double track: a page-coloured stripe punched down the centre of the same
+          stroke, leaving two thin rails of the line's colour either side. The page colour is the
+          hole the station beads already use, so the two tricks read as one material. It carries
+          the same reveal so it draws on hollow rather than filling solid and splitting at the end,
+          and it never takes the pointer — the colour path beneath it is the whole hit area. The
+          line keeps its single id path, so trains still ride its centre and frameLine still finds
+          its bbox; nothing downstream knows the difference. */}
+      {rail && (
+        <path
+          d={d}
+          fill="none"
+          stroke="var(--bg-page)"
+          strokeWidth={Math.max(1.5, fullWidth - 2 * RAIL_GAUGE)}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          {...revealProps}
+        />
+      )}
       {/* Selected line reads as "live": a faint highlight streams along it. Skipped
           during the draw-on so the two animations don't fight for the same stroke. */}
       {selected && !revealing && (

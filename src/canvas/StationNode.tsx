@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import type { Station } from '../types'
+import type { LineKind, Station } from '../types'
+import { MODE_GLYPH_GAP, MODE_GLYPH_SIZE, ModeGlyphSvg, modeGlyphsWidth } from '../modeGlyphs'
 import type { LabelPlacement } from './labelPlacement'
 import { BASELINE_CENTRE, labelGeometry, LABEL_FONT_SIZE } from './labelPlacement'
 
@@ -10,6 +11,12 @@ interface StationNodeProps {
   inDraftLine: boolean
   /** True when the station sits on 2+ distinct lines — rendered as an interchange. */
   interchange: boolean
+  /** True when any rail line calls here — drawn as a rounded square rather than a circle, so the
+   * shape says the mode while the ink still says whether it's an interchange. */
+  rail: boolean
+  /** The distinct transport modes calling here, metro before rail. A main station that mixes two
+   * of them shows a glyph for each above its label — the modal interchange, spelled out. */
+  modes: LineKind[]
   /** The colour of the one line calling here, for a stop that serves exactly one. Interchanges
    * don't get one: black is what marks them out once the ordinary stops stop using it. */
   lineColor?: string
@@ -37,11 +44,63 @@ const LAND_MS = 320
 const DRAG_GROWTH = 2
 const HOVER_GROWTH = 1.5
 
+/**
+ * A station marker, drawn as a circle for metro and a rounded square for rail. Every one of the
+ * marker's rings routes through here, so the shape choice is made once — the fill/stroke logic
+ * above doesn't change, only what it draws onto. A square of side `2r` reads heavier than a circle
+ * of radius `r`, so rail is shrunk a touch to sit at the same visual weight as its metro neighbours.
+ *
+ * SVG geometry properties (r, x, y, width, height) are CSS-animatable, so the marker's hover/drag
+ * swell eases either way; the transition names differ because a circle grows `r` and a rect grows
+ * its box.
+ */
+function Mark({
+  rail,
+  r,
+  fill,
+  stroke,
+  strokeWidth,
+}: {
+  rail: boolean
+  r: number
+  fill: string
+  stroke: string
+  strokeWidth: number
+}) {
+  if (rail) {
+    const s = r * 0.9
+    return (
+      <rect
+        x={-s}
+        y={-s}
+        width={2 * s}
+        height={2 * s}
+        rx={Math.max(1.5, s * 0.34)}
+        fill={fill}
+        stroke={stroke === 'none' ? undefined : stroke}
+        strokeWidth={stroke === 'none' ? undefined : strokeWidth}
+        style={{ transition: 'x 150ms ease, y 150ms ease, width 150ms ease, height 150ms ease' }}
+      />
+    )
+  }
+  return (
+    <circle
+      r={r}
+      fill={fill}
+      stroke={stroke === 'none' ? undefined : stroke}
+      strokeWidth={stroke === 'none' ? undefined : strokeWidth}
+      style={{ transition: 'r 150ms ease' }}
+    />
+  )
+}
+
 export function StationNode({
   station,
   selected,
   inDraftLine,
   interchange,
+  rail,
+  modes,
   lineColor,
   dragging,
   landing,
@@ -70,7 +129,16 @@ export function StationNode({
   // Nothing about the marker changes: a principal station is one the eye should find by name,
   // and the map already spends its marker vocabulary on what the lines are doing.
   const isMain = station.main
-  const { labelX, labelY, cardX, cardY, cardW, cardH, lines } = labelGeometry(station, labelPlacement, isInterchange)
+  // A main station that mixes two modes carries a glyph for each inside its label; the card
+  // reserves the room so the placement search sizes the real box.
+  const showModes = isMain && modes.length >= 2
+  const glyphsWidth = showModes ? modeGlyphsWidth(modes.length) : 0
+  const { labelX, labelY, cardX, cardY, cardW, cardH, lines, glyphsX, glyphsY } = labelGeometry(
+    station,
+    labelPlacement,
+    isInterchange,
+    glyphsWidth,
+  )
 
   return (
     <g
@@ -118,36 +186,41 @@ export function StationNode({
           }
         >
           {isInterchange ? (
+            // An interchange stays a circle whatever mode meets there. The double ring is the
+            // "change here" mark, and it's the more important thing to say at a junction than which
+            // kind of line it is — a metro/rail transfer reads as a transfer first. So the square is
+            // reserved for a single rail stop; the moment a station becomes an interchange it rejoins
+            // the circle vocabulary, and the rail lines through it already show themselves as rail.
             <>
-              <circle
+              <Mark
+                rail={false}
                 r={drawnRadius}
                 fill={inDraftLine ? 'var(--brand-500)' : 'var(--bg-page)'}
                 stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
                 strokeWidth={3.5}
-                style={{ transition: 'r 150ms ease' }}
               />
-              <circle
+              <Mark
+                rail={false}
                 r={drawnRadius - 4.5}
                 fill="none"
                 stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
                 strokeWidth={1.25}
-                style={{ transition: 'r 150ms ease' }}
               />
             </>
           ) : (
-            <circle
+            // A single-line stop wears its line's colour rather than black, so the map's black is
+            // spent on interchanges alone — the places where a decision is made.
+            //
+            // Not the raw colour, though: measured against the page, four of the ten line colours
+            // fall under 2:1 in one theme or the other — yellow disappears on a light page, purple
+            // and graphite on a dark one — and since the bead is a page-coloured hole inside that
+            // ring, low contrast means an invisible stop. Mixing a third of the ink in pulls every
+            // colour back to a legible edge while leaving the hue recognisable, and because the ink
+            // is themed, the mix darkens on light pages and lightens on dark ones without a second rule.
+            <Mark
+              rail={rail}
               r={drawnRadius}
               fill={inDraftLine ? 'var(--brand-500)' : 'var(--bg-page)'}
-              // A single-line stop wears its line's colour rather than black, so the map's
-              // black is spent on interchanges alone — the places where a decision is made.
-              //
-              // Not the raw colour, though: measured against the page, four of the ten line
-              // colours fall under 2:1 in one theme or the other — yellow disappears on a light
-              // page, purple and graphite on a dark one — and since the bead is a page-coloured
-              // hole inside that ring, low contrast means an invisible stop. Mixing a third of
-              // the ink in pulls every colour back to a legible edge while leaving the hue
-              // recognisable, and because the ink is themed, the mix darkens on light pages and
-              // lightens on dark ones without a second rule.
               stroke={
                 inDraftLine
                   ? 'var(--brand-500)'
@@ -156,7 +229,6 @@ export function StationNode({
                     : 'var(--text-primary)'
               }
               strokeWidth={2.5}
-              style={{ transition: 'r 150ms ease' }}
             />
           )}
         </g>
@@ -192,6 +264,25 @@ export function StationNode({
             </tspan>
           ))}
         </text>
+
+        {/* The modes that meet here, glyphed inside the label's right end — but only where a main
+            station mixes two of them, which is the modal interchange the icons are for. A single-mode
+            stop shows nothing: the whole map is one mode by default, so a lone glyph would say little.
+            Inverted, because a main station's plate is a dark pill and the name on it is inverted too. */}
+        {showModes && (
+          <g pointerEvents="none">
+            {modes.map((mode, i) => (
+              <ModeGlyphSvg
+                key={mode}
+                mode={mode}
+                x={glyphsX + i * (MODE_GLYPH_SIZE + MODE_GLYPH_GAP)}
+                y={glyphsY - MODE_GLYPH_SIZE / 2}
+                size={MODE_GLYPH_SIZE}
+                color="var(--text-inverse)"
+              />
+            ))}
+          </g>
+        )}
       </g>
     </g>
   )

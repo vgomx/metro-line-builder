@@ -41,7 +41,7 @@ import { useScoreEvents } from './state/useScoreEvents'
 import { ScoreBadge } from './components/ScoreBadge'
 import { playSequence, playSound } from './sound'
 import type { SoundName } from './sound'
-import type { Line, Tool } from './types'
+import type { Line, LineKind, Tool } from './types'
 import { openMojiLabel } from './openmoji'
 
 // The canvas runs edge to edge underneath the floating toolbar and panel, so the parts of
@@ -133,6 +133,15 @@ function App() {
   // isn't undoable, and doesn't belong in a snapshot.
   const [journeyFromId, setJourneyFromId] = useState<string | null>(null)
   const [journeyToId, setJourneyToId] = useState<string | null>(null)
+
+  // The type the next drawn line will be. Set by which section's "Add" button started the draw —
+  // "Add rail line" pins it to rail — and reset to metro on any tool change, so a line drawn via
+  // the keyboard or toolbar (not the rail section) is metro. It lives here rather than in the map
+  // because it is an intent about the next edit, not a fact about the map.
+  const [pendingLineKind, setPendingLineKind] = useState<LineKind>('metro')
+  // The mode the next placed station takes — chosen from the Add-station tool's picker. Its own
+  // mode only shows while it has no lines; the picker just seeds that.
+  const [pendingStationMode, setPendingStationMode] = useState<LineKind>('metro')
 
   /**
    * Whether the journey tool is up.
@@ -472,9 +481,26 @@ function App() {
       setTool(tool)
       // Putting the landmark tool down puts the symbol down with it.
       if (tool !== 'add-poi') setArmedPoi(null)
+      // Entering the pen from anywhere but the rail section means a metro line; the rail section
+      // overrides this straight after, so the last writer (rail) wins.
+      setPendingLineKind('metro')
     },
     [setTool],
   )
+
+  // Draw a new line of a given type: pin the pending kind, then drop into the pen. Order matters —
+  // handleSetTool resets the kind to metro, so rail is set after it.
+  const handleAddLine = useCallback(
+    (kind: LineKind) => {
+      handleSetTool('draw-line')
+      setPendingLineKind(kind)
+    },
+    [handleSetTool],
+  )
+
+  // Finish the drawn line as whatever the pending kind is. The reducer stamps the kind and picks
+  // the line's number from that kind's own 1..N.
+  const handleFinishDraftLine = useCallback(() => finishDraftLine(pendingLineKind), [finishDraftLine, pendingLineKind])
 
   const selectedLine =
     state.selectedLineIds.length === 1 && state.selectedStationIds.length === 0 && state.selectedGeoFeatureIds.length === 0
@@ -522,7 +548,7 @@ function App() {
           finishLabel: state.draftLineId
             ? `Update line (${state.draftLineNodes.length} points)`
             : `Finish line (${state.draftLineNodes.length} points)`,
-          onFinish: finishDraftLine,
+          onFinish: handleFinishDraftLine,
         }
       : geoType
         ? {
@@ -587,13 +613,13 @@ function App() {
             showGrid={showGrid}
             showTrains={showTrains}
             viewportInsets={insets}
-            onAddStation={withSound('station', addStation)}
+            onAddStation={withSound('station', (x: number, y: number) => addStation(x, y, pendingStationMode))}
             onMoveStations={moveStations}
             onMergeStations={withSound('lineDone', mergeStations)}
             onAppendDraftLineNode={withSound('node', appendDraftLineNode)}
             onInsertDraftLineStation={withSound('station', insertDraftLineStation)}
             onInsertLineStation={withSound('station', insertLineStation)}
-            onFinishDraftLine={withSound('lineDone', finishDraftLine)}
+            onFinishDraftLine={withSound('lineDone', handleFinishDraftLine)}
             onPopDraftPoint={withSound('remove', () => (state.draftLineNodes.length > 0 ? popDraftLineNode() : popDraftGeoPoint()))}
             onCancelDraftLine={cancelDraftLine}
             onAddGeoPoint={withSound('node', addGeoPoint)}
@@ -800,7 +826,16 @@ function App() {
           }}
         />
 
-        <LeftToolbar tool={state.tool} onSetTool={handleSetTool} theme={theme} onStartOver={() => setShowWelcome(true)} />
+        <LeftToolbar
+          tool={state.tool}
+          onSetTool={handleSetTool}
+          lineKind={pendingLineKind}
+          onLineKind={setPendingLineKind}
+          stationMode={pendingStationMode}
+          onStationMode={setPendingStationMode}
+          theme={theme}
+          onStartOver={() => setShowWelcome(true)}
+        />
 
         {state.tool === 'add-poi' && (
           <PoiPicker
@@ -899,7 +934,7 @@ function App() {
               onSelectCompany={handleSelectCompany}
               onReorderLine={reorderLine}
               onToggleLineVisibility={withSound('toggle', toggleLineVisibility)}
-              onAddLine={() => handleSetTool('draw-line')}
+              onAddLine={handleAddLine}
               onAddRiver={() => handleSetTool('draw-river')}
               onAddPark={() => handleSetTool('draw-park')}
               onAddPoi={() => handleSetTool('add-poi')}

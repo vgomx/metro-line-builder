@@ -9,7 +9,7 @@ import { CompaniesPanel } from './CompaniesPanel'
 import { Inspector } from './Inspector'
 import { JourneyPanel } from './JourneyPanel'
 import { HoverTip } from './HoverTip'
-import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
+import type { Company, GeoFeature, Line, LineKind, PointOfInterest, Station } from '../types'
 import type { RideProgress } from '../canvas/trainMotion'
 import type { Journey } from '../journey'
 
@@ -52,7 +52,7 @@ interface RightPanelProps {
   onSelectCompany: (companyId: string) => void
   onToggleLineVisibility: (lineId: string) => void
   onReorderLine: (lineId: string, toIndex: number) => void
-  onAddLine: () => void
+  onAddLine: (kind: LineKind) => void
   onAddRiver: () => void
   onAddPark: () => void
   onAddPoi: () => void

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { LineIndicator } from 'metro-ds'
 import type { Line, Station } from '../types'
+import { LineBadge } from './LineBadge'
 
 interface StationSelectProps {
   label: string
@@ -172,7 +172,7 @@ function LineNumbers({ lines }: { lines: Line[] }) {
   return (
     <span style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
       {shown.map(line => (
-        <LineIndicator key={line.id} id={String(line.number)} color={line.color} shape="circle" size="xs" />
+        <LineBadge key={line.id} line={line} shape="circle" size="xs" />
       ))}
       {extra > 0 && <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>+{extra}</span>}
     </span>
