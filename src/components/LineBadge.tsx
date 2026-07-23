@@ -33,18 +33,19 @@ export function LineBadge({ line, shape, size }: { line: Line; shape: 'pill' | '
   }
 
   if (shape === 'circle') {
-    const d = size === 'xs' ? 16 : 20
+    const d = size === 'xs' ? 18 : 22
     return (
-      <span style={{ ...shared, width: `${d}px`, height: `${d}px`, borderRadius: '50%', fontSize: size === 'xs' ? '9px' : '11px' }}>
+      <span style={{ ...shared, width: `${d}px`, height: `${d}px`, borderRadius: '50%', fontSize: size === 'xs' ? '10px' : '11px' }}>
         {line.number}
       </span>
     )
   }
 
-  // Matched to the design system's pill indicator (height, min-width, font) so a rail badge sits
-  // level with the metro badges beside it in the list.
+  // Matched to the design system's pill indicator — its size="sm" measures 22px tall, 35px min
+  // wide, 11px Barlow Condensed — so a rail badge sits level with the metro badges beside it in
+  // the list rather than reading as a smaller sibling.
   return (
-    <span style={{ ...shared, minWidth: '29px', height: '18px', padding: '0 8px', borderRadius: '9999px', fontSize: '9px', letterSpacing: '-0.09px' }}>
+    <span style={{ ...shared, minWidth: '35px', height: '22px', padding: '0 9px', borderRadius: '9999px', fontSize: '11px', letterSpacing: '-0.01em' }}>
       {line.number}
     </span>
   )
