@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import type { Station } from '../types'
+import type { LineKind, Station } from '../types'
+import { ModeGlyphSvg } from '../modeGlyphs'
 import type { LabelPlacement } from './labelPlacement'
 import { BASELINE_CENTRE, labelGeometry, LABEL_FONT_SIZE } from './labelPlacement'
 
@@ -13,6 +14,9 @@ interface StationNodeProps {
   /** True when any rail line calls here — drawn as a rounded square rather than a circle, so the
    * shape says the mode while the ink still says whether it's an interchange. */
   rail: boolean
+  /** The distinct transport modes calling here, metro before rail. A main station that mixes two
+   * of them shows a glyph for each above its label — the modal interchange, spelled out. */
+  modes: LineKind[]
   /** The colour of the one line calling here, for a stop that serves exactly one. Interchanges
    * don't get one: black is what marks them out once the ordinary stops stop using it. */
   lineColor?: string
@@ -39,6 +43,9 @@ const LAND_MS = 320
  * answer the cursor by the same amount. */
 const DRAG_GROWTH = 2
 const HOVER_GROWTH = 1.5
+/** Modal glyphs above a main interchange's label: size and the gap between them. */
+const MODE_GLYPH = 13
+const MODE_GAP = 3
 
 /**
  * A station marker, drawn as a circle for metro and a rounded square for rail. Every one of the
@@ -96,6 +103,7 @@ export function StationNode({
   inDraftLine,
   interchange,
   rail,
+  modes,
   lineColor,
   dragging,
   landing,
@@ -250,6 +258,25 @@ export function StationNode({
             </tspan>
           ))}
         </text>
+
+        {/* The modes that meet here, glyphed above the label — but only where a main station mixes
+            two of them, which is the modal interchange the icons are for. A single-mode stop shows
+            nothing: the whole map is one mode by default, so a lone glyph would say little. Sits
+            above the pill rather than inside it, so the placement search's card size stays honest. */}
+        {isMain && modes.length >= 2 && (
+          <g pointerEvents="none">
+            {modes.map((mode, i) => (
+              <ModeGlyphSvg
+                key={mode}
+                mode={mode}
+                x={cardX + cardW / 2 - (modes.length * MODE_GLYPH + (modes.length - 1) * MODE_GAP) / 2 + i * (MODE_GLYPH + MODE_GAP)}
+                y={cardY - MODE_GLYPH - 3}
+                size={MODE_GLYPH}
+                color="var(--text-primary)"
+              />
+            ))}
+          </g>
+        )}
       </g>
     </g>
   )

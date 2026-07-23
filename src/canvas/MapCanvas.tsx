@@ -1,7 +1,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import type { ZoomTransform } from 'd3-zoom'
-import type { GeoFeature, Line, LineNode, Point, PointOfInterest, Station, Tool } from '../types'
+import type { GeoFeature, Line, LineKind, LineNode, Point, PointOfInterest, Station, Tool } from '../types'
+import { lineKind } from '../types'
 import { useZoomPan } from './useZoomPan'
 import { useReducedMotion } from '../useReducedMotion'
 import type { ViewportInsets } from './useZoomPan'
@@ -1044,12 +1045,21 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   // that can serve both a metro and a rail line — so "rail station" is "a rail line stops here",
   // derived the same way interchange is, and a mixed metro/rail stop reads as rail.
   const railStationIds = new Set<string>()
+  // The distinct transport modes calling at each station — a main station that mixes two of them
+  // (metro + rail) is a modal interchange and wears a glyph for each.
+  const modesByStation = new Map<string, Set<LineKind>>()
   for (const line of lineList) {
     const isRail = line.kind === 'rail'
+    const mode = lineKind(line)
     for (const id of new Set(stationIdsOfLine(line))) {
       lineCountByStation[id] = (lineCountByStation[id] ?? 0) + 1
       if (line.visible) lineColorByStation[id] = line.color
       if (isRail && line.visible) railStationIds.add(id)
+      if (line.visible) {
+        let set = modesByStation.get(id)
+        if (!set) { set = new Set<LineKind>(); modesByStation.set(id, set) }
+        set.add(mode)
+      }
     }
   }
 
@@ -1522,6 +1532,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             inDraftLine={draftLineStationIdSet.has(station.id)}
             interchange={(lineCountByStation[station.id] ?? 0) >= 2}
             rail={railStationIds.has(station.id)}
+            modes={[...(modesByStation.get(station.id) ?? [])].sort()}
             lineColor={lineCountByStation[station.id] === 1 ? lineColorByStation[station.id] : undefined}
             dragging={draggingStationIdSet.has(station.id)}
             landing={
