@@ -9,6 +9,11 @@ export interface Station {
    * map without being one of the handful the city is organised around, so this is only ever
    * the map-maker's call. */
   main: boolean
+  /** The station's own transport mode, chosen when it's placed. Optional and absent-means-metro,
+   * so old maps load unchanged. It only decides the station's look — its square-or-circle shape —
+   * while it has no lines; once lines run through it, their modes are what it wears, so a metro
+   * stop on a rail line reads as rail regardless of how it was first placed. */
+  mode?: LineKind
 }
 
 /**

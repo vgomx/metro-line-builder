@@ -139,6 +139,9 @@ function App() {
   // the keyboard or toolbar (not the rail section) is metro. It lives here rather than in the map
   // because it is an intent about the next edit, not a fact about the map.
   const [pendingLineKind, setPendingLineKind] = useState<LineKind>('metro')
+  // The mode the next placed station takes — chosen from the Add-station tool's picker. Its own
+  // mode only shows while it has no lines; the picker just seeds that.
+  const [pendingStationMode, setPendingStationMode] = useState<LineKind>('metro')
 
   /**
    * Whether the journey tool is up.
@@ -610,7 +613,7 @@ function App() {
             showGrid={showGrid}
             showTrains={showTrains}
             viewportInsets={insets}
-            onAddStation={withSound('station', addStation)}
+            onAddStation={withSound('station', (x: number, y: number) => addStation(x, y, pendingStationMode))}
             onMoveStations={moveStations}
             onMergeStations={withSound('lineDone', mergeStations)}
             onAppendDraftLineNode={withSound('node', appendDraftLineNode)}
@@ -823,7 +826,16 @@ function App() {
           }}
         />
 
-        <LeftToolbar tool={state.tool} onSetTool={handleSetTool} theme={theme} onStartOver={() => setShowWelcome(true)} />
+        <LeftToolbar
+          tool={state.tool}
+          onSetTool={handleSetTool}
+          lineKind={pendingLineKind}
+          onLineKind={setPendingLineKind}
+          stationMode={pendingStationMode}
+          onStationMode={setPendingStationMode}
+          theme={theme}
+          onStartOver={() => setShowWelcome(true)}
+        />
 
         {state.tool === 'add-poi' && (
           <PoiPicker

@@ -1045,17 +1045,14 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   // Stations any rail line calls at. Rail is a property of the line, but a stop is a shared node
   // that can serve both a metro and a rail line — so "rail station" is "a rail line stops here",
   // derived the same way interchange is, and a mixed metro/rail stop reads as rail.
-  const railStationIds = new Set<string>()
   // The distinct transport modes calling at each station — a main station that mixes two of them
   // (metro + rail) is a modal interchange and wears a glyph for each.
   const modesByStation = new Map<string, Set<LineKind>>()
   for (const line of lineList) {
-    const isRail = line.kind === 'rail'
     const mode = lineKind(line)
     for (const id of new Set(stationIdsOfLine(line))) {
       lineCountByStation[id] = (lineCountByStation[id] ?? 0) + 1
       if (line.visible) lineColorByStation[id] = line.color
-      if (isRail && line.visible) railStationIds.add(id)
       if (line.visible) {
         let set = modesByStation.get(id)
         if (!set) { set = new Set<LineKind>(); modesByStation.set(id, set) }
@@ -1528,15 +1525,21 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           )
         })}
 
-        {stationList.map(station => (
+        {stationList.map(station => {
+          // A station's modes are the modes of the lines through it; with no lines, its own mode
+          // (from how it was placed) stands in. So a stop reads as rail once a rail line runs
+          // through it, and a freshly placed rail station is a square before any line arrives.
+          const lineModes = modesByStation.get(station.id)
+          const modes = (lineModes && lineModes.size > 0 ? [...lineModes] : [station.mode ?? 'metro']).sort()
+          return (
           <StationNode
             key={station.id}
             station={station}
             selected={selectedStationIds.includes(station.id)}
             inDraftLine={draftLineStationIdSet.has(station.id)}
             interchange={(lineCountByStation[station.id] ?? 0) >= 2}
-            rail={railStationIds.has(station.id)}
-            modes={[...(modesByStation.get(station.id) ?? [])].sort()}
+            rail={modes.includes('rail')}
+            modes={modes}
             lineColor={lineCountByStation[station.id] === 1 ? lineColorByStation[station.id] : undefined}
             dragging={draggingStationIdSet.has(station.id)}
             landing={
@@ -1551,7 +1554,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             onClick={handleStationClick}
             onDoubleClick={s => tool === 'select' && onRenameRequest('station', s.id)}
           />
-        ))}
+          )
+        })}
 
         {/* The air a landing landmark shoves aside. Drawn before the markers so the rings
             spread out from under the one that just arrived rather than over it. */}

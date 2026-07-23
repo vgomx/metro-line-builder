@@ -75,7 +75,7 @@ type Action =
   | { type: 'setCompanySymbol'; companyId: string; symbol: CompanySymbol }
   | { type: 'deleteCompany'; companyId: string }
   | { type: 'setLineCompany'; lineId: string; companyId: string | null }
-  | { type: 'addStation'; x: number; y: number }
+  | { type: 'addStation'; x: number; y: number; mode: LineKind }
   | { type: 'moveStations'; ids: string[]; dx: number; dy: number }
   | { type: 'mergeStations'; survivorId: string; mergedId: string }
   | { type: 'renameStation'; stationId: string; name: string }
@@ -732,6 +732,8 @@ function reducer(rawState: MapState, action: Action): MapState {
         y: action.y,
         transfer: false,
         main: false,
+        // Metro is left absent so the JSON stays clean of the default; only rail is written.
+        ...(action.mode === 'rail' ? { mode: 'rail' as const } : {}),
       }
       return {
         ...state,
@@ -1461,7 +1463,7 @@ export function useMapState() {
     (lineId: string, companyId: string | null) => dispatch({ type: 'setLineCompany', lineId, companyId }),
     [],
   )
-  const addStation = useCallback((x: number, y: number) => dispatch({ type: 'addStation', x, y }), [])
+  const addStation = useCallback((x: number, y: number, mode: LineKind) => dispatch({ type: 'addStation', x, y, mode }), [])
   const moveStations = useCallback(
     (ids: string[], dx: number, dy: number) => dispatch({ type: 'moveStations', ids, dx, dy }),
     [],
