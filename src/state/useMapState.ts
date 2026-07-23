@@ -6,7 +6,7 @@ import { nextLineColor } from '../lineColors'
 import { isUsableLineNumber, nextFreeLineNumber } from '../lineNumber'
 import { snapToGrid, snapToPoiGrid } from '../grid'
 import { MIN_GEO_POINTS } from '../geoDraft'
-import { pickLineName, pickMapName, pickStationName } from '../names'
+import { pickCompanyName, pickLineName, pickMapName, pickStationName } from '../names'
 import { buildRandomMap } from '../generate'
 import { exactSegmentIndex, exclusiveStationIds, lineHasStation, lineRouteIndexThrough, resolveLineNodes, sameNode } from '../canvas/lineNodes'
 
@@ -661,7 +661,12 @@ function reducer(rawState: MapState, action: Action): MapState {
 
     case 'addCompany': {
       const id = `company-${state.nextCompanyNumber}`
-      const company: Company = { id, name: `Company ${state.nextCompanyNumber}`, type: 'public', symbol: DEFAULT_COMPANY_SYMBOL }
+      const company: Company = {
+        id,
+        name: pickCompanyName(new Set(Object.values(state.companies).map(c => c.name))),
+        type: 'public',
+        symbol: DEFAULT_COMPANY_SYMBOL,
+      }
       return {
         ...state,
         companies: { ...state.companies, [id]: company },
