@@ -1,10 +1,9 @@
-import { IconButton } from 'metro-ds'
+import { Button } from 'metro-ds'
 import type { Company, Line, Station } from '../types'
 import type { Journey } from '../journey'
 import { CompanySymbolIcon } from '../companySymbols'
 import { AuthoritySealIcon } from '../authoritySeal'
 import { SwapIcon } from '../icons'
-import { HoverTip } from './HoverTip'
 import { StationSelect } from './StationSelect'
 
 interface JourneyPanelProps {
@@ -81,19 +80,17 @@ export function JourneyPanel({
 
         {/* Reversing a journey is the commonest second question a rider asks, and retyping both
             ends to get there is busywork. It sits in the gap between the two fields, which is
-            where the exchange it performs actually happens — and being between them, it no longer
-            has to borrow a field's height to stay level with one. */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '-2px 0' }}>
-          <HoverTip label="Swap" placement="bottom">
-            <IconButton
-              icon={<SwapIcon />}
-              label="Swap from and to"
-              variant="ghost"
-              size="sm"
-              disabled={!fromId && !toId}
-              onClick={onSwap}
-            />
-          </HoverTip>
+            where the exchange it performs actually happens, and centred over the pair it acts on
+            rather than tucked against one edge.
+
+            Labelled rather than icon-only: two arrows passing each other is a shape you have to
+            already know, and a control that appears once in a panel doesn't get the repetition
+            that teaches it. The word also drops the tooltip and the aria-label, which existed to
+            say what the button can now simply say. */}
+        <div style={{ display: 'flex', justifyContent: 'center', margin: '-2px 0' }}>
+          <Button variant="ghost" size="sm" icon={<SwapIcon />} disabled={!fromId && !toId} onClick={onSwap}>
+            Swap
+          </Button>
         </div>
 
         <StationSelect
