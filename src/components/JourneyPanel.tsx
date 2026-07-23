@@ -1,7 +1,8 @@
-import { Select } from 'metro-ds'
-import type { Line, Station } from '../types'
+import type { Company, Line, Station } from '../types'
 import type { Journey } from '../journey'
+import { CompanySymbolIcon } from '../companySymbols'
 import { HoverTip } from './HoverTip'
+import { StationSelect } from './StationSelect'
 
 interface JourneyPanelProps {
   fromId: string | null
@@ -10,6 +11,9 @@ interface JourneyPanelProps {
   journey: Journey | null
   stationList: Station[]
   lineList: Line[]
+  companyList: Company[]
+  /** What the authority is called on this map — the operator every unassigned line falls back to. */
+  authorityDisplayName: string
   stations: Record<string, Station>
   onSetFrom: (id: string | null) => void
   onSetTo: (id: string | null) => void
@@ -36,14 +40,28 @@ export function JourneyPanel({
   journey,
   stationList,
   lineList,
+  companyList,
+  authorityDisplayName,
   stations,
   onSetFrom,
   onSetTo,
   onSwap,
 }: JourneyPanelProps) {
-  const options = stationList
-    .map(s => ({ label: s.name.trim() || 'Unnamed station', value: s.id }))
-    .sort((a, b) => a.label.localeCompare(b.label))
+  // Which lines call at each station, in list order. Built once here rather than rescanned for
+  // every option — a select of 26 stations would otherwise walk the whole network 26 times.
+  const linesByStation = new Map<string, Line[]>()
+  for (const line of lineList) {
+    if (!line.visible) continue
+    for (const node of line.nodes) {
+      if (node.kind !== 'station') continue
+      const existing = linesByStation.get(node.stationId)
+      if (existing) {
+        if (!existing.includes(line)) existing.push(line)
+      } else {
+        linesByStation.set(node.stationId, [line])
+      }
+    }
+  }
 
   const nameOf = (id: string) => stations[id]?.name?.trim() || 'Unnamed station'
 
@@ -51,19 +69,19 @@ export function JourneyPanel({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)', padding: '12px' }}>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm)' }}>
-          <Select
+          <StationSelect
             label="From"
-            options={options}
-            value={fromId ?? ''}
-            placeholder="Pick a station…"
-            onChange={value => onSetFrom(value ? String(value) : null)}
+            value={fromId}
+            stationList={stationList}
+            linesByStation={linesByStation}
+            onChange={onSetFrom}
           />
-          <Select
+          <StationSelect
             label="To"
-            options={options}
-            value={toId ?? ''}
-            placeholder="Pick a station…"
-            onChange={value => onSetTo(value ? String(value) : null)}
+            value={toId}
+            stationList={stationList}
+            linesByStation={linesByStation}
+            onChange={onSetTo}
           />
         </div>
         {/* Reversing a journey is the commonest second question a rider asks, and retyping both
@@ -188,8 +206,77 @@ export function JourneyPanel({
               )
             })}
           </div>
+
+          <Operators
+            journey={journey}
+            lineList={lineList}
+            companyList={companyList}
+            authorityDisplayName={authorityDisplayName}
+          />
         </>
       )}
+    </div>
+  )
+}
+
+/**
+ * Who runs the trains on this journey — the small print at the foot of a ticket.
+ *
+ * Deliberately quiet: it answers a question a rider only sometimes has, and it must not compete
+ * with the itinerary above it. Each operator appears once however many of the journey's lines it
+ * runs, in the order first ridden, so it reads as a list of companies rather than a list of legs.
+ */
+function Operators({
+  journey,
+  lineList,
+  companyList,
+  authorityDisplayName,
+}: {
+  journey: Journey
+  lineList: Line[]
+  companyList: Company[]
+  authorityDisplayName: string
+}) {
+  const seen = new Set<string>()
+  const operators: { key: string; name: string; company: Company | null }[] = []
+
+  for (const leg of journey.legs) {
+    const line = lineList.find(l => l.id === leg.lineId)
+    // An unassigned line is the authority's, which is what the map says everywhere else too.
+    const company = (line?.companyId ? companyList.find(c => c.id === line.companyId) : null) ?? null
+    const key = company?.id ?? 'authority'
+    if (seen.has(key)) continue
+    seen.add(key)
+    operators.push({ key, name: company ? company.name.trim() || 'Unnamed company' : authorityDisplayName, company })
+  }
+
+  if (operators.length === 0) return null
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: '4px 10px',
+        marginTop: '10px',
+        paddingTop: '8px',
+        borderTop: '1px solid var(--border-subtle)',
+        fontSize: '10px',
+        color: 'var(--text-muted)',
+      }}
+    >
+      <span style={{ letterSpacing: '0.04em', textTransform: 'uppercase' }}>Operated by</span>
+      {operators.map((op, index) => (
+        <span key={op.key} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', minWidth: 0 }}>
+          {/* Separates two operators when the row wraps and the gap alone stops reading as a
+              break. The authority wears no seal — it isn't a company — so without this the
+              names can run together into one apparent title. */}
+          {index > 0 && <span aria-hidden style={{ opacity: 0.5 }}>·</span>}
+          {op.company && <CompanySymbolIcon symbol={op.company.symbol} size={12} />}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{op.name}</span>
+        </span>
+      ))}
     </div>
   )
 }

@@ -295,6 +295,8 @@ export function RightPanel({
             journey={journey}
             stationList={stationList}
             lineList={lineList}
+            companyList={companyList}
+            authorityDisplayName={authorityDisplayName}
             stations={stations}
             onSetFrom={onSetJourneyFrom}
             onSetTo={onSetJourneyTo}
