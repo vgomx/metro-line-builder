@@ -217,6 +217,9 @@ function App() {
   const [zoom, setZoom] = useState(1)
   const [showGrid, setShowGrid] = useState(true)
   const [showTrains, setShowTrains] = useState(false)
+  // The map key in the corner. On by default — a legend is meant to be read; the top-bar toggle
+  // hides it for a clean view.
+  const [showLegend, setShowLegend] = useState(true)
   // The line whose train the viewport is riding, plus its live position along the route, or null
   // when no ride is on. One object so the camera, the trip view, and the announcer all read the
   // same source. `trainsBeforeRide` remembers whether trains were showing, to put the toggle back.
@@ -570,6 +573,8 @@ function App() {
         onZoomOut={() => mapCanvasRef.current?.zoomOut()}
         showGrid={showGrid}
         onToggleGrid={withSound('toggle', () => setShowGrid(g => !g))}
+        showLegend={showLegend}
+        onToggleLegend={withSound('toggle', () => setShowLegend(v => !v))}
         showTrains={showTrains}
         onToggleTrains={withSound('toggle', () => setShowTrains(t => !t))}
         showPanel={showPanel}
@@ -667,7 +672,7 @@ function App() {
           {/* The authority mark sits at the foot of the left edge now — it reads as the map's
               own nameplate, so it lives with the map rather than under the panel. */}
           <div style={{ position: 'absolute', bottom: 'var(--space-3)', left: 'var(--space-3)', pointerEvents: 'none', zIndex: 10 }}>
-            <CanvasLegend mapName={state.mapName} authorityName={state.authorityName} />
+            <CanvasLegend mapName={state.mapName} authorityName={state.authorityName} showKey={showLegend} />
           </div>
 
           <div

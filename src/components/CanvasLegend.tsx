@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react'
+import { MapKey } from './MapKey'
 import { AuthoritySealIcon } from '../authoritySeal'
 
 interface CanvasLegendProps {
   mapName: string
   authorityName: string
+  /** Whether the map key is shown, toggled from the top bar. */
+  showKey: boolean
 }
 
 /**
@@ -14,7 +17,7 @@ interface CanvasLegendProps {
  * Laid out by the column that owns it rather than pinning itself to a corner, so it stays
  * put as the panel above it flexes.
  */
-export function CanvasLegend({ mapName, authorityName }: CanvasLegendProps) {
+export function CanvasLegend({ mapName, authorityName, showKey }: CanvasLegendProps) {
   const primaryName = authorityName.trim() || mapName.trim() || 'Untitled Map'
 
   return (
@@ -28,6 +31,7 @@ export function CanvasLegend({ mapName, authorityName }: CanvasLegendProps) {
         pointerEvents: 'none',
       }}
     >
+      {showKey && <MapKey />}
       <AuthorityMark name={primaryName} />
     </div>
   )

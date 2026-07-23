@@ -6,6 +6,7 @@ import logoDarkUrl from 'metro-ds/assets/logo-horizontal-white.svg'
 import {
   FolderOpenIcon,
   GridIcon,
+  KeyIcon,
   MoonIcon,
   PanelIcon,
   RedoIcon,
@@ -56,6 +57,8 @@ interface TopBarProps {
   onZoomOut: () => void
   showGrid: boolean
   onToggleGrid: () => void
+  showLegend: boolean
+  onToggleLegend: () => void
   showTrains: boolean
   onToggleTrains: () => void
   showPanel: boolean
@@ -85,6 +88,8 @@ export function TopBar({
   onZoomOut,
   showGrid,
   onToggleGrid,
+  showLegend,
+  onToggleLegend,
   showTrains,
   onToggleTrains,
   showPanel,
@@ -209,6 +214,19 @@ export function TopBar({
             size="sm"
             active={showGrid}
             onClick={onToggleGrid}
+          />
+        </HoverTip>
+        <HoverTip label="Toggle key" placement="bottom">
+          <IconButton
+            icon={
+              <ToggleIcon on={showLegend}>
+                <KeyIcon />
+              </ToggleIcon>
+            }
+            label="Toggle key"
+            size="sm"
+            active={showLegend}
+            onClick={onToggleLegend}
           />
         </HoverTip>
         <HoverTip label="Toggle trains" placement="bottom">

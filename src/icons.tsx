@@ -315,3 +315,13 @@ export const SwapIcon = () => (
     <path d="M9.5 11.5v-9M9.5 11.5l2-2.1M9.5 11.5l-2-2.1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 )
+
+/** A legend/key: sample marks beside their meaning — a couple of rows, each a swatch and a line. */
+export const KeyIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <circle cx="3.5" cy="4.5" r="2" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M8 4.5h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <rect x="1.6" y="9.6" width="3.8" height="3.8" rx="1" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M8 11.5h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+)
