@@ -151,6 +151,9 @@ export interface LabelGeometry {
 
 /** The gap between the name and the mode glyphs sharing its card. */
 const LABEL_GLYPH_GAP = 5
+/** The pad after the glyphs, kept below the card's own padX to offset the whitespace baked into an
+ * OpenMoji glyph's box — so the visible right margin matches the name's on the left. */
+const GLYPH_EDGE_PAD = 5
 
 /** A station name wraps past this, so one long name can't drive a card across its
  * neighbours. Wide enough that the names in the generator's own pool stay on one line. */
@@ -182,10 +185,6 @@ export function labelGeometry(
   const lines = wrapLabel(station.name, STATION_LABEL_MAX_WIDTH, LABEL_FONT_SIZE, 2)
   // The widest line sets the card, and every line has to fit inside it.
   const textWidth = lines.length > 0 ? Math.max(...lines.map(measureLabelWidth)) : 0
-  // Space kept at the card's right for the mode glyphs, if any — the name is positioned exactly as
-  // it would be without them, and the card simply grows to the right to hold them, so a station
-  // gaining or losing a glyph doesn't shift its name.
-  const reserve = glyphsWidth > 0 ? glyphsWidth + LABEL_GLYPH_GAP : 0
   const cardW = textWidth + padX * 2
   const cardH = LABEL_FONT_SIZE * lines.length + CARD_PAD_Y * 2
   const cardX =
@@ -194,6 +193,12 @@ export function labelGeometry(
       : placement.anchor === 'end'
         ? labelX - textWidth - padX
         : labelX - cardW / 2
+  // Space kept at the card's right for the mode glyphs, if any — the name is positioned exactly as
+  // it would be without them, and the card simply grows to the right to hold them, so a station
+  // gaining or losing a glyph doesn't shift its name. The pad after the glyphs is smaller than the
+  // card's own: an OpenMoji glyph carries a wide margin inside its own box, so a full padX beyond
+  // it reads as a bigger gap than the name has on the left.
+  const reserve = glyphsWidth > 0 ? LABEL_GLYPH_GAP + glyphsWidth + GLYPH_EDGE_PAD - padX : 0
   const fullW = cardW + reserve
 
   return {
@@ -205,8 +210,7 @@ export function labelGeometry(
     cardH,
     textWidth,
     lines,
-    // Right-aligned inside the card's padding; vertically centred.
-    glyphsX: cardX + fullW - padX - glyphsWidth,
+    glyphsX: cardX + fullW - GLYPH_EDGE_PAD - glyphsWidth,
     glyphsY: labelY,
   }
 }
