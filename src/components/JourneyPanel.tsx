@@ -86,11 +86,22 @@ export function JourneyPanel({
             Labelled rather than icon-only: two arrows passing each other is a shape you have to
             already know, and a control that appears once in a panel doesn't get the repetition
             that teaches it. The word also drops the tooltip and the aria-label, which existed to
-            say what the button can now simply say. */}
-        <div style={{ display: 'flex', justifyContent: 'center', margin: '-2px 0' }}>
+            say what the button can now simply say.
+
+            Rules either side, so it reads as something acting on the pair rather than a third
+            thing stacked between them — a divider between the two halves of the question, with the
+            control that reverses them sitting in it.
+
+            Both margins are set rather than relying on the column's 2px gap: that gap left the
+            button two pixels off the "To" label and twelve from the field above, so it read as
+            belonging to the field below instead of to the space between. A hair more above than
+            below, because the label's own leading already supplies some of the room underneath. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px', marginBottom: '8px' }}>
+          <Rule />
           <Button variant="ghost" size="sm" icon={<SwapIcon />} disabled={!fromId && !toId} onClick={onSwap}>
             Swap
           </Button>
+          <Rule />
         </div>
 
         <StationSelect
@@ -267,6 +278,11 @@ function Operators({
       ))}
     </div>
   )
+}
+
+/** A hairline running out to the panel's edge, flanking the control it belongs to. */
+function Rule() {
+  return <span aria-hidden style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
 }
 
 function Stop({ color, top, bottom }: { color: string; top?: string; bottom?: string }) {
