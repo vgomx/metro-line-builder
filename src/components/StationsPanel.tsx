@@ -6,14 +6,18 @@ import { isTransferStation, lineHasStation } from '../canvas/lineNodes'
 import { LineBadge } from './LineBadge'
 import { StationMark, stationMarkColor, stationMarkKind } from './StationMark'
 import { SortControl } from './SortControl'
-import type { SortOption } from './SortControl'
+import type { SortEntry } from './SortControl'
 
-export type StationSortKey = 'map' | 'name' | 'type'
+export type StationSortKey = 'map' | 'name' | 'metro' | 'rail'
 
-const SORT_OPTIONS: SortOption<StationSortKey>[] = [
+const SORT_OPTIONS: SortEntry<StationSortKey>[] = [
   { key: 'map', label: 'Map order' },
   { key: 'name', label: 'Name' },
-  { key: 'type', label: 'Type' },
+  // "Type" isn't a sort of its own — it's the heading over the two that are, the modes a station
+  // can belong to. Picking one gathers that mode's stops to the top.
+  { header: true, label: 'Type' },
+  { key: 'metro', label: 'Metro' },
+  { key: 'rail', label: 'Rail' },
 ]
 
 /** The stations' own sort vocabulary, on the shared control. */
@@ -34,29 +38,27 @@ interface StationsPanelProps {
  * instead. Four is already a busier junction than most maps build. */
 const MAX_BADGES = 4
 
-/** Sorting by type groups by the mark a stop wears, in the order they matter to someone scanning
- * for one: the junctions first, then rail, then the ordinary metro stops. Interchanges lead rather
- * than sitting inside the rail or metro group because a stop where two modes meet belongs to
- * neither — it is its own kind of place, which is why it has its own mark. */
-const TYPE_ORDER: Record<string, number> = { interchange: 0, rail: 1, stop: 2 }
-
 export function StationsPanel({ stations, lines, selectedStationId, sortBy, onSelect }: StationsPanelProps) {
   const [query, setQuery] = useState('')
   const linesCallingAt = (stationId: string) => lines.filter(l => lineHasStation(l, stationId))
 
-  const markKindOf = (station: Station) => {
+  // Whether a stop is served by a given mode — a rail line calls there, or a metro one; a stop no
+  // line has reached yet answers to the mode it was placed as. An interchange serves both, so it
+  // gathers to the top under either mode, which is the right answer: it is one of each.
+  const servesMode = (station: Station, mode: 'metro' | 'rail') => {
     const calling = linesCallingAt(station.id)
-    const rail = calling.length > 0 ? calling.some(isRailLine) : station.mode === 'rail'
-    return stationMarkKind(isTransferStation(station, lines), rail)
+    if (calling.length === 0) return (station.mode ?? 'metro') === mode
+    return mode === 'rail' ? calling.some(isRailLine) : calling.some(l => !isRailLine(l))
   }
 
-  // Both sorts are stable, so stops that tie keep the order the map put them in — which is the
-  // order this list has always used, and the only one a station really has of its own.
+  // Every sort is stable, so stops that tie keep the order the map put them in — which is the order
+  // this list has always used, and the only one a station really has of its own. Picking a mode
+  // gathers its stops to the top rather than hiding the rest, so it reads as a sort, not a filter.
   const ordered =
     sortBy === 'name'
       ? [...stations].sort((a, b) => a.name.localeCompare(b.name))
-      : sortBy === 'type'
-        ? [...stations].sort((a, b) => TYPE_ORDER[markKindOf(a)] - TYPE_ORDER[markKindOf(b)])
+      : sortBy === 'metro' || sortBy === 'rail'
+        ? [...stations].sort((a, b) => (servesMode(a, sortBy) ? 0 : 1) - (servesMode(b, sortBy) ? 0 : 1))
         : stations
 
   // Only once there are enough stops for the list to be a problem. On a small map the field
