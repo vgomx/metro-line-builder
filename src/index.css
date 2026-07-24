@@ -884,7 +884,7 @@ svg ::selection {
   animation: mlb-train-ring 1600ms ease-out infinite;
 }
 
-/* Approval: the badge pops when the score climbs, and hearts (the likes) rise off it and fade. */
+/* Karma: the badge pops when the score moves, and the crowd's faces rise off it and fade. */
 @keyframes mlb-score-pop {
   0% {
     transform: scale(1);
@@ -899,10 +899,11 @@ svg ::selection {
 .mlb-score-pop {
   animation: mlb-score-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-/* A single like taking flight — the TikTok/Instagram-live gesture: it pops in, drifts up and to
-   one side along its own path, and fades near the top. Each heart carries its own --dx/--dy/--rot
-   so a burst of them fans out into a little stream rather than a straight column. */
-@keyframes mlb-heart-rise {
+/* A single reaction taking flight — the TikTok/Instagram-live gesture: it pops in, drifts up and
+   to one side along its own path, and fades near the top. Each face carries its own --dx/--dy/--rot
+   so a burst of them fans out into a little stream rather than a straight column. Smiling or
+   furious, the flight is the same; only the face differs. */
+@keyframes mlb-face-rise {
   0% {
     opacity: 0;
     transform: translate(0, 0) scale(0.3) rotate(0deg);
@@ -936,11 +937,11 @@ svg ::selection {
     transform: translateY(-40px) scale(1);
   }
 }
-/* Longhand so each heart's own inline animation-duration and -delay survive — the shorthand would
+/* Longhand so each face's own inline animation-duration and -delay survive — the shorthand would
    reset them. */
-.mlb-heart-rise {
+.mlb-face-rise {
   will-change: transform, opacity;
-  animation-name: mlb-heart-rise;
+  animation-name: mlb-face-rise;
   animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   animation-fill-mode: forwards;
 }
