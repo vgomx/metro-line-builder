@@ -1,13 +1,19 @@
 import { useEffect, useRef } from 'react'
-import { Badge } from 'metro-ds'
 import { prefersReducedMotion } from '../useReducedMotion'
 import type { RideProgress } from '../canvas/trainMotion'
+import type { Line } from '../types'
+import { LineBadge } from './LineBadge'
 
 export interface TripStop {
   id: string
   name: string
   transfer: boolean
+  /** The other lines calling here — the ones you'd change onto. Empty at a plain stop. */
+  transferLines: Line[]
 }
+
+/** Past this many the badges crowd the name out of the narrow strip; the rest are counted. */
+const MAX_TRANSFER_BADGES = 3
 
 interface LineTripViewProps {
   color: string
@@ -158,17 +164,35 @@ export function LineTripView({ color, rail = false, stops, ride }: LineTripViewP
                     width: current ? '15px' : '13px',
                     height: current ? '15px' : '13px',
                     marginLeft: current ? '-1px' : 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     // A square (softly rounded) for rail, a disc for metro — the same shape language
                     // the canvas marks use, so a stop reads the same in the strip as on the map. A
                     // transfer stays a disc even on a rail line, matching the canvas rule that an
                     // interchange is a circle whatever mode meets there.
                     borderRadius: rail && !stop.transfer ? '4px' : '50%',
                     border: `2.5px solid ${nodeColor}`,
-                    background: stop.transfer ? nodeColor : 'var(--bg-surface)',
+                    // A plain stop is a hollow bead. An interchange wears the map's target mark — the
+                    // same ring with a filled centre it has on the canvas — rather than a solid dot,
+                    // so "change here" reads the same in the strip as everywhere else.
+                    background: 'var(--bg-surface)',
                     boxShadow: current ? `0 0 0 3px color-mix(in srgb, ${color} 25%, transparent)` : 'none',
                     transition: 'width 150ms ease, box-shadow 150ms ease, border-color 400ms ease, background-color 400ms ease',
                   }}
-                />
+                >
+                  {stop.transfer && (
+                    <div
+                      style={{
+                        width: current ? '5px' : '4px',
+                        height: current ? '5px' : '4px',
+                        borderRadius: '50%',
+                        background: nodeColor,
+                        transition: 'background-color 400ms ease',
+                      }}
+                    />
+                  )}
+                </div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-tight)', flex: 1, minWidth: 0 }}>
@@ -187,10 +211,21 @@ export function LineTripView({ color, rail = false, stops, ride }: LineTripViewP
                 >
                   {stop.name}
                 </span>
-                {stop.transfer && (
-                  <Badge variant="primary" style={{ fontSize: '9px', padding: '1px 5px' }}>
-                    Transfer
-                  </Badge>
+                {/* Which lines you'd change onto, in the same numbered badges the rest of the app
+                    names them by — the "Transfer" word said only that a change was possible, not to
+                    what. Dimmed with the row once the train is past it. Capped so a busy junction
+                    can't crowd the name out of the narrow strip. */}
+                {stop.transferLines.length > 0 && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', flexShrink: 0, opacity: passed ? 0.5 : 1, transition: 'opacity 400ms ease' }}>
+                    {stop.transferLines.slice(0, MAX_TRANSFER_BADGES).map(l => (
+                      <LineBadge key={l.id} line={l} shape="circle" size="xs" />
+                    ))}
+                    {stop.transferLines.length > MAX_TRANSFER_BADGES && (
+                      <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-muted)' }}>
+                        +{stop.transferLines.length - MAX_TRANSFER_BADGES}
+                      </span>
+                    )}
+                  </span>
                 )}
               </div>
             </div>
