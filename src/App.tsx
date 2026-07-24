@@ -34,7 +34,7 @@ import { exclusiveStationIds, stationIdsOfLine } from './canvas/lineNodes'
 import { geoTypeOfTool, MIN_GEO_POINTS } from './geoDraft'
 import { useTheme } from './useTheme'
 import { useSound } from './useSound'
-import { useNotifications } from './state/useNotifications'
+import { forgetGazette, useNotifications } from './state/useNotifications'
 import { useMapNotifications } from './state/useMapNotifications'
 import { forgetKarma, useScore } from './state/useScore'
 import { useScoreEvents } from './state/useScoreEvents'
@@ -189,19 +189,19 @@ function App() {
 
   const { theme, toggleTheme } = useTheme()
   const { soundEnabled, toggleSound } = useSound()
-  // The Gazette: a running feed of the map's big moments (see useMapNotifications for what earns
-  // a headline). `suppress` keeps a whole-map move — load, undo/redo, generate — from reading as
-  // a burst of separate events.
-  const notifications = useNotifications()
-  const { suppress: suppressNotifications } = useMapNotifications(state, notifications.announce)
   // Which map is on the canvas. A ref rather than state because nothing renders from it —
   // it's the key the autosave files under, and re-rendering the app to change a filing label
-  // would be work for nothing. Declared up here because karma is filed per city, so the score
-  // hook below has to know which one it is opening on.
+  // would be work for nothing. Declared ahead of the two hooks below because both the Gazette and
+  // karma are filed per city, so each has to know which one it is opening on.
   // Lazily, once: useRef evaluates its argument on every render, and currentMapId reads
   // localStorage — a synchronous disk read per render to answer a question that can't change.
   const mapId = useRef<string | null>(null)
   if (mapId.current === null) mapId.current = currentMapId()
+  // The Gazette: a running feed of the map's big moments (see useMapNotifications for what earns
+  // a headline). `suppress` keeps a whole-map move — load, undo/redo, generate — from reading as
+  // a burst of separate events.
+  const notifications = useNotifications(mapId.current!)
+  const { suppress: suppressNotifications } = useMapNotifications(state, notifications.announce)
   // Karma rides the same event detection, but keeps its own tally and history — and unlike the
   // Gazette it reads demolition as well as building, so the two are not quite the same diff.
   const score = useScore(mapId.current!)
@@ -268,6 +268,7 @@ function App() {
         // A file is a different map from the one it replaces, whatever it's called.
         mapId.current = startNewMapId()
         score.switchTo(mapId.current)
+        notifications.switchTo(mapId.current)
         suppressEvents('silent')
         const ok = loadMap(data)
         setToast(
@@ -291,6 +292,7 @@ function App() {
     playSound('generate')
     mapId.current = startNewMapId()
     score.switchTo(mapId.current)
+    notifications.switchTo(mapId.current)
     suppressEvents('foundation')
     generateMap()
     // Same two frames the Surprise button waits: React has to commit the new line paths and
@@ -340,6 +342,7 @@ function App() {
     // one gets a new identity, so the two are two maps rather than one map that changed.
     mapId.current = startNewMapId()
     score.switchTo(mapId.current)
+    notifications.switchTo(mapId.current)
     suppressEvents('foundation')
     generateMap()
     setToast({ message: SURPRISE_LINES[Math.floor(Math.random() * SURPRISE_LINES.length)], variant: 'success' })
@@ -808,6 +811,7 @@ function App() {
             adoptMapId(id)
             mapId.current = id
             score.switchTo(id)
+            notifications.switchTo(id)
             suppressEvents('silent')
             loadMap(saved)
             requestAnimationFrame(() => requestAnimationFrame(() => mapCanvasRef.current?.fitContent()))
@@ -815,6 +819,7 @@ function App() {
           onForgetMap={id => {
             forgetMap(id)
             forgetKarma(id)
+            forgetGazette(id)
             setLibrary(summarizeLibrary())
           }}
           onImportFile={handleImportFile}
