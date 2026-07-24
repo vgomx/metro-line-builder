@@ -13,7 +13,11 @@
  *
  * Their own directory, because `scripts/fetch-openmoji.mjs` wipes the landmark one on every run and
  * these aren't in the travel-places group it refetches. Fetched from
- * https://unpkg.com/openmoji@17.0.0/color/svg/<hexcode>.svg, as published — nothing rewritten.
+ * https://cdn.jsdelivr.net/npm/openmoji@17.0.0/color/svg/<hexcode>.svg, as published — nothing
+ * rewritten. jsDelivr rather than the unpkg the icon script uses: unpkg serves what it has cached
+ * promptly but times out fetching anything cold, which is most of a set being assembled for the
+ * first time. The professions are ZWJ sequences, so their filenames carry the joiners and, for the
+ * few built on a bare symbol (health worker, judge, pilot), a trailing FE0F.
  */
 const PEOPLE_SVGS = import.meta.glob('./assets/openmoji-people/*.svg', {
   eager: true,
