@@ -103,8 +103,16 @@ function Thumbnail({ routes }: { routes: LibrarySummary['routes'] }) {
 export function OpenMapDialog({ open, onClose, maps, currentId, onOpenMap, onForgetMap, onImportFile }: OpenMapDialogProps) {
   return (
     <Dialog open={open} onClose={onClose} title="Open a map" width="560px">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
-        <div style={{ maxHeight: 'calc(100svh - 340px)', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      {/* Bounded to the viewport as a whole rather than capping the list against a guessed height
+          for the surrounding chrome. That guess (a fixed 340px for the title, import button and
+          notice) came up short wherever the notice wrapped to more lines than it was measured at —
+          a narrower iPad among them — and the dialog then ran off the bottom of the screen. Here the
+          column can't outgrow the screen, the list takes whatever height is left and scrolls, and
+          the import button and the notice are pinned so they always show, however the notice wraps.
+          svh, the small viewport height, so it still fits with the mobile browser's bars expanded.
+          The −140px leaves room for the overlay's padding, the dialog's title, and its body pad. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)', maxHeight: 'calc(100svh - 140px)', minHeight: 0 }}>
+        <div style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
           {maps.length === 0 ? (
             <div
               style={{
@@ -187,12 +195,13 @@ export function OpenMapDialog({ open, onClose, maps, currentId, onOpenMap, onFor
           )}
         </div>
 
-        <Button variant="secondary" icon={<FolderOpenIcon />} onClick={onImportFile}>
+        <Button variant="secondary" icon={<FolderOpenIcon />} onClick={onImportFile} style={{ flexShrink: 0 }}>
           Import from a file…
         </Button>
 
         <div
           style={{
+            flexShrink: 0,
             display: 'flex',
             gap: 'var(--gap-sm)',
             padding: 'var(--gap-md)',
