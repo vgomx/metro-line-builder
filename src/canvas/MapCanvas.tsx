@@ -1375,6 +1375,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
                   line={line}
                   geometry={geometry}
                   selected={selectedLineIds.includes(line.id)}
+                  riding={ridingLineId === line.id}
                   revealing={revealingLineIds.has(line.id)}
                   segmentLineMap={network.segmentLineMap}
                   onClick={handleLineClick}

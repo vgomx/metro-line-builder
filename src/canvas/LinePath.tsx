@@ -9,6 +9,9 @@ interface LinePathProps {
   /** This line's routed vertices, already subdivided against the rest of the network. */
   geometry: LineGeometry
   selected: boolean
+  /** True while this line is the one being ridden. It keeps a selected line's extra weight — it is
+   * still the line under attention — but drops the highlight that streams along it. */
+  riding?: boolean
   /** True for one animation cycle right after the line first appears — draws its stroke on. */
   revealing?: boolean
   /** Every subdivided segment's line ids — tells this line which lane to take in a fan. */
@@ -40,7 +43,7 @@ const HOVER_GROWTH = 1.5
  * layer can walk a marker along it. Nodes can be real stations or bare waypoints that
  * just shape the route without stopping there.
  */
-export function LinePath({ line, geometry, selected, revealing, segmentLineMap, onClick }: LinePathProps) {
+export function LinePath({ line, geometry, selected, riding, revealing, segmentLineMap, onClick }: LinePathProps) {
   const [hovered, setHovered] = useState(false)
   const d = buildLinePath(geometry, line.id, segmentLineMap)
   if (!d) return null
@@ -119,9 +122,13 @@ export function LinePath({ line, geometry, selected, revealing, segmentLineMap, 
           {...revealProps}
         />
       )}
-      {/* Selected line reads as "live": a faint highlight streams along it. Skipped
-          during the draw-on so the two animations don't fight for the same stroke. */}
-      {selected && !revealing && (
+      {/* Selected line reads as "live": a faint highlight streams along it. Skipped during the
+          draw-on, and again while the line is being ridden — the same reason both times, which is
+          that two things must not animate along one stroke at once. During a ride the train is
+          already running this path with a halo on it and the camera tracking it, and a second
+          stream flowing over the same line at its own unrelated speed reads as a competing service.
+          The extra weight stays: the line is still the one under attention. */}
+      {selected && !revealing && !riding && (
         <path
           d={d}
           fill="none"
