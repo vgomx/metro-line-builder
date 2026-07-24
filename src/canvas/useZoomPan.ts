@@ -212,20 +212,25 @@ export function useZoomPan(
 
   /** Snaps the viewport so a world point sits at the centre of the *uncovered* area, at a given
    * scale. No transition — this is the per-frame primitive a follow-camera calls every rAF, so it
-   * must be cheap and immediate. Panning to a moving target each frame reads as smooth tracking. */
+   * must be cheap and immediate. Panning to a moving target each frame reads as smooth tracking.
+   *
+   * Returns the transform it applied, so a caller tracking a target the same frame can pin the DOM
+   * to it at once rather than waiting on the React state this also sets — see the ride camera. */
   const centerOn = useCallback(
-    (point: Point, scale: number) => {
+    (point: Point, scale: number): ZoomTransform | null => {
       const svg = svgRef.current
       const behavior = behaviorRef.current
       const selection = selectionRef.current
-      if (!svg || !behavior || !selection) return
+      if (!svg || !behavior || !selection) return null
       const rect = svg.getBoundingClientRect()
       const { left, right, top, bottom } = insetsRef.current
       const visibleWidth = Math.max(1, rect.width - left - right)
       const visibleHeight = Math.max(1, rect.height - top - bottom)
       const tx = left + visibleWidth / 2 - scale * point.x
       const ty = top + visibleHeight / 2 - scale * point.y
-      behavior.transform(selection, zoomIdentity.translate(tx, ty).scale(scale))
+      const next = zoomIdentity.translate(tx, ty).scale(scale)
+      behavior.transform(selection, next)
+      return next
     },
     [svgRef],
   )
