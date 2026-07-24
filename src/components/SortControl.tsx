@@ -15,13 +15,26 @@ export interface SortOption<T extends string> {
   label: string
 }
 
+/** A non-selectable heading in the list, grouping the options under it. It ignores clicks and can
+ * never be the value — a label, not a choice. */
+export interface SortHeader {
+  header: true
+  label: string
+}
+
+export type SortEntry<T extends string> = SortOption<T> | SortHeader
+
+function isHeader<T extends string>(entry: SortEntry<T>): entry is SortHeader {
+  return 'header' in entry
+}
+
 export function SortControl<T extends string>({
   value,
   options,
   onChange,
 }: {
   value: T
-  options: SortOption<T>[]
+  options: SortEntry<T>[]
   onChange: (key: T) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -59,7 +72,7 @@ export function SortControl<T extends string>({
           cursor: 'pointer',
         }}
       >
-        {options.find(o => o.key === value)?.label}
+        {options.find((o): o is SortOption<T> => !isHeader(o) && o.key === value)?.label}
         <svg
           width="10"
           height="10"
@@ -86,29 +99,50 @@ export function SortControl<T extends string>({
             padding: '4px 0',
           }}
         >
-          {options.map(option => (
-            <div
-              key={option.key}
-              role="option"
-              aria-selected={option.key === value}
-              onClick={() => {
-                onChange(option.key)
-                setOpen(false)
-              }}
-              style={{
-                padding: '5px 12px',
-                fontSize: 'var(--text-xs)',
-                cursor: 'pointer',
-                color: 'var(--text-primary)',
-                background: option.key === value ? 'var(--color-info-bg)' : 'transparent',
-                fontWeight: option.key === value ? 500 : 400,
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = option.key === value ? 'var(--color-info-bg)' : 'var(--bg-subtle)')}
-              onMouseLeave={e => (e.currentTarget.style.background = option.key === value ? 'var(--color-info-bg)' : 'transparent')}
-            >
-              {option.label}
-            </div>
-          ))}
+          {options.map((option, i) =>
+            isHeader(option) ? (
+              // A grey, unclickable heading. Not the first entry it fans out above, so it earns a
+              // hairline over it to sit apart from the choices before it.
+              <div
+                key={`header-${i}`}
+                role="presentation"
+                style={{
+                  padding: '6px 12px 3px',
+                  marginTop: i > 0 ? '2px' : 0,
+                  borderTop: i > 0 ? '1px solid var(--border-subtle)' : 'none',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                {option.label}
+              </div>
+            ) : (
+              <div
+                key={option.key}
+                role="option"
+                aria-selected={option.key === value}
+                onClick={() => {
+                  onChange(option.key)
+                  setOpen(false)
+                }}
+                style={{
+                  padding: '5px 12px',
+                  fontSize: 'var(--text-xs)',
+                  cursor: 'pointer',
+                  color: 'var(--text-primary)',
+                  background: option.key === value ? 'var(--color-info-bg)' : 'transparent',
+                  fontWeight: option.key === value ? 500 : 400,
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = option.key === value ? 'var(--color-info-bg)' : 'var(--bg-subtle)')}
+                onMouseLeave={e => (e.currentTarget.style.background = option.key === value ? 'var(--color-info-bg)' : 'transparent')}
+              >
+                {option.label}
+              </div>
+            ),
+          )}
         </div>
       )}
     </div>
