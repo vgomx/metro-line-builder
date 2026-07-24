@@ -476,6 +476,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const [boardingAt, setBoardingAt] = useState<{ stationId: string; arrival: number } | null>(null)
   const centerOnRef = useRef(centerOn)
   centerOnRef.current = centerOn
+  // The scene's root group. The ride camera writes its transform here directly, in the same frame
+  // the train moves, rather than waiting on the React state centerOn also sets — see handleRideFrame.
+  const contentRef = useRef<SVGGElement>(null)
 
   useEffect(() => {
     if (ridingLineId) {
@@ -494,7 +497,16 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
 
   const handleRideFrame = (track: LineTrack, lineId: string) => (x: number, y: number, sample: TrainSample) => {
     rideScaleRef.current += (RIDE_SCALE - rideScaleRef.current) * 0.06
-    centerOnRef.current({ x, y }, rideScaleRef.current)
+    // TrainMarker has just written the car's new position to the DOM; centerOn computes the camera
+    // that keeps it centred and sets the React transform state. But that state paints on React's own
+    // clock, which can lag a frame behind this one — and a camera a frame behind a moving train is
+    // exactly the jitter the followed car showed while its neighbours, panning with the scene, did
+    // not. So pin the scene's root transform to the same value right here, in the frame the train
+    // moved, and let the React commit that follows write the identical string harmlessly.
+    const next = centerOnRef.current({ x, y }, rideScaleRef.current)
+    if (next && contentRef.current) {
+      contentRef.current.setAttribute('transform', `translate(${next.x}, ${next.y}) scale(${next.k})`)
+    }
     // Report only when the stop or heading actually changes — the panel and chime react to
     // arrivals, not to every one of 60 frames a second.
     const stationId = track.stopStationIds[sample.nextStationStop] ?? null
@@ -1304,7 +1316,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           <feDropShadow dx="0" dy="1" stdDeviation="1.5" floodOpacity="0.25" />
         </filter>
       </defs>
-      <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.k})`}>
+      <g ref={contentRef} transform={`translate(${transform.x}, ${transform.y}) scale(${transform.k})`}>
         {/* The surface that catches a click on empty space. Marked as scaffolding for the
             image exporter, which would otherwise measure the map as 20000 units across. */}
         <rect
