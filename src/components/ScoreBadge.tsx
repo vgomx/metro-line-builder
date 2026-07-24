@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import type { Burst, ScoreApi, ScoreSample } from '../state/useScore'
 import type { ScoreCategory } from '../score'
 import { KARMA_COLOR, KarmaFace, toneOf } from '../karmaFaces'
@@ -25,6 +26,32 @@ function ago(at: number, now: number): string {
  * tabular score and a hyphen reads short next to it. */
 function signed(points: number): string {
   return `${points < 0 ? '−' : '+'}${Math.abs(points).toLocaleString()}`
+}
+
+/** Karma in the black reads green, in the red reads red. Exactly nothing is neither, and colouring
+ * it either way would claim a verdict the score hasn't reached yet. */
+function karmaColor(value: number): string {
+  if (value === 0) return 'var(--text-primary)'
+  return value < 0 ? KARMA_COLOR.cross : KARMA_COLOR.glad
+}
+
+/**
+ * A figure whose digits drop into place one after another, left to right.
+ *
+ * Keyed on the text so a score that moves while the panel is open lands again rather than silently
+ * changing — the same reasoning as the badge's own pop. Each character is its own inline-block
+ * because a transform needs a box to act on, and the stagger is an inline delay per index.
+ */
+function FallingNumber({ text, style }: { text: string; style?: CSSProperties }) {
+  return (
+    <span key={text} style={{ display: 'inline-flex', fontVariantNumeric: 'tabular-nums', ...style }}>
+      {[...text].map((char, i) => (
+        <span key={i} className="mlb-digit-fall" style={{ animationDelay: `${i * 45}ms` }}>
+          {char}
+        </span>
+      ))}
+    </span>
+  )
 }
 
 /**
@@ -87,9 +114,8 @@ export function ScoreBadge({ api }: { api: ScoreApi }) {
             style={{
               fontSize: 'var(--text-sm)',
               fontWeight: 700,
-              // Only a negative total is coloured: in the black the figure is just the score, but
-              // in the red it is the headline.
-              color: api.points < 0 ? KARMA_COLOR.cross : 'var(--text-primary)',
+              // Signed, so the standing is legible before the number is read at all.
+              color: karmaColor(api.points),
               fontVariantNumeric: 'tabular-nums',
             }}
           >
@@ -175,6 +201,7 @@ function ScorePanel({ api, onReset }: { api: ScoreApi; onReset: () => void }) {
 
   return (
     <div
+      className="mlb-panel-pop"
       style={{
         position: 'absolute',
         bottom: 'calc(100% + 8px)',
@@ -191,17 +218,10 @@ function ScorePanel({ api, onReset }: { api: ScoreApi; onReset: () => void }) {
       <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid var(--border-subtle)' }}>
         <KarmaFace tone={tone} size={24} />
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span
-            style={{
-              fontSize: '20px',
-              fontWeight: 800,
-              lineHeight: 1,
-              color: total < 0 ? KARMA_COLOR.cross : 'var(--text-primary)',
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            {total.toLocaleString()}
-          </span>
+          <FallingNumber
+            text={total.toLocaleString()}
+            style={{ fontSize: '20px', fontWeight: 800, lineHeight: 1, color: karmaColor(total) }}
+          />
           <span style={{ fontSize: '10px', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginTop: '3px' }}>
             Karma · {api.cheers.toLocaleString()} cheered · {api.jeers.toLocaleString()} furious
           </span>
@@ -220,11 +240,7 @@ function ScorePanel({ api, onReset }: { api: ScoreApi; onReset: () => void }) {
             <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 14px', fontSize: 'var(--text-xs)' }}>
               <span style={{ color: 'var(--text-secondary)' }}>{CATEGORY_LABEL[cat]}</span>
               <span
-                style={{
-                  color: api.breakdown[cat] < 0 ? KARMA_COLOR.cross : 'var(--text-primary)',
-                  fontWeight: 600,
-                  fontVariantNumeric: 'tabular-nums',
-                }}
+                style={{ color: karmaColor(api.breakdown[cat]), fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}
               >
                 {signed(api.breakdown[cat])}
               </span>
