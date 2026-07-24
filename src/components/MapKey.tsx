@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { ModeGlyphHtml } from '../modeGlyphs'
+import { StationMark } from './StationMark'
 
 /**
  * The map's key: what the marks mean, now that the map speaks in modes.
@@ -54,31 +55,6 @@ function DoubleLine() {
   )
 }
 
-function StopMark() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-      <circle cx="7" cy="7" r="4.5" fill="var(--bg-surface)" stroke={INK} strokeWidth="2" />
-    </svg>
-  )
-}
-
-function RailStopMark() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-      <rect x="2.4" y="2.4" width="9.2" height="9.2" rx="3" fill="var(--bg-surface)" stroke={INK} strokeWidth="2" />
-    </svg>
-  )
-}
-
-function InterchangeMark() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-      <circle cx="7" cy="7" r="5.5" fill="var(--bg-surface)" stroke={INK} strokeWidth="2.4" />
-      <circle cx="7" cy="7" r="1.9" fill={INK} />
-    </svg>
-  )
-}
-
 export function MapKey() {
   // Translucent at rest so it sits back from the map it explains, full strength on hover for when
   // you're actually reading it — the same treatment, and the same touch fallback (a finger never
@@ -110,9 +86,9 @@ export function MapKey() {
       <Row mark={<DoubleLine />} label="Rail line" />
 
       <Header>Stations</Header>
-      <Row mark={<StopMark />} label="Stop" />
-      <Row mark={<RailStopMark />} label="Rail stop" />
-      <Row mark={<InterchangeMark />} label="Interchange" />
+      <Row mark={<StationMark kind="stop" color={INK} />} label="Stop" />
+      <Row mark={<StationMark kind="rail" color={INK} />} label="Rail stop" />
+      <Row mark={<StationMark kind="interchange" color={INK} />} label="Interchange" />
 
       <Header>Main interchange</Header>
       <Row

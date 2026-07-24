@@ -1,7 +1,10 @@
 import { useState } from 'react'
-import { Badge, Input } from 'metro-ds'
+import { Input } from 'metro-ds'
 import type { Line, Station } from '../types'
+import { isRailLine } from '../types'
 import { isTransferStation, lineHasStation } from '../canvas/lineNodes'
+import { LineBadge } from './LineBadge'
+import { StationMark, stationMarkColor, stationMarkKind } from './StationMark'
 
 interface StationsPanelProps {
   stations: Station[]
@@ -10,9 +13,13 @@ interface StationsPanelProps {
   onSelect: (stationId: string) => void
 }
 
+/** Past this many, the badges would crowd the name out of its own row; the rest are counted
+ * instead. Four is already a busier junction than most maps build. */
+const MAX_BADGES = 4
+
 export function StationsPanel({ stations, lines, selectedStationId, onSelect }: StationsPanelProps) {
   const [query, setQuery] = useState('')
-  const primaryLineFor = (stationId: string) => lines.find(l => lineHasStation(l, stationId))
+  const linesCallingAt = (stationId: string) => lines.filter(l => lineHasStation(l, stationId))
 
   // Only once there are enough stops for the list to be a problem. On a small map the field
   // would be a control asking to be used on something already visible in full.
@@ -42,9 +49,16 @@ export function StationsPanel({ stations, lines, selectedStationId, onSelect }: 
 
       {shown.map(station => {
         const isSelected = station.id === selectedStationId
-        const line = primaryLineFor(station.id)
-        const color = line?.color ?? 'var(--border-strong)'
-        const transfer = isTransferStation(station, lines)
+        // The same three questions the canvas asks of a stop, answered the same way, so a row and
+        // the marker it stands for can't disagree. A stop no line has reached yet has only its own
+        // mode to go on.
+        const calling = linesCallingAt(station.id)
+        const interchange = isTransferStation(station, lines)
+        const rail = calling.length > 0 ? calling.some(isRailLine) : station.mode === 'rail'
+        const kind = stationMarkKind(interchange, rail)
+        const color = stationMarkColor(interchange, calling[0]?.color)
+        const badges = calling.slice(0, MAX_BADGES)
+        const overflow = calling.length - badges.length
         return (
           <div
             key={station.id}
@@ -60,19 +74,11 @@ export function StationsPanel({ stations, lines, selectedStationId, onSelect }: 
               borderLeft: `3px solid ${isSelected ? 'var(--interactive-primary)' : 'transparent'}`,
             }}
           >
-            <div
-              style={{
-                width: '10px',
-                height: '10px',
-                borderRadius: 'var(--radius-full)',
-                border: `2px solid ${color}`,
-                background: transfer ? color : 'var(--bg-surface)',
-                flexShrink: 0,
-              }}
-            />
+            <StationMark kind={kind} color={color} />
             <span
               style={{
                 flex: 1,
+                minWidth: 0,
                 fontSize: 'var(--text-sm)',
                 color: 'var(--text-primary)',
                 overflow: 'hidden',
@@ -82,10 +88,18 @@ export function StationsPanel({ stations, lines, selectedStationId, onSelect }: 
             >
               {station.name}
             </span>
-            {transfer && (
-              <Badge variant="primary" style={{ fontSize: '9px', padding: '1px 5px' }}>
-                Transfer
-              </Badge>
+            {/* Which lines call here, in the same numbered badges the Lines tab identifies them by.
+                This is what the old single dot could never say: it took its colour from whichever
+                line happened to be found first, so a junction of three looked like a stop on one. */}
+            {badges.length > 0 && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+                {badges.map(line => (
+                  <LineBadge key={line.id} line={line} shape="circle" size="xs" />
+                ))}
+                {overflow > 0 && (
+                  <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-muted)' }}>+{overflow}</span>
+                )}
+              </span>
             )}
           </div>
         )
