@@ -582,7 +582,17 @@ export function Inspector({
         <LineTripView
           color={line.color}
           rail={isRailLine(line)}
-          stops={lineStations.map(s => ({ id: s.id, name: s.name, transfer: isTransferStation(s, Object.values(lines)) }))}
+          stops={lineStations.map(s => ({
+            id: s.id,
+            name: s.name,
+            transfer: isTransferStation(s, Object.values(lines)),
+            // The other lines calling here — what a change at this stop connects to. Sorted by
+            // number so the badges read in a settled order rather than in whatever order the lines
+            // were drawn. A metro 1 and a rail 1 can both appear; LineBadge tells them apart.
+            transferLines: Object.values(lines)
+              .filter(other => other.id !== line.id && lineHasStation(other, s.id))
+              .sort((a, b) => a.number - b.number),
+          }))}
           ride={riding ? ride : null}
         />
 
