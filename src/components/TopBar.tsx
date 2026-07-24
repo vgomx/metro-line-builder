@@ -148,8 +148,11 @@ export function TopBar({
         style={{
           display: 'flex',
           alignItems: 'center',
-          marginRight: 'var(--space-4)',
-          paddingRight: 'var(--space-4)',
+          // The gap around the logo's divider, matched to every other divider in the bar (space-2
+          // each side of the line). It read as space-4 on both sides — 32px — which left the map
+          // name marooned well to the right of the logo with nothing filling the space.
+          marginRight: 'var(--space-2)',
+          paddingRight: 'var(--space-2)',
           borderRight: '1px solid var(--border-subtle)',
           flexShrink: 0,
         }}
