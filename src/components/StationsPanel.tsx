@@ -5,11 +5,28 @@ import { isRailLine } from '../types'
 import { isTransferStation, lineHasStation } from '../canvas/lineNodes'
 import { LineBadge } from './LineBadge'
 import { StationMark, stationMarkColor, stationMarkKind } from './StationMark'
+import { SortControl } from './SortControl'
+import type { SortOption } from './SortControl'
+
+export type StationSortKey = 'map' | 'name' | 'type'
+
+const SORT_OPTIONS: SortOption<StationSortKey>[] = [
+  { key: 'map', label: 'Map order' },
+  { key: 'name', label: 'Name' },
+  { key: 'type', label: 'Type' },
+]
+
+/** The stations' own sort vocabulary, on the shared control. */
+export function StationSortControl({ value, onChange }: { value: StationSortKey; onChange: (key: StationSortKey) => void }) {
+  return <SortControl value={value} options={SORT_OPTIONS} onChange={onChange} />
+}
 
 interface StationsPanelProps {
   stations: Station[]
   lines: Line[]
   selectedStationId: string | null
+  /** The active sort, owned by RightPanel so its control can live on the title row. */
+  sortBy: StationSortKey
   onSelect: (stationId: string) => void
 }
 
@@ -17,15 +34,36 @@ interface StationsPanelProps {
  * instead. Four is already a busier junction than most maps build. */
 const MAX_BADGES = 4
 
-export function StationsPanel({ stations, lines, selectedStationId, onSelect }: StationsPanelProps) {
+/** Sorting by type groups by the mark a stop wears, in the order they matter to someone scanning
+ * for one: the junctions first, then rail, then the ordinary metro stops. Interchanges lead rather
+ * than sitting inside the rail or metro group because a stop where two modes meet belongs to
+ * neither — it is its own kind of place, which is why it has its own mark. */
+const TYPE_ORDER: Record<string, number> = { interchange: 0, rail: 1, stop: 2 }
+
+export function StationsPanel({ stations, lines, selectedStationId, sortBy, onSelect }: StationsPanelProps) {
   const [query, setQuery] = useState('')
   const linesCallingAt = (stationId: string) => lines.filter(l => lineHasStation(l, stationId))
+
+  const markKindOf = (station: Station) => {
+    const calling = linesCallingAt(station.id)
+    const rail = calling.length > 0 ? calling.some(isRailLine) : station.mode === 'rail'
+    return stationMarkKind(isTransferStation(station, lines), rail)
+  }
+
+  // Both sorts are stable, so stops that tie keep the order the map put them in — which is the
+  // order this list has always used, and the only one a station really has of its own.
+  const ordered =
+    sortBy === 'name'
+      ? [...stations].sort((a, b) => a.name.localeCompare(b.name))
+      : sortBy === 'type'
+        ? [...stations].sort((a, b) => TYPE_ORDER[markKindOf(a)] - TYPE_ORDER[markKindOf(b)])
+        : stations
 
   // Only once there are enough stops for the list to be a problem. On a small map the field
   // would be a control asking to be used on something already visible in full.
   const searchable = stations.length >= 12
   const needle = query.trim().toLowerCase()
-  const shown = needle ? stations.filter(station => station.name.toLowerCase().includes(needle)) : stations
+  const shown = needle ? ordered.filter(station => station.name.toLowerCase().includes(needle)) : ordered
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>

@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { Button } from 'metro-ds'
 import { LineBadge } from './LineBadge'
+import { SortControl } from './SortControl'
+import type { SortOption } from './SortControl'
 import { EyeIcon, EyeOffIcon, GripIcon, PlusIcon, TrainIcon } from '../icons'
 import { stationIdsOfLine } from '../canvas/lineNodes'
 import type { Line, LineKind } from '../types'
@@ -9,7 +11,7 @@ import { lineKind } from '../types'
 
 export type SortKey = 'manual' | 'name' | 'number' | 'length' | 'created'
 
-const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+const SORT_OPTIONS: SortOption<SortKey>[] = [
   { key: 'manual', label: 'Manual' },
   { key: 'name', label: 'Name' },
   { key: 'number', label: 'Number' },
@@ -17,94 +19,9 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: 'created', label: 'Created' },
 ]
 
-/**
- * The "Sort by" control. Lives apart from the list so it can sit up on the panel's title row —
- * its state is owned by RightPanel and handed to both this and the list.
- */
+/** The lines' own sort vocabulary, on the shared control. */
 export function LineSortControl({ value, onChange }: { value: SortKey; onChange: (key: SortKey) => void }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const close = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('pointerdown', close)
-    return () => document.removeEventListener('pointerdown', close)
-  }, [open])
-
-  return (
-    <div ref={ref} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '6px' }}>
-      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Sort by</span>
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px',
-          height: '24px',
-          padding: '0 8px',
-          fontSize: 'var(--text-xs)',
-          fontWeight: 500,
-          color: 'var(--text-primary)',
-          background: 'var(--bg-surface)',
-          border: '1px solid var(--border-default)',
-          borderRadius: '5px',
-          cursor: 'pointer',
-        }}
-      >
-        {SORT_OPTIONS.find(o => o.key === value)?.label}
-        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" style={{ color: 'var(--text-muted)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms ease' }}>
-          <path d="M2 4L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-      {open && (
-        <div
-          role="listbox"
-          style={{
-            position: 'absolute',
-            top: '28px',
-            right: 0,
-            zIndex: 50,
-            minWidth: '120px',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border-default)',
-            borderRadius: '6px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-            padding: '4px 0',
-          }}
-        >
-          {SORT_OPTIONS.map(option => (
-            <div
-              key={option.key}
-              role="option"
-              aria-selected={option.key === value}
-              onClick={() => {
-                onChange(option.key)
-                setOpen(false)
-              }}
-              style={{
-                padding: '5px 12px',
-                fontSize: 'var(--text-xs)',
-                cursor: 'pointer',
-                color: 'var(--text-primary)',
-                background: option.key === value ? 'var(--color-info-bg)' : 'transparent',
-                fontWeight: option.key === value ? 500 : 400,
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = option.key === value ? 'var(--color-info-bg)' : 'var(--bg-subtle)')}
-              onMouseLeave={e => (e.currentTarget.style.background = option.key === value ? 'var(--color-info-bg)' : 'transparent')}
-            >
-              {option.label}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
+  return <SortControl value={value} options={SORT_OPTIONS} onChange={onChange} />
 }
 
 interface LinesPanelProps {
