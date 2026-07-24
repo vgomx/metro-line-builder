@@ -12,7 +12,9 @@ interface TrainMarkerProps {
   stopFlags: boolean[]
   /** Path `d` for the track between each consecutive pair of stops, already lane-offset and filleted. */
   segmentPaths: string[]
-  /** How long the train dwells at each station, in ms. */
+  /** How long the train dwells at each station, in ms. Long enough for a stop to read as a stop:
+   * passengers gather under the station's name while the train is in it, and at the old 1400 the
+   * whole service felt like it was hurrying between places rather than calling at them. */
   dwellMs?: number
   /** Travel speed in px/ms. */
   speed?: number
@@ -48,7 +50,7 @@ const CAR_HEIGHT = 3.4
  * LinePath draws, so a train always sits on its own line's lane rather than on a
  * neighbour's rails wherever lines fan out along a shared stretch.
  */
-export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths, dwellMs = 1400, speed = 0.12, phase = 0, highlighted = false, onFrame, onSelect }: TrainMarkerProps) {
+export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths, dwellMs = 2200, speed = 0.12, phase = 0, highlighted = false, onFrame, onSelect }: TrainMarkerProps) {
   const groupRef = useRef<SVGGElement>(null)
   const segmentRefs = useRef<(SVGPathElement | null)[]>([])
   const lastAngleRef = useRef(0)

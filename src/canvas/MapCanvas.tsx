@@ -471,6 +471,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const rideScaleRef = useRef(transform.k)
   const preRideTransformRef = useRef<ZoomTransform | null>(null)
   const lastRideStopRef = useRef<string | null>(null)
+  // Which station the ridden train is sitting in, and a counter bumped on each arrival so the
+  // platform's crowd remounts — pulling into the same stop twice should bring different people.
+  const [boardingAt, setBoardingAt] = useState<{ stationId: string; arrival: number } | null>(null)
   const centerOnRef = useRef(centerOn)
   centerOnRef.current = centerOn
 
@@ -483,6 +486,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       easeToTransform(preRideTransformRef.current)
       preRideTransformRef.current = null
     }
+    // Leaving the ride takes the crowd with it: they belong to the train being followed.
+    if (!ridingLineId) setBoardingAt(null)
     // Keyed on the ride's identity alone: `transform` churns every frame *during* a ride and must
     // not re-trigger this, or it would re-bank the ride view as the pre-ride one and never restore.
   }, [ridingLineId]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -497,6 +502,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     const key = `${stationId}|${atStation}|${sample.direction}`
     if (key !== lastRideStopRef.current) {
       lastRideStopRef.current = key
+      // Same de-duplicated edge the panel and chime react to, so the crowd turns up exactly once
+      // per arrival rather than on every one of sixty frames a second.
+      setBoardingAt(atStation && stationId ? prev => ({ stationId, arrival: (prev?.arrival ?? 0) + 1 }) : null)
       onRideProgress({
         lineId,
         nextStationId: stationId,
@@ -1556,6 +1564,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
                   : undefined
             }
             labelPlacement={labelPlacementByStation[station.id]}
+            boarding={boardingAt?.stationId === station.id ? boardingAt.arrival : undefined}
             onPointerDown={handleStationPointerDown}
             onClick={handleStationClick}
             onDoubleClick={s => tool === 'select' && onRenameRequest('station', s.id)}
