@@ -12,11 +12,9 @@ interface TrainMarkerProps {
   stopFlags: boolean[]
   /** Path `d` for the track between each consecutive pair of stops, already lane-offset and filleted. */
   segmentPaths: string[]
-  /** How long the train dwells at each station, in ms. Long enough for a stop to read as a stop:
-   * passengers gather under the station's name while the train is in it, and at the old 1400 the
-   * whole service felt like it was hurrying between places rather than calling at them. */
+  /** How long the train dwells at each station, in ms. Defaults to DEFAULT_DWELL_MS. */
   dwellMs?: number
-  /** Travel speed in px/ms. */
+  /** Travel speed in px/ms. Defaults to DEFAULT_SPEED. */
   speed?: number
   /** Fraction of the full back-and-forth cycle to shift this car by. The two services on a
    * line run at phase 0 and 0.5 — half a cycle apart is a mirror in time, so one is heading
@@ -30,6 +28,23 @@ interface TrainMarkerProps {
   /** When set, an enlarged invisible hit-area lets a click on the moving car start a ride. */
   onSelect?: () => void
 }
+
+/**
+ * How a service is paced: how long a train waits once it arrives, and how fast it runs between.
+ *
+ * These two are one decision, not two. What reads as "too fast" is almost never the speed on its
+ * own — it is the speed against the wait either side of it. A stop long enough for passengers to
+ * gather under the station's name makes a quick hop look like a dart, however reasonable that hop
+ * was before the stop grew.
+ *
+ * On a typical map a hop runs about 125 units, so this speed puts roughly 1.7s of running either
+ * side of a 2.2s stand: near enough even that a train reads as calling at places rather than
+ * flitting between them. The pair drifted apart once — the dwell went to 2200 while the speed
+ * stayed at 0.12, which left a train standing twice as long as it moved — so if either moves
+ * again, check it against the other.
+ */
+const DEFAULT_DWELL_MS = 2200
+const DEFAULT_SPEED = 0.075
 
 /**
  * The car's footprint — small enough that two can share a line. Down from 20x5: at that size
@@ -50,7 +65,7 @@ const CAR_HEIGHT = 3.4
  * LinePath draws, so a train always sits on its own line's lane rather than on a
  * neighbour's rails wherever lines fan out along a shared stretch.
  */
-export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths, dwellMs = 2200, speed = 0.12, phase = 0, highlighted = false, onFrame, onSelect }: TrainMarkerProps) {
+export function TrainMarker({ lineId, color, stopPoints, stopFlags, segmentPaths, dwellMs = DEFAULT_DWELL_MS, speed = DEFAULT_SPEED, phase = 0, highlighted = false, onFrame, onSelect }: TrainMarkerProps) {
   const groupRef = useRef<SVGGElement>(null)
   const segmentRefs = useRef<(SVGPathElement | null)[]>([])
   const lastAngleRef = useRef(0)
