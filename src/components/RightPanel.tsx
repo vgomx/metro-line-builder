@@ -3,7 +3,8 @@ import { IconButton, Tabs } from 'metro-ds'
 import { BackIcon } from '../icons'
 import { LinesPanel, LineSortControl } from './LinesPanel'
 import type { SortKey } from './LinesPanel'
-import { StationsPanel } from './StationsPanel'
+import { StationsPanel, StationSortControl } from './StationsPanel'
+import type { StationSortKey } from './StationsPanel'
 import { GeoPanel } from './GeoPanel'
 import { CompaniesPanel } from './CompaniesPanel'
 import { Inspector } from './Inspector'
@@ -165,6 +166,7 @@ export function RightPanel({
   // Owned here rather than in LinesPanel so the "Sort by" control can sit on the title row.
   // Number by default — how riders know the lines, and the order most lists want to open in.
   const [lineSort, setLineSort] = useState<SortKey>('number')
+  const [stationSort, setStationSort] = useState<StationSortKey>('map')
 
   // Which way the content slides when the tab changes: rightward through the strip (and on to
   // Properties, which is the deepest view) enters from the right, back the other way from the
@@ -282,11 +284,16 @@ export function RightPanel({
         >
           {journeyMode ? 'Journey' : detail && tab === 'Properties' ? detail.title : tab}
         </span>
-        {/* The lines' sort control rides the title row rather than sitting a line below it. Only
-            on the Lines tab — it's the one list that sorts. Pushed to the right edge. */}
+        {/* A list's sort control rides the title row rather than sitting a line below it, pushed
+            to the right edge. Each list brings its own vocabulary to the shared control. */}
         {tab === 'Lines' && !journeyMode && (
           <div style={{ marginLeft: 'auto' }}>
             <LineSortControl value={lineSort} onChange={setLineSort} />
+          </div>
+        )}
+        {tab === 'Stations' && !journeyMode && (
+          <div style={{ marginLeft: 'auto' }}>
+            <StationSortControl value={stationSort} onChange={setStationSort} />
           </div>
         )}
       </div>
@@ -329,6 +336,7 @@ export function RightPanel({
             stations={stationList}
             lines={lineList}
             selectedStationId={selectedStation?.id ?? null}
+            sortBy={stationSort}
             onSelect={openDetail(onSelectStation)}
           />
         )}

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { LineKind, Station } from '../types'
 import { MODE_GLYPH_GAP, MODE_GLYPH_SIZE, ModeGlyphSvg, modeGlyphsWidth } from '../modeGlyphs'
+import { PERSON_GAP, PERSON_SIZE, PersonGlyph, peopleRowWidth, pickPeople } from '../peopleGlyphs'
 import type { LabelPlacement } from './labelPlacement'
 import { BASELINE_CENTRE, labelGeometry, LABEL_FONT_SIZE } from './labelPlacement'
 
@@ -29,6 +30,10 @@ interface StationNodeProps {
   landing?: 'appear' | 'settle'
   /** Compass direction (away from every line touching this station) to place the name in. */
   labelPlacement: LabelPlacement
+  /** Which arrival of the ridden train is sitting in this station, or undefined when none is. A
+   * counter rather than a flag so that pulling into the same stop twice keys a fresh crowd, instead
+   * of React reusing the first one and replaying nothing. */
+  boarding?: number
   onPointerDown: (e: ReactPointerEvent<SVGGElement>, station: Station) => void
   onClick: (station: Station) => void
   /** Double-clicking a stop is a request to rename it — the most repeated edit on a map. */
@@ -94,6 +99,59 @@ function Mark({
   )
 }
 
+/** The gap between the name plate and the heads below it, and how many turn up for one stop. */
+const BOARDER_GAP = 3
+const MIN_BOARDERS = 2
+const MAX_BOARDERS = 4
+/** One pass of the pop, spanning the dwell — a shade under it, so the platform is clear again
+ * before the train pulls out rather than figures being cut off mid-wait. */
+const BOARDER_MS = 1900
+/** How far apart two passengers arrive. Enough to read as arriving one after another rather than
+ * as one block appearing, without the last of four still coming up as the first fades. */
+const BOARDER_STAGGER = 90
+
+/**
+ * The little crowd that gathers under a station's name while a train sits in it.
+ *
+ * Placed on the side of the plate facing away from the marker, which for a name below or beside its
+ * station is underneath it as you'd expect — but for a name sitting *above* its station, underneath
+ * would mean squeezing into the few pixels between plate and marker, so it goes above instead. The
+ * row is centred on the plate either way.
+ *
+ * Mounted only for the length of the stop, and the caller keys it per arrival, so every train that
+ * pulls in brings a different handful of people rather than replaying the same one.
+ */
+function Boarders({
+  cardX,
+  cardY,
+  cardW,
+  cardH,
+  labelY,
+}: {
+  cardX: number
+  cardY: number
+  cardW: number
+  cardH: number
+  labelY: number
+}) {
+  const [people] = useState(() => pickPeople(MIN_BOARDERS + Math.floor(Math.random() * (MAX_BOARDERS - MIN_BOARDERS + 1))))
+  if (people.length === 0) return null
+
+  const above = labelY < 0
+  const rowY = above ? cardY - BOARDER_GAP - PERSON_SIZE : cardY + cardH + BOARDER_GAP
+  const rowX = cardX + cardW / 2 - peopleRowWidth(people.length) / 2
+
+  return (
+    <g pointerEvents="none">
+      {people.map((person, i) => (
+        <g key={person} className="mlb-boarder-pop" style={{ animationDuration: `${BOARDER_MS}ms`, animationDelay: `${i * BOARDER_STAGGER}ms` }}>
+          <PersonGlyph index={person} x={rowX + i * (PERSON_SIZE + PERSON_GAP)} y={rowY} size={PERSON_SIZE} />
+        </g>
+      ))}
+    </g>
+  )
+}
+
 export function StationNode({
   station,
   selected,
@@ -105,6 +163,7 @@ export function StationNode({
   dragging,
   landing,
   labelPlacement,
+  boarding,
   onPointerDown,
   onClick,
   onDoubleClick,
@@ -269,6 +328,10 @@ export function StationNode({
             station mixes two of them, which is the modal interchange the icons are for. A single-mode
             stop shows nothing: the whole map is one mode by default, so a lone glyph would say little.
             Inverted, because a main station's plate is a dark pill and the name on it is inverted too. */}
+        {boarding !== undefined && lines.length > 0 && (
+          <Boarders key={boarding} cardX={cardX} cardY={cardY} cardW={cardW} cardH={cardH} labelY={labelY} />
+        )}
+
         {showModes && (
           <g pointerEvents="none">
             {modes.map((mode, i) => (

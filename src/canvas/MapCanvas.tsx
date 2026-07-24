@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import type { ZoomTransform } from 'd3-zoom'
 import type { GeoFeature, Line, LineKind, LineNode, Point, PointOfInterest, Station, Tool } from '../types'
@@ -471,6 +471,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const rideScaleRef = useRef(transform.k)
   const preRideTransformRef = useRef<ZoomTransform | null>(null)
   const lastRideStopRef = useRef<string | null>(null)
+  // Which station the ridden train is sitting in, and a counter bumped on each arrival so the
+  // platform's crowd remounts — pulling into the same stop twice should bring different people.
+  const [boardingAt, setBoardingAt] = useState<{ stationId: string; arrival: number } | null>(null)
   const centerOnRef = useRef(centerOn)
   centerOnRef.current = centerOn
 
@@ -483,6 +486,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       easeToTransform(preRideTransformRef.current)
       preRideTransformRef.current = null
     }
+    // Leaving the ride takes the crowd with it: they belong to the train being followed.
+    if (!ridingLineId) setBoardingAt(null)
     // Keyed on the ride's identity alone: `transform` churns every frame *during* a ride and must
     // not re-trigger this, or it would re-bank the ride view as the pre-ride one and never restore.
   }, [ridingLineId]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -497,6 +502,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     const key = `${stationId}|${atStation}|${sample.direction}`
     if (key !== lastRideStopRef.current) {
       lastRideStopRef.current = key
+      // Same de-duplicated edge the panel and chime react to, so the crowd turns up exactly once
+      // per arrival rather than on every one of sixty frames a second.
+      setBoardingAt(atStation && stationId ? prev => ({ stationId, arrival: (prev?.arrival ?? 0) + 1 }) : null)
       onRideProgress({
         lineId,
         nextStationId: stationId,
@@ -1042,46 +1050,68 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           .filter(g => g.d)
       : []
 
-  const lineCountByStation: Record<string, number> = {}
-  // The colour of the last line seen at each station. Only read where the count is 1, so
-  // "last" is also "only" — an interchange keeps black, which is what makes black mean
-  // interchange rather than merely meaning station.
-  const lineColorByStation: Record<string, string> = {}
-  // Stations any rail line calls at. Rail is a property of the line, but a stop is a shared node
-  // that can serve both a metro and a rail line — so "rail station" is "a rail line stops here",
-  // derived the same way interchange is, and a mixed metro/rail stop reads as rail.
-  // The distinct transport modes calling at each station — a main station that mixes two of them
-  // (metro + rail) is a modal interchange and wears a glyph for each.
-  const modesByStation = new Map<string, Set<LineKind>>()
-  for (const line of lineList) {
-    const mode = lineKind(line)
-    for (const id of new Set(stationIdsOfLine(line))) {
-      lineCountByStation[id] = (lineCountByStation[id] ?? 0) + 1
-      if (line.visible) lineColorByStation[id] = line.color
-      if (line.visible) {
-        let set = modesByStation.get(id)
-        if (!set) { set = new Set<LineKind>(); modesByStation.set(id, set) }
-        set.add(mode)
+  /**
+   * Everything derived from the map's own shape: which lines call where, and the two whole-network
+   * passes — where every label sits, and how every line's lanes fan out.
+   *
+   * Memoised because the follow camera re-renders this component on *every* animation frame: it
+   * recentres on the moving train, which moves the zoom transform, which is state. Recomputed
+   * inline, that put a label-placement search over every station and a routing pass over every
+   * segment into each of those frames, and the ride ran at half rate because of it. None of it
+   * depends on where the camera is, so none of it belongs in that loop.
+   *
+   * stationList and lineList are themselves memoised upstream, so these deps only move when the
+   * map really changes. fontsReady is one of them because the placement search measures names in
+   * the real label font, and the first pass can land before that font has arrived.
+   */
+  const { lineCountByStation, lineColorByStation, modesByStation, labelPlacementByStation, network } = useMemo(() => {
+    const lineCountByStation: Record<string, number> = {}
+    // The colour of the last line seen at each station. Only read where the count is 1, so
+    // "last" is also "only" — an interchange keeps black, which is what makes black mean
+    // interchange rather than merely meaning station.
+    const lineColorByStation: Record<string, string> = {}
+    // Stations any rail line calls at. Rail is a property of the line, but a stop is a shared node
+    // that can serve both a metro and a rail line — so "rail station" is "a rail line stops here",
+    // derived the same way interchange is, and a mixed metro/rail stop reads as rail.
+    // The distinct transport modes calling at each station — a main station that mixes two of them
+    // (metro + rail) is a modal interchange and wears a glyph for each.
+    const modesByStation = new Map<string, Set<LineKind>>()
+    for (const line of lineList) {
+      const mode = lineKind(line)
+      for (const id of new Set(stationIdsOfLine(line))) {
+        lineCountByStation[id] = (lineCountByStation[id] ?? 0) + 1
+        if (line.visible) lineColorByStation[id] = line.color
+        if (line.visible) {
+          let set = modesByStation.get(id)
+          if (!set) { set = new Set<LineKind>(); modesByStation.set(id, set) }
+          set.add(mode)
+        }
       }
     }
-  }
 
-  // One pass for the whole map rather than a decision per station: a label has to know where
-  // its neighbours landed to keep off them.
-  const labelPlacementByStation = computeLabelPlacements(
-    stationList,
-    lineList,
-    stations,
-    new Set(stationList.filter(s => (lineCountByStation[s.id] ?? 0) >= 2).map(s => s.id)),
-    // A main station that mixes two modes wears a glyph per mode inside its label, widening its
-    // card — the search reserves that width so a neighbour doesn't choose a spot the card will cover.
-    station => (station.main && (modesByStation.get(station.id)?.size ?? 0) >= 2 ? modeGlyphsWidth(modesByStation.get(station.id)!.size) : 0),
-  )
+    // One pass for the whole map rather than a decision per station: a label has to know where
+    // its neighbours landed to keep off them.
+    const labelPlacementByStation = computeLabelPlacements(
+      stationList,
+      lineList,
+      stations,
+      new Set(stationList.filter(s => (lineCountByStation[s.id] ?? 0) >= 2).map(s => s.id)),
+      // A main station that mixes two modes wears a glyph per mode inside its label, widening its
+      // card — the search reserves that width so a neighbour doesn't choose a spot the card will cover.
+      station => (station.main && (modesByStation.get(station.id)?.size ?? 0) >= 2 ? modeGlyphsWidth(modesByStation.get(station.id)!.size) : 0),
+    )
 
-  // One routing pass for the whole network: it subdivides every line's segments against
-  // the others so shared corridors fan out, and both the line renderer and the train
-  // layer read their lane geometry from it rather than each deriving their own.
-  const network = buildNetworkGeometry(lineList, stations)
+    // One routing pass for the whole network: it subdivides every line's segments against
+    // the others so shared corridors fan out, and both the line renderer and the train
+    // layer read their lane geometry from it rather than each deriving their own.
+    const network = buildNetworkGeometry(lineList, stations)
+
+    return { lineCountByStation, lineColorByStation, modesByStation, labelPlacementByStation, network }
+    // fontsReady is deliberately a dependency it doesn't read: the placement search measures names
+    // through a canvas in the real label font, so its result is only as good as the font that was
+    // loaded when it ran. Flipping it is precisely the signal to measure again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stationList, lineList, stations, fontsReady])
 
   /**
    * The drawn segments a journey actually rides over.
@@ -1345,6 +1375,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
                   line={line}
                   geometry={geometry}
                   selected={selectedLineIds.includes(line.id)}
+                  riding={ridingLineId === line.id}
                   revealing={revealingLineIds.has(line.id)}
                   segmentLineMap={network.segmentLineMap}
                   onClick={handleLineClick}
@@ -1556,6 +1587,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
                   : undefined
             }
             labelPlacement={labelPlacementByStation[station.id]}
+            boarding={boardingAt?.stationId === station.id ? boardingAt.arrival : undefined}
             onPointerDown={handleStationPointerDown}
             onClick={handleStationClick}
             onDoubleClick={s => tool === 'select' && onRenameRequest('station', s.id)}

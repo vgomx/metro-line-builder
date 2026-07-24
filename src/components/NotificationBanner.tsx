@@ -32,17 +32,16 @@ function dateline(at: number): string {
  */
 export function NotificationBanner({ items, cityName, onDismiss }: NotificationBannerProps) {
   if (items.length === 0) return null
+  // Laid out by whatever places it, rather than pinning itself to the top of the canvas — it
+  // shares that spot with the drawing tools' hints, and two things anchored to the same point
+  // is exactly how a headline came to land on top of the button a half-drawn line was waiting on.
   return (
     <div
       style={{
-        position: 'absolute',
-        top: 'var(--space-3)',
-        left: '50%',
-        transform: 'translateX(-50%)',
         display: 'flex',
         flexDirection: 'column',
         gap: '8px',
-        width: 'min(440px, calc(100% - 32px))',
+        width: 'min(440px, 100%)',
         pointerEvents: 'none',
       }}
     >

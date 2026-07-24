@@ -34,9 +34,9 @@ import { exclusiveStationIds, stationIdsOfLine } from './canvas/lineNodes'
 import { geoTypeOfTool, MIN_GEO_POINTS } from './geoDraft'
 import { useTheme } from './useTheme'
 import { useSound } from './useSound'
-import { useNotifications } from './state/useNotifications'
+import { forgetGazette, useNotifications } from './state/useNotifications'
 import { useMapNotifications } from './state/useMapNotifications'
-import { useScore } from './state/useScore'
+import { forgetKarma, useScore } from './state/useScore'
 import { useScoreEvents } from './state/useScoreEvents'
 import { ScoreBadge } from './components/ScoreBadge'
 import { playSequence, playSound } from './sound'
@@ -189,13 +189,22 @@ function App() {
 
   const { theme, toggleTheme } = useTheme()
   const { soundEnabled, toggleSound } = useSound()
+  // Which map is on the canvas. A ref rather than state because nothing renders from it —
+  // it's the key the autosave files under, and re-rendering the app to change a filing label
+  // would be work for nothing. Declared ahead of the two hooks below because both the Gazette and
+  // karma are filed per city, so each has to know which one it is opening on.
+  // Lazily, once: useRef evaluates its argument on every render, and currentMapId reads
+  // localStorage — a synchronous disk read per render to answer a question that can't change.
+  const mapId = useRef<string | null>(null)
+  if (mapId.current === null) mapId.current = currentMapId()
   // The Gazette: a running feed of the map's big moments (see useMapNotifications for what earns
   // a headline). `suppress` keeps a whole-map move — load, undo/redo, generate — from reading as
   // a burst of separate events.
-  const notifications = useNotifications()
+  const notifications = useNotifications(mapId.current!)
   const { suppress: suppressNotifications } = useMapNotifications(state, notifications.announce)
-  // The Approval score rides the same event detection, but keeps its own tally and history.
-  const score = useScore()
+  // Karma rides the same event detection, but keeps its own tally and history — and unlike the
+  // Gazette it reads demolition as well as building, so the two are not quite the same diff.
+  const score = useScore(mapId.current!)
   const { suppress: suppressScore } = useScoreEvents(state, score.award)
   // Load, undo/redo and generate move the whole map at once — neither the Gazette nor the score
   // should treat that as a burst of things the user built, so both detectors are silenced first.
@@ -238,13 +247,6 @@ function App() {
   // Read fresh each time the dialog opens rather than kept in step continuously: it's a
   // dozen deserialised maps, and nothing outside the dialog looks at it.
   const [library, setLibrary] = useState<LibrarySummary[]>([])
-  // Which map is on the canvas. A ref rather than state because nothing renders from it —
-  // it's the key the autosave files under, and re-rendering the app to change a filing label
-  // would be work for nothing.
-  // Lazily, once: useRef evaluates its argument on every render, and currentMapId reads
-  // localStorage — a synchronous disk read per render to answer a question that can't change.
-  const mapId = useRef<string | null>(null)
-  if (mapId.current === null) mapId.current = currentMapId()
   // Bumped each time a rename is asked for. A counter rather than a boolean because asking
   // twice for the same station has to focus the field twice.
   const [renameToken, setRenameToken] = useState(0)
@@ -265,6 +267,8 @@ function App() {
       data => {
         // A file is a different map from the one it replaces, whatever it's called.
         mapId.current = startNewMapId()
+        score.switchTo(mapId.current)
+        notifications.switchTo(mapId.current)
         suppressEvents('silent')
         const ok = loadMap(data)
         setToast(
@@ -287,6 +291,8 @@ function App() {
     setShowWelcome(false)
     playSound('generate')
     mapId.current = startNewMapId()
+    score.switchTo(mapId.current)
+    notifications.switchTo(mapId.current)
     suppressEvents('foundation')
     generateMap()
     // Same two frames the Surprise button waits: React has to commit the new line paths and
@@ -335,6 +341,8 @@ function App() {
     // The city about to be replaced keeps its place in the library under its own id; the new
     // one gets a new identity, so the two are two maps rather than one map that changed.
     mapId.current = startNewMapId()
+    score.switchTo(mapId.current)
+    notifications.switchTo(mapId.current)
     suppressEvents('foundation')
     generateMap()
     setToast({ message: SURPRISE_LINES[Math.floor(Math.random() * SURPRISE_LINES.length)], variant: 'success' })
@@ -687,8 +695,6 @@ function App() {
               pointerEvents: 'none',
             }}
           >
-            <NotificationBanner items={notifications.bannerItems} cityName={state.mapName} onDismiss={notifications.dismiss} />
-
             {selectionLabel && <SelectionLabel label={selectionLabel} />}
 
             {selectedLine && (
@@ -712,52 +718,62 @@ function App() {
               />
             )}
 
-            {/* Everything the line-drawing tool has to say, stacked in one column so the
-                button and the hint beneath it can't land on top of each other. */}
-            {/* Everything a drawing tool has to say, in one column so the button and the
-                hints beneath it can't land on top of each other. Lines and geography share it:
-                they are drawn the same way, finished the same way, and were equally silent
-                about both. */}
-            {draft && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 'var(--space-3)',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 'var(--gap-sm)',
-                }}
-              >
-                {draft.points === 0 && (
-                  <div
-                    style={{
-                      background: 'var(--ink-900)',
-                      color: 'var(--ink-0)',
-                      borderRadius: 'var(--radius-lg)',
-                      padding: '5px 12px',
-                      fontSize: 'var(--text-xs)',
-                      fontWeight: 500,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {draft.startHint}
-                  </div>
-                )}
+            {/* The one thing anchored to the top centre of the canvas.
+                Everything a drawing tool has to say lives here — its opening hint, its Finish
+                button, and the keys beneath — and so do the Gazette's headlines. Both used to pin
+                themselves to this exact point independently, which is how a headline arriving
+                mid-draw came to land on top of the button the half-drawn line was waiting on. In
+                one column they can only sit above and below each other.
 
-                {draft.points >= draft.minimum && (
-                  <div style={{ pointerEvents: 'auto' }}>
-                    <Button variant="primary" onClick={draft.onFinish}>
-                      {draft.finishLabel}
-                    </Button>
-                  </div>
-                )}
+                The draft goes first because it is the actionable one: an ambient headline should
+                never be the thing that pushes a control out from under the cursor. Lines and
+                geography share the draft column — they are drawn the same way and finished the
+                same way. */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 'var(--space-3)',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 'var(--gap-sm)',
+                maxWidth: 'calc(100% - 32px)',
+              }}
+            >
+              {draft && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--gap-sm)' }}>
+                  {draft.points === 0 && (
+                    <div
+                      style={{
+                        background: 'var(--ink-900)',
+                        color: 'var(--ink-0)',
+                        borderRadius: 'var(--radius-lg)',
+                        padding: '5px 12px',
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 500,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {draft.startHint}
+                    </div>
+                  )}
 
-                <DraftFinishHint active={draft.points >= draft.minimum} />
-              </div>
-            )}
+                  {draft.points >= draft.minimum && (
+                    <div style={{ pointerEvents: 'auto' }}>
+                      <Button variant="primary" onClick={draft.onFinish}>
+                        {draft.finishLabel}
+                      </Button>
+                    </div>
+                  )}
+
+                  <DraftFinishHint active={draft.points >= draft.minimum} />
+                </div>
+              )}
+
+              <NotificationBanner items={notifications.bannerItems} cityName={state.mapName} onDismiss={notifications.dismiss} />
+            </div>
 
             {toast && (
               <div
@@ -802,12 +818,16 @@ function App() {
             // switching is only a matter of adopting the other one's.
             adoptMapId(id)
             mapId.current = id
+            score.switchTo(id)
+            notifications.switchTo(id)
             suppressEvents('silent')
             loadMap(saved)
             requestAnimationFrame(() => requestAnimationFrame(() => mapCanvasRef.current?.fitContent()))
           }}
           onForgetMap={id => {
             forgetMap(id)
+            forgetKarma(id)
+            forgetGazette(id)
             setLibrary(summarizeLibrary())
           }}
           onImportFile={handleImportFile}

@@ -1,16 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import type { Burst, ScoreApi, ScoreSample } from '../state/useScore'
 import type { ScoreCategory } from '../score'
-
-const HEART = 'M8 14s-5-3.3-5-7A3 3 0 0 1 8 5a3 3 0 0 1 5 2c0 3.7-5 7-5 7Z'
-
-function Heart({ size = 12, color = 'var(--heart, #e0245e)' }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill={color} aria-hidden="true">
-      <path d={HEART} />
-    </svg>
-  )
-}
+import { KARMA_COLOR, KarmaFace, toneOf } from '../karmaFaces'
+import type { KarmaTone } from '../karmaFaces'
 
 const CATEGORY_LABEL: Record<ScoreCategory, string> = {
   lines: 'Lines & extensions',
@@ -29,14 +22,48 @@ function ago(at: number, now: number): string {
   return `${Math.round(h / 24)}d ago`
 }
 
+/** A signed figure with a real minus sign rather than a hyphen, since these are set beside the
+ * tabular score and a hyphen reads short next to it. */
+function signed(points: number): string {
+  return `${points < 0 ? '−' : '+'}${Math.abs(points).toLocaleString()}`
+}
+
+/** Karma in the black reads green, in the red reads red. Exactly nothing is neither, and colouring
+ * it either way would claim a verdict the score hasn't reached yet. */
+function karmaColor(value: number): string {
+  if (value === 0) return 'var(--text-primary)'
+  return value < 0 ? KARMA_COLOR.cross : KARMA_COLOR.glad
+}
+
 /**
- * The Approval badge: your score, tucked in the bottom corner, with the likes flying off it as
- * hearts whenever it climbs. Clicking opens a panel that breaks the score down by where it came
- * from and charts it over time — the personal record, kept in browser memory.
+ * A figure whose digits drop into place one after another, left to right.
+ *
+ * Keyed on the text so a score that moves while the panel is open lands again rather than silently
+ * changing — the same reasoning as the badge's own pop. Each character is its own inline-block
+ * because a transform needs a box to act on, and the stagger is an inline delay per index.
+ */
+function FallingNumber({ text, style }: { text: string; style?: CSSProperties }) {
+  return (
+    <span key={text} style={{ display: 'inline-flex', fontVariantNumeric: 'tabular-nums', ...style }}>
+      {[...text].map((char, i) => (
+        <span key={i} className="mlb-digit-fall" style={{ animationDelay: `${i * 45}ms` }}>
+          {char}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+/**
+ * The Karma badge: what the network makes of you, tucked in the bottom corner, with the crowd
+ * flying off it as faces whenever it moves — smiling when you build, furious when you tear down.
+ * The badge itself wears whichever face your running total has earned. Clicking opens a panel that
+ * breaks the score down by where it came from and charts it over time, zero line and all.
  */
 export function ScoreBadge({ api }: { api: ScoreApi }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const tone = toneOf(api.points)
 
   useEffect(() => {
     if (!open) return
@@ -54,8 +81,8 @@ export function ScoreBadge({ api }: { api: ScoreApi }) {
 
   return (
     <div ref={ref} style={{ position: 'relative', flexShrink: 0, pointerEvents: 'auto' }}>
-      {/* The likes, taking flight off the badge — a little stream of hearts per award, anchored to
-          the heart icon so they lift right off it. */}
+      {/* The crowd, taking flight off the badge — a little stream of faces per award, anchored to
+          the face on the badge so they lift right off it. */}
       <div style={{ position: 'absolute', left: '12px', bottom: '14px', width: 0, height: 0, pointerEvents: 'none', zIndex: 30 }}>
         {api.bursts.map(burst => (
           <BurstFlight key={burst.id} burst={burst} onDone={() => api.clearBurst(burst.id)} />
@@ -66,7 +93,7 @@ export function ScoreBadge({ api }: { api: ScoreApi }) {
         type="button"
         className="mlb-score-btn"
         onClick={() => setOpen(o => !o)}
-        aria-label={`Approval score ${api.points}`}
+        aria-label={`Karma ${api.points}`}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -81,12 +108,20 @@ export function ScoreBadge({ api }: { api: ScoreApi }) {
           cursor: 'pointer',
         }}
       >
-        <Heart size={13} />
+        <KarmaFace tone={tone} size={15} />
         <span key={api.points} className="mlb-score-pop" style={{ display: 'inline-flex', alignItems: 'baseline', gap: '3px' }}>
-          <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+          <span
+            style={{
+              fontSize: 'var(--text-sm)',
+              fontWeight: 700,
+              // Signed, so the standing is legible before the number is read at all.
+              color: karmaColor(api.points),
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
             {api.points.toLocaleString()}
           </span>
-          <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-muted)' }}>pts</span>
+          <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-muted)' }}>karma</span>
         </span>
       </button>
 
@@ -95,21 +130,18 @@ export function ScoreBadge({ api }: { api: ScoreApi }) {
   )
 }
 
-// A warm spread of like-reds, so a burst isn't one flat colour.
-const HEART_COLORS = ['#e0245e', '#ff4d6d', '#ff6b8a', '#f0347a', '#ff8fab']
-
 function BurstFlight({ burst, onDone }: { burst: Burst; onDone: () => void }) {
-  // Fix each heart's random path once, on mount — re-rolling every render would make them jitter.
-  const hearts = useRef(
-    Array.from({ length: Math.max(6, Math.min(20, Math.round(burst.likes / 32))) }, () => ({
+  const tone: KarmaTone = burst.points < 0 ? 'cross' : 'glad'
+  // Fix each face's random path once, on mount — re-rolling every render would make them jitter.
+  const faces = useRef(
+    Array.from({ length: Math.max(6, Math.min(20, Math.round(burst.reactions / 32))) }, () => ({
       dx: Math.round((Math.random() - 0.5) * 84),
       dy: -70 - Math.round(Math.random() * 70),
       rot: Math.round((Math.random() - 0.5) * 60),
-      size: 11 + Math.round(Math.random() * 11),
+      size: 13 + Math.round(Math.random() * 11),
       delay: Math.round(Math.random() * 480),
       duration: 1100 + Math.round(Math.random() * 900),
       startX: Math.round((Math.random() - 0.5) * 16),
-      color: HEART_COLORS[Math.floor(Math.random() * HEART_COLORS.length)],
     })),
   ).current
 
@@ -123,28 +155,36 @@ function BurstFlight({ burst, onDone }: { burst: Burst; onDone: () => void }) {
     <>
       <div
         className="mlb-gain-float"
-        style={{ position: 'absolute', left: '-2px', bottom: '2px', whiteSpace: 'nowrap', fontSize: '13px', fontWeight: 800, color: 'var(--heart, #e0245e)' }}
+        style={{
+          position: 'absolute',
+          left: '-2px',
+          bottom: '2px',
+          whiteSpace: 'nowrap',
+          fontSize: '13px',
+          fontWeight: 800,
+          color: KARMA_COLOR[tone],
+        }}
       >
-        +{burst.points}
+        {signed(burst.points)}
       </div>
-      {hearts.map((h, i) => (
+      {faces.map((f, i) => (
         <span
           key={i}
-          className="mlb-heart-rise"
+          className="mlb-face-rise"
           style={{
             position: 'absolute',
-            left: `${h.startX}px`,
+            left: `${f.startX}px`,
             bottom: 0,
             display: 'flex',
             // @ts-expect-error CSS custom properties
-            '--dx': `${h.dx}px`,
-            '--dy': `${h.dy}px`,
-            '--rot': `${h.rot}deg`,
-            animationDelay: `${h.delay}ms`,
-            animationDuration: `${h.duration}ms`,
+            '--dx': `${f.dx}px`,
+            '--dy': `${f.dy}px`,
+            '--rot': `${f.rot}deg`,
+            animationDelay: `${f.delay}ms`,
+            animationDuration: `${f.duration}ms`,
           }}
         >
-          <Heart size={h.size} color={h.color} />
+          <KarmaFace tone={tone} size={f.size} />
         </span>
       ))}
     </>
@@ -154,10 +194,14 @@ function BurstFlight({ burst, onDone }: { burst: Burst; onDone: () => void }) {
 function ScorePanel({ api, onReset }: { api: ScoreApi; onReset: () => void }) {
   const now = Date.now()
   const total = api.points
-  const categories = (Object.keys(CATEGORY_LABEL) as ScoreCategory[]).filter(c => api.breakdown[c] > 0)
+  const tone = toneOf(total)
+  // A category is worth a row whichever way it went — a line of nothing but closures is exactly
+  // what someone opening this panel wants to see.
+  const categories = (Object.keys(CATEGORY_LABEL) as ScoreCategory[]).filter(c => api.breakdown[c] !== 0)
 
   return (
     <div
+      className="mlb-panel-pop"
       style={{
         position: 'absolute',
         bottom: 'calc(100% + 8px)',
@@ -172,13 +216,14 @@ function ScorePanel({ api, onReset }: { api: ScoreApi; onReset: () => void }) {
       }}
     >
       <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid var(--border-subtle)' }}>
-        <Heart size={22} />
+        <KarmaFace tone={tone} size={24} />
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span style={{ fontSize: '20px', fontWeight: 800, lineHeight: 1, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
-            {total.toLocaleString()}
-          </span>
+          <FallingNumber
+            text={total.toLocaleString()}
+            style={{ fontSize: '20px', fontWeight: 800, lineHeight: 1, color: karmaColor(total) }}
+          />
           <span style={{ fontSize: '10px', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginTop: '3px' }}>
-            Approval · {api.likes.toLocaleString()} likes
+            Karma · {api.cheers.toLocaleString()} cheered · {api.jeers.toLocaleString()} furious
           </span>
         </div>
       </div>
@@ -188,14 +233,16 @@ function ScorePanel({ api, onReset }: { api: ScoreApi; onReset: () => void }) {
       <div style={{ padding: '4px 0' }}>
         {categories.length === 0 ? (
           <div style={{ padding: '14px', textAlign: 'center', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-            Build a line, place a stop, found an operator — approval starts here.
+            Build a line, place a stop, found an operator — karma starts here.
           </div>
         ) : (
           categories.map(cat => (
             <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 14px', fontSize: 'var(--text-xs)' }}>
               <span style={{ color: 'var(--text-secondary)' }}>{CATEGORY_LABEL[cat]}</span>
-              <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                {api.breakdown[cat].toLocaleString()}
+              <span
+                style={{ color: karmaColor(api.breakdown[cat]), fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}
+              >
+                {signed(api.breakdown[cat])}
               </span>
             </div>
           ))
@@ -218,8 +265,14 @@ function ScorePanel({ api, onReset }: { api: ScoreApi; onReset: () => void }) {
   )
 }
 
-/** A quiet line of the score climbing. The current total is appended so the line always ends at
- * where the badge sits, even between the once-a-minute history samples. */
+/**
+ * A quiet line of the score moving. The current total is appended so the line always ends at where
+ * the badge sits, even between the once-a-minute history samples.
+ *
+ * Once karma can go negative the chart needs a zero to be read against — a line that only ever
+ * falls looks identical to one that only ever climbs without it. The rule is drawn only when the
+ * span actually crosses zero, so a map that has never been in the red keeps the plain sparkline.
+ */
 function Sparkline({ history, current }: { history: ScoreSample[]; current: number }) {
   const points = [...history.map(h => h.score), current]
   if (points.length < 3) {
@@ -232,16 +285,18 @@ function Sparkline({ history, current }: { history: ScoreSample[]; current: numb
   const min = Math.min(...points)
   const span = max - min || 1
   const step = (w - pad * 2) / (points.length - 1)
-  const coords = points.map((p, i) => {
-    const x = pad + i * step
-    const y = h - pad - ((p - min) / span) * (h - pad * 2)
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  })
+  const yOf = (p: number) => h - pad - ((p - min) / span) * (h - pad * 2)
+  const coords = points.map((p, i) => `${(pad + i * step).toFixed(1)},${yOf(p).toFixed(1)}`)
+  const crossesZero = min < 0 && max > 0
+  const stroke = current < 0 ? KARMA_COLOR.cross : KARMA_COLOR.glad
   return (
     <div style={{ padding: '8px 0 4px', borderBottom: '1px solid var(--border-subtle)' }}>
       <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: 'block' }}>
-        <polyline points={coords.join(' ')} fill="none" stroke="var(--heart, #e0245e)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-        <circle cx={pad + (points.length - 1) * step} cy={h - pad - ((current - min) / span) * (h - pad * 2)} r="2.5" fill="var(--heart, #e0245e)" />
+        {crossesZero && (
+          <line x1={pad} x2={w - pad} y1={yOf(0)} y2={yOf(0)} stroke="var(--border-default)" strokeWidth="1" strokeDasharray="3 3" />
+        )}
+        <polyline points={coords.join(' ')} fill="none" stroke={stroke} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={pad + (points.length - 1) * step} cy={yOf(current)} r="2.5" fill={stroke} />
       </svg>
     </div>
   )

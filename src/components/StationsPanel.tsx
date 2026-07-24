@@ -1,24 +1,69 @@
 import { useState } from 'react'
-import { Badge, Input } from 'metro-ds'
+import { Input } from 'metro-ds'
 import type { Line, Station } from '../types'
+import { isRailLine } from '../types'
 import { isTransferStation, lineHasStation } from '../canvas/lineNodes'
+import { LineBadge } from './LineBadge'
+import { StationMark, stationMarkColor, stationMarkKind } from './StationMark'
+import { SortControl } from './SortControl'
+import type { SortOption } from './SortControl'
+
+export type StationSortKey = 'map' | 'name' | 'type'
+
+const SORT_OPTIONS: SortOption<StationSortKey>[] = [
+  { key: 'map', label: 'Map order' },
+  { key: 'name', label: 'Name' },
+  { key: 'type', label: 'Type' },
+]
+
+/** The stations' own sort vocabulary, on the shared control. */
+export function StationSortControl({ value, onChange }: { value: StationSortKey; onChange: (key: StationSortKey) => void }) {
+  return <SortControl value={value} options={SORT_OPTIONS} onChange={onChange} />
+}
 
 interface StationsPanelProps {
   stations: Station[]
   lines: Line[]
   selectedStationId: string | null
+  /** The active sort, owned by RightPanel so its control can live on the title row. */
+  sortBy: StationSortKey
   onSelect: (stationId: string) => void
 }
 
-export function StationsPanel({ stations, lines, selectedStationId, onSelect }: StationsPanelProps) {
+/** Past this many, the badges would crowd the name out of its own row; the rest are counted
+ * instead. Four is already a busier junction than most maps build. */
+const MAX_BADGES = 4
+
+/** Sorting by type groups by the mark a stop wears, in the order they matter to someone scanning
+ * for one: the junctions first, then rail, then the ordinary metro stops. Interchanges lead rather
+ * than sitting inside the rail or metro group because a stop where two modes meet belongs to
+ * neither — it is its own kind of place, which is why it has its own mark. */
+const TYPE_ORDER: Record<string, number> = { interchange: 0, rail: 1, stop: 2 }
+
+export function StationsPanel({ stations, lines, selectedStationId, sortBy, onSelect }: StationsPanelProps) {
   const [query, setQuery] = useState('')
-  const primaryLineFor = (stationId: string) => lines.find(l => lineHasStation(l, stationId))
+  const linesCallingAt = (stationId: string) => lines.filter(l => lineHasStation(l, stationId))
+
+  const markKindOf = (station: Station) => {
+    const calling = linesCallingAt(station.id)
+    const rail = calling.length > 0 ? calling.some(isRailLine) : station.mode === 'rail'
+    return stationMarkKind(isTransferStation(station, lines), rail)
+  }
+
+  // Both sorts are stable, so stops that tie keep the order the map put them in — which is the
+  // order this list has always used, and the only one a station really has of its own.
+  const ordered =
+    sortBy === 'name'
+      ? [...stations].sort((a, b) => a.name.localeCompare(b.name))
+      : sortBy === 'type'
+        ? [...stations].sort((a, b) => TYPE_ORDER[markKindOf(a)] - TYPE_ORDER[markKindOf(b)])
+        : stations
 
   // Only once there are enough stops for the list to be a problem. On a small map the field
   // would be a control asking to be used on something already visible in full.
   const searchable = stations.length >= 12
   const needle = query.trim().toLowerCase()
-  const shown = needle ? stations.filter(station => station.name.toLowerCase().includes(needle)) : stations
+  const shown = needle ? ordered.filter(station => station.name.toLowerCase().includes(needle)) : ordered
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -42,9 +87,16 @@ export function StationsPanel({ stations, lines, selectedStationId, onSelect }: 
 
       {shown.map(station => {
         const isSelected = station.id === selectedStationId
-        const line = primaryLineFor(station.id)
-        const color = line?.color ?? 'var(--border-strong)'
-        const transfer = isTransferStation(station, lines)
+        // The same three questions the canvas asks of a stop, answered the same way, so a row and
+        // the marker it stands for can't disagree. A stop no line has reached yet has only its own
+        // mode to go on.
+        const calling = linesCallingAt(station.id)
+        const interchange = isTransferStation(station, lines)
+        const rail = calling.length > 0 ? calling.some(isRailLine) : station.mode === 'rail'
+        const kind = stationMarkKind(interchange, rail)
+        const color = stationMarkColor(interchange, calling[0]?.color)
+        const badges = calling.slice(0, MAX_BADGES)
+        const overflow = calling.length - badges.length
         return (
           <div
             key={station.id}
@@ -60,19 +112,11 @@ export function StationsPanel({ stations, lines, selectedStationId, onSelect }: 
               borderLeft: `3px solid ${isSelected ? 'var(--interactive-primary)' : 'transparent'}`,
             }}
           >
-            <div
-              style={{
-                width: '10px',
-                height: '10px',
-                borderRadius: 'var(--radius-full)',
-                border: `2px solid ${color}`,
-                background: transfer ? color : 'var(--bg-surface)',
-                flexShrink: 0,
-              }}
-            />
+            <StationMark kind={kind} color={color} />
             <span
               style={{
                 flex: 1,
+                minWidth: 0,
                 fontSize: 'var(--text-sm)',
                 color: 'var(--text-primary)',
                 overflow: 'hidden',
@@ -82,10 +126,18 @@ export function StationsPanel({ stations, lines, selectedStationId, onSelect }: 
             >
               {station.name}
             </span>
-            {transfer && (
-              <Badge variant="primary" style={{ fontSize: '9px', padding: '1px 5px' }}>
-                Transfer
-              </Badge>
+            {/* Which lines call here, in the same numbered badges the Lines tab identifies them by.
+                This is what the old single dot could never say: it took its colour from whichever
+                line happened to be found first, so a junction of three looked like a stop on one. */}
+            {badges.length > 0 && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+                {badges.map(line => (
+                  <LineBadge key={line.id} line={line} shape="circle" size="xs" />
+                ))}
+                {overflow > 0 && (
+                  <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-muted)' }}>+{overflow}</span>
+                )}
+              </span>
             )}
           </div>
         )
