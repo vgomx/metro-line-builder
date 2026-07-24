@@ -695,8 +695,6 @@ function App() {
               pointerEvents: 'none',
             }}
           >
-            <NotificationBanner items={notifications.bannerItems} cityName={state.mapName} onDismiss={notifications.dismiss} />
-
             {selectionLabel && <SelectionLabel label={selectionLabel} />}
 
             {selectedLine && (
@@ -720,52 +718,62 @@ function App() {
               />
             )}
 
-            {/* Everything the line-drawing tool has to say, stacked in one column so the
-                button and the hint beneath it can't land on top of each other. */}
-            {/* Everything a drawing tool has to say, in one column so the button and the
-                hints beneath it can't land on top of each other. Lines and geography share it:
-                they are drawn the same way, finished the same way, and were equally silent
-                about both. */}
-            {draft && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 'var(--space-3)',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 'var(--gap-sm)',
-                }}
-              >
-                {draft.points === 0 && (
-                  <div
-                    style={{
-                      background: 'var(--ink-900)',
-                      color: 'var(--ink-0)',
-                      borderRadius: 'var(--radius-lg)',
-                      padding: '5px 12px',
-                      fontSize: 'var(--text-xs)',
-                      fontWeight: 500,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {draft.startHint}
-                  </div>
-                )}
+            {/* The one thing anchored to the top centre of the canvas.
+                Everything a drawing tool has to say lives here — its opening hint, its Finish
+                button, and the keys beneath — and so do the Gazette's headlines. Both used to pin
+                themselves to this exact point independently, which is how a headline arriving
+                mid-draw came to land on top of the button the half-drawn line was waiting on. In
+                one column they can only sit above and below each other.
 
-                {draft.points >= draft.minimum && (
-                  <div style={{ pointerEvents: 'auto' }}>
-                    <Button variant="primary" onClick={draft.onFinish}>
-                      {draft.finishLabel}
-                    </Button>
-                  </div>
-                )}
+                The draft goes first because it is the actionable one: an ambient headline should
+                never be the thing that pushes a control out from under the cursor. Lines and
+                geography share the draft column — they are drawn the same way and finished the
+                same way. */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 'var(--space-3)',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 'var(--gap-sm)',
+                maxWidth: 'calc(100% - 32px)',
+              }}
+            >
+              {draft && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--gap-sm)' }}>
+                  {draft.points === 0 && (
+                    <div
+                      style={{
+                        background: 'var(--ink-900)',
+                        color: 'var(--ink-0)',
+                        borderRadius: 'var(--radius-lg)',
+                        padding: '5px 12px',
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 500,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {draft.startHint}
+                    </div>
+                  )}
 
-                <DraftFinishHint active={draft.points >= draft.minimum} />
-              </div>
-            )}
+                  {draft.points >= draft.minimum && (
+                    <div style={{ pointerEvents: 'auto' }}>
+                      <Button variant="primary" onClick={draft.onFinish}>
+                        {draft.finishLabel}
+                      </Button>
+                    </div>
+                  )}
+
+                  <DraftFinishHint active={draft.points >= draft.minimum} />
+                </div>
+              )}
+
+              <NotificationBanner items={notifications.bannerItems} cityName={state.mapName} onDismiss={notifications.dismiss} />
+            </div>
 
             {toast && (
               <div
