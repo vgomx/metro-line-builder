@@ -127,12 +127,20 @@ export function LinePath({ line, geometry, selected, riding, revealing, segmentL
           that two things must not animate along one stroke at once. During a ride the train is
           already running this path with a halo on it and the camera tracking it, and a second
           stream flowing over the same line at its own unrelated speed reads as a competing service.
-          The extra weight stays: the line is still the one under attention. */}
+          The extra weight stays: the line is still the one under attention.
+
+          On a metro line the stream is a light run down the coloured stroke, which white gives it.
+          A rail line's centre is already the page colour, so a white stream vanishes into it — the
+          effect was there but invisible. Rail keeps the very same stream — same width, same dashes,
+          same speed — and only recolours it: the line's own colour pulled toward the page's ink so
+          it reads against the centre stripe in either theme (dark on the white centre in light mode,
+          light on the dark centre in dark). At metro's width it rides the channel between the two
+          rails rather than over them. */}
       {selected && !revealing && !riding && (
         <path
           d={d}
           fill="none"
-          stroke="rgba(255, 255, 255, 0.6)"
+          stroke={rail ? `color-mix(in srgb, ${line.color} 68%, var(--text-primary))` : 'rgba(255, 255, 255, 0.6)'}
           strokeWidth={3}
           strokeLinecap="round"
           strokeDasharray="1.5 26.5"
