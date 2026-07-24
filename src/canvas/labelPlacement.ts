@@ -68,6 +68,9 @@ let measureCanvas: HTMLCanvasElement | null = null
  * label uses a literal family string, so it measures directly. A little horizontal
  * padding on top absorbs the small canvas-vs-layout metric drift. */
 export function measureLabelWidth(text: string): number {
+  // The same estimate stands in wherever there is nothing to measure with: a missing 2d context, or
+  // no document at all, which is how this module is reached from a test runner.
+  if (typeof document === 'undefined') return text.length * (LABEL_FONT_SIZE * 0.55)
   if (!measureCanvas) measureCanvas = document.createElement('canvas')
   const ctx = measureCanvas.getContext('2d')
   if (!ctx) return text.length * (LABEL_FONT_SIZE * 0.55)
@@ -193,18 +196,26 @@ export function labelGeometry(
   const reserve = glyphsWidth > 0 ? LABEL_GLYPH_GAP + glyphsWidth + GLYPH_EDGE_PAD - padX : 0
   const fullW = cardW + reserve
 
-  // A stacked label (directly above or below the marker) centres the whole plate — glyphs and all —
-  // on the stop it names, so the reserve for the glyphs doesn't slide the plate off to one side of
-  // the marker. The name then shifts left by half the reserve to stay centred within the text half
-  // of the plate. A side label (start/end) is instead pinned to the marker at one edge and grows
-  // away from it, so its name and card both stay put whether or not glyphs are present.
+  // Where the reserve is allowed to grow is the whole question, because the plate has to stay clear
+  // of the marker it names.
+  //
+  // A stacked label (directly above or below) centres the whole plate — glyphs and all — on the
+  // stop, so the reserve doesn't slide it off to one side; the name shifts left by half the reserve
+  // to stay centred in the text half.
+  //
+  // A side label is pinned by the edge that faces the marker and grows *away* from it. That is what
+  // the two arms below are for: a label to the east is pinned at its left edge and grows east, a
+  // label to the west is pinned at its right edge and grows west. Growing rightward in both cases —
+  // which is what this did when the glyphs were added — walks a westward label straight over its own
+  // marker, since the reserve is wider than the clearance the offset leaves.
+  const centred = placement.anchor === 'middle'
   const cardX =
     placement.anchor === 'start'
       ? labelX - padX
       : placement.anchor === 'end'
-        ? labelX - textWidth - padX
+        ? labelX + padX - fullW
         : labelX - fullW / 2
-  const textX = placement.anchor === 'middle' ? labelX - reserve / 2 : labelX
+  const textX = centred ? labelX - reserve / 2 : placement.anchor === 'end' ? labelX - reserve : labelX
 
   return {
     labelX: textX,
@@ -354,8 +365,12 @@ export function computeLabelPlacements(
 
       const box = labelBox(station, direction, interchange, glyphsWidthOf(station))
       const hitsLabel = placed.some(other => overlaps(box, other, LABEL_GAP))
-      // A station's own marker never reaches its label — the offset guarantees it — so the
-      // only markers worth testing are everyone else's.
+      // A station's own marker never reaches its label, so the only markers worth testing are
+      // everyone else's. That is a property labelGeometry has to hold up rather than a given: the
+      // offset clears the marker, but only while the card grows away from it. It stopped being
+      // true once a main station's card reserved room for mode glyphs and grew rightward whichever
+      // side of the marker it sat on, which put the glyphs of a westward label on top of the very
+      // interchange they were describing.
       const hitsMarker = [...markers].some(([id, marker]) => id !== station.id && overlaps(box, marker))
       if (hitsLabel || hitsMarker) {
         let spilled = 0
