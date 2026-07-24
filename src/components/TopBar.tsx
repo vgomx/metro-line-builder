@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ChangeEvent, ReactNode } from 'react'
 import { Button, IconButton } from 'metro-ds'
 import logoLightUrl from 'metro-ds/assets/logo.svg'
@@ -111,6 +111,24 @@ export function TopBar({
 }: TopBarProps) {
   const [focused, setFocused] = useState(false)
 
+  // The field grows to fit the name it holds. It can't lean on a `ch` width for that: `ch` is the
+  // width of a "0", and in a proportional face the letters that actually make up a name — the m's
+  // and w's and capitals — run wider, so a name sized in `ch` overflows and clips (which is how
+  // "Gnomesby" was showing as "Gnomes…"). So a hidden mirror carrying the same text in the same
+  // type is measured for the true width instead. Bounded: never a sliver for a short name, and past
+  // a long one it stops growing and scrolls, so a novel-length name can't push the toolbar off.
+  const mirrorRef = useRef<HTMLSpanElement>(null)
+  const [fieldWidth, setFieldWidth] = useState(96)
+  const NAME_MIN_WIDTH = 96
+  const NAME_MAX_WIDTH = 260
+  /** Padding either side (6+6) plus a little air for the caret and a breath beyond the last letter. */
+  const NAME_SLACK = 20
+
+  useLayoutEffect(() => {
+    const text = mirrorRef.current?.offsetWidth ?? 0
+    setFieldWidth(Math.max(NAME_MIN_WIDTH, Math.min(NAME_MAX_WIDTH, text + NAME_SLACK)))
+  }, [mapName])
+
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => onMapNameChange(e.target.value)
 
   return (
@@ -130,8 +148,11 @@ export function TopBar({
         style={{
           display: 'flex',
           alignItems: 'center',
-          marginRight: 'var(--space-4)',
-          paddingRight: 'var(--space-4)',
+          // The gap around the logo's divider, matched to every other divider in the bar (space-2
+          // each side of the line). It read as space-4 on both sides — 32px — which left the map
+          // name marooned well to the right of the logo with nothing filling the space.
+          marginRight: 'var(--space-2)',
+          paddingRight: 'var(--space-2)',
           borderRight: '1px solid var(--border-subtle)',
           flexShrink: 0,
         }}
@@ -156,10 +177,27 @@ export function TopBar({
           borderRadius: 'var(--radius-sm)',
           transition: 'background 100ms ease',
           minWidth: 0,
-          width: `${Math.max(mapName.length, 8)}ch`,
+          width: `${fieldWidth}px`,
         }}
         className="mlb-map-name"
       />
+      {/* Off-screen twin of the field's text in the same type, measured for the field's width. It
+          carries a placeholder when the name is empty so the field doesn't collapse to nothing
+          mid-rename. Kept out of layout and off the a11y tree — it exists only to be measured. */}
+      <span
+        ref={mirrorRef}
+        aria-hidden
+        style={{
+          position: 'absolute',
+          visibility: 'hidden',
+          whiteSpace: 'pre',
+          fontSize: 'var(--text-base)',
+          fontWeight: 500,
+          fontFamily: 'var(--font-sans)',
+        }}
+      >
+        {mapName || 'Untitled map'}
+      </span>
 
       <div style={{ width: '1px', height: '24px', background: 'var(--border-subtle)', margin: '0 var(--space-2)' }} />
 
