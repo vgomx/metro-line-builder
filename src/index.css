@@ -648,8 +648,9 @@ body {
 
   /* Hover states never resolve on touch — the finger leaves and the style stays. These are
      the ones that were left permanently half-lit. */
-  .mlb-authority-mark {
-    opacity: 1;
+  .mlb-authority-mark,
+  .mlb-map-key {
+    opacity: 1 !important;
   }
 
   /* The score badge lines up with the stats pill beside it, so it keeps that pill's height
