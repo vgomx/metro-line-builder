@@ -13,7 +13,7 @@ import { LineColorSelect } from './LineColorSelect'
 import { DeleteStationsDialog } from './DeleteStationsDialog'
 import { HoverTip } from './HoverTip'
 import { LineTripView } from './LineTripView'
-import { openMojiBySubgroup, openMojiUrl, SUBGROUP_LABELS } from '../openmoji'
+import { openMojiBySubgroup, openMojiLabel, openMojiUrl, SUBGROUP_LABELS } from '../openmoji'
 import { connectedLineCount, exclusiveStationIds, isTransferStation, lineHasStation, lineRouteIndexThrough, stationIdsOfLine } from '../canvas/lineNodes'
 
 /** Why `draft` can't be committed, or undefined if it can. One rule drives both the message
@@ -60,6 +60,98 @@ function LineNumberField({
         if (!lineNumberError(next, line, lines)) onSetLineNumber(line.id, Number(next.trim()))
       }}
     />
+  )
+}
+
+/**
+ * A landmark's symbol: shown by default, offered only when asked for.
+ *
+ * Selecting a landmark is usually about its name or where it sits, and the set runs to some 140
+ * symbols. Laid out in full they are the tallest thing in the panel by a wide margin, so they read
+ * as the point of the view rather than one field of it, and they push Delete far enough down that
+ * it takes a scroll to reach. Collapsed, the panel says which symbol this is and gets out of the
+ * way — the same bargain the line's own fields strike, and for the same reason.
+ *
+ * The grid stays open once it is, rather than closing on the first pick: choosing a symbol is
+ * usually trying a few against the map, and a panel that snapped shut after each one would make
+ * comparing them a chore.
+ */
+function PoiSymbolField({
+  poi,
+  onSetPoiIcon,
+}: {
+  poi: PointOfInterest
+  onSetPoiIcon: (poiId: string, icon: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const url = openMojiUrl(poi.icon)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)' }}>
+        <label style={{ flex: 1, fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--text-secondary)' }}>Symbol</label>
+        <Button variant="ghost" size="sm" icon={open ? undefined : <PenIcon />} onClick={() => setOpen(o => !o)}>
+          {open ? 'Done' : 'Change'}
+        </Button>
+      </div>
+
+      {open ? (
+        // Capped and scrolling, despite that being a scroll inside the panel's own: at full length
+        // the set is some 1900px, which would bury the destructive action below it.
+        <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+          {openMojiBySubgroup().map(group => (
+            <div key={group.subgroup} style={{ marginBottom: 'var(--gap-sm)' }}>
+              <div
+                style={{
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  color: 'var(--text-secondary)',
+                  marginBottom: 'var(--gap-xs)',
+                }}
+              >
+                {SUBGROUP_LABELS[group.subgroup] ?? group.subgroup}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
+                {group.icons.map(entry => {
+                  const entryUrl = openMojiUrl(entry.hexcode)
+                  return (
+                    <button
+                      key={entry.hexcode}
+                      type="button"
+                      className="mlb-poi-swatch"
+                      data-selected={entry.hexcode === poi.icon}
+                      title={entry.name}
+                      aria-label={entry.name}
+                      aria-pressed={entry.hexcode === poi.icon}
+                      onClick={() => onSetPoiIcon(poi.id, entry.hexcode)}
+                    >
+                      {entryUrl && <img src={entryUrl} alt="" width={34} height={34} />}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)', minHeight: '28px' }}>
+          {url && <img src={url} alt="" width={26} height={26} />}
+          <span
+            style={{
+              fontSize: 'var(--text-sm)',
+              color: 'var(--text-primary)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {openMojiLabel(poi.icon)}
+          </span>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -360,53 +452,9 @@ export function Inspector({
           <Input label="Name" value={poi.name} onChange={e => onRenamePoi(poi.id, e.target.value)} />
         </div>
 
-        {/* The same grid the placement picker offers, so changing a landmark's symbol after
-            the fact is the gesture that placed it.
-
-            Capped and scrolling, despite that being a scroll inside the panel's own — run at
-            full length it puts the whole set, some 1900px of it, between the name field and
-            Delete, and burying the destructive action is the worse of the two faults. The
-            palette is where symbols are browsed; this is where one is corrected. */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-          <label style={{ fontSize: 'var(--text-xs)', fontWeight: 500, color: 'var(--text-secondary)' }}>Symbol</label>
-          <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-            {openMojiBySubgroup().map(group => (
-              <div key={group.subgroup} style={{ marginBottom: 'var(--gap-sm)' }}>
-                <div
-                  style={{
-                    fontSize: 'var(--text-xs)',
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                    color: 'var(--text-secondary)',
-                    marginBottom: 'var(--gap-xs)',
-                  }}
-                >
-                  {SUBGROUP_LABELS[group.subgroup] ?? group.subgroup}
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
-                  {group.icons.map(entry => {
-                    const entryUrl = openMojiUrl(entry.hexcode)
-                    return (
-                      <button
-                        key={entry.hexcode}
-                        type="button"
-                        className="mlb-poi-swatch"
-                        data-selected={entry.hexcode === poi.icon}
-                        title={entry.name}
-                        aria-label={entry.name}
-                        aria-pressed={entry.hexcode === poi.icon}
-                        onClick={() => onSetPoiIcon(poi.id, entry.hexcode)}
-                      >
-                        {entryUrl && <img src={entryUrl} alt="" width={34} height={34} />}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        {/* Keyed on the landmark, so selecting a different one closes the grid again rather than
+            carrying the last one's open state over to it. */}
+        <PoiSymbolField key={poi.id} poi={poi} onSetPoiIcon={onSetPoiIcon} />
 
         <Divider />
         <Button variant="destructive" size="sm" icon={<TrashIcon />} onClick={() => onDeletePoi(poi.id)}>
