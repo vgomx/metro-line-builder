@@ -613,9 +613,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
 
   const handleBackgroundPointerDown = (e: ReactPointerEvent<SVGRectElement>) => {
     if (e.button !== 0) return
-    // A second finger already down means this is a pinch, not a tool action — placing a
-    // station or starting a marquee with it would be a side effect of trying to zoom.
-    if (e.pointerType === 'touch' && activeTouches.current.size >= 1) return
+    // A second finger down means this is a pinch, not a tool action — placing a station or starting
+    // a marquee with it would be a side effect of trying to zoom. The current finger is already
+    // counted (capture phase), so two-or-more is the pinch.
+    if (e.pointerType === 'touch' && activeTouches.current.size >= 2) return
     if (spaceHeld) return // space-held drag is pan-only; let useZoomPan's own drag handle it
     if (tool === 'add-station') {
       const { x, y } = toWorld(e.clientX, e.clientY)
@@ -644,6 +645,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const handleStationPointerDown = (e: ReactPointerEvent<SVGGElement>, station: Station) => {
     if (e.button !== 0) return
     if (spaceHeld) return // space-held drag is pan-only, even when starting on a station
+    // A finger landing on a station while another is already down is the second of a pinch, not a
+    // grab — taking hold of the station would drag it out from under the zoom.
+    if (e.pointerType === 'touch' && activeTouches.current.size >= 2) return
     if (tool !== 'select') return
     e.stopPropagation()
 
@@ -686,6 +690,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const handlePoiPointerDown = (e: ReactPointerEvent<SVGGElement>, poi: PointOfInterest) => {
     if (e.button !== 0) return
     if (spaceHeld) return
+    if (e.pointerType === 'touch' && activeTouches.current.size >= 2) return // second finger of a pinch, not a grab
     if (tool !== 'select') return
     e.stopPropagation()
 
@@ -744,6 +749,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   // doesn't move is just a selection.
   const handleGeoFeaturePointerDown = (e: ReactPointerEvent<SVGPathElement>, feature: GeoFeature) => {
     if (e.button !== 0 || spaceHeld) return
+    if (e.pointerType === 'touch' && activeTouches.current.size >= 2) return // second finger of a pinch, not a grab
     if (tool !== 'select') return
     e.stopPropagation()
     onStationGrab?.()
@@ -779,11 +785,14 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       setCursorWorld(prev => (prev && prev.x === snapped.x && prev.y === snapped.y ? prev : snapped))
     }
 
+    // A pinch that slipped past the capture cancel — belt to its braces. Whatever the drag was, put
+    // it back and stop, so a second finger never drags anything while the zoom takes over.
+    if (isPinch() && drag.kind !== 'none') {
+      cancelPinchedDrag()
+      return
+    }
+
     if (drag.kind === 'marquee') {
-      if (isPinch()) {
-        setDrag({ kind: 'none' })
-        return
-      }
       const { x, y } = toWorld(e.clientX, e.clientY)
       setDrag({ ...drag, x, y })
     } else if (drag.kind === 'pois') {
@@ -931,13 +940,36 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   // background rect so a click that lands on a station or a line dismisses it too — with the
   // tool up, neither of those does anything else. Space-held panning is exempt: that's
   // navigation, and it would be a poor reward for looking around.
-  const handleRootPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
-    if (e.pointerType === 'touch') {
-      activeTouches.current.add(e.pointerId)
-      // The second finger of a pinch. Drop the marquee the first finger opened and let
-      // useZoomPan's own touch handling drive the zoom.
-      if (isPinch() && drag.kind === 'marquee') setDrag({ kind: 'none' })
+  // Put back whatever a drag had taken hold of, then let it go. Called when a pinch is detected
+  // mid-drag: a station, landmark or shape the first finger had started to move is returned to where
+  // it began, so a two-finger zoom can't leave the map rearranged behind it. Only a drag that had
+  // actually shifted needs putting back; one that hadn't moved just releases.
+  const cancelPinchedDrag = () => {
+    if (drag.kind === 'stations' && drag.moved) {
+      const anchor = stations[drag.anchorId]
+      const origin = drag.originalPositions[drag.anchorId]
+      if (anchor && origin) onMoveStations(drag.ids, origin.x - anchor.x, origin.y - anchor.y)
+    } else if (drag.kind === 'pois' && drag.moved) {
+      const anchor = poiList.find(p => p.id === drag.anchorId)
+      if (anchor) onMovePois(drag.ids, drag.startAnchorX - anchor.x, drag.startAnchorY - anchor.y)
+    } else if (drag.kind === 'geo' && drag.moved) {
+      const anchor = geoFeatureList.find(f => f.id === drag.id)?.points[0]
+      if (anchor) onMoveGeoFeature(drag.id, drag.startAnchorX - anchor.x, drag.startAnchorY - anchor.y)
     }
+    if (drag.kind !== 'none') setDrag({ kind: 'none' })
+  }
+
+  // Every touch is counted here, in the capture phase, because a finger landing on a station or a
+  // landmark stops the event before it reaches the root — so counting on the way down is the only
+  // place that sees all of them, and isPinch() undercounted without it. The moment a second finger
+  // lands it's a pinch, not a drag, so whatever the first finger had taken hold of is let go.
+  const handlePointerDownCapture = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (e.pointerType !== 'touch') return
+    activeTouches.current.add(e.pointerId)
+    if (isPinch()) cancelPinchedDrag()
+  }
+
+  const handleRootPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (e.button !== 0 || spaceHeld) return
     if (tool !== 'add-poi') return
 
@@ -1300,6 +1332,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
         // d3 or the tool handlers see them, so on a tablet the canvas mostly moved the page.
         touchAction: 'none',
       }}
+      onPointerDownCapture={handlePointerDownCapture}
       onPointerDown={handleRootPointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
