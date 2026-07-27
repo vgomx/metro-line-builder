@@ -75,6 +75,9 @@ interface MapCanvasProps {
   selectedPoiIds: string[]
   selectedWaypoint: { lineId: string; index: number } | null
   draftLineNodes: LineNode[]
+  /** The line being extended, or null when drawing a fresh one — so the draft preview knows how
+   * much of itself is already committed and drawn, and previews only the part being added. */
+  draftLineId: string | null
   draftGeoPoints: Point[]
   showGrid: boolean
   showTrains: boolean
@@ -233,6 +236,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     selectedPoiIds,
     selectedWaypoint,
     draftLineNodes,
+    draftLineId,
     draftGeoPoints,
     showGrid,
     showTrains,
@@ -1061,7 +1065,17 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   // Split into the already-committed portion (clickable to insert a station mid-route)
   // and a separate rubber-band segment to the live cursor (preview only, not clickable).
   const draftPoints = resolveLineNodes(draftLineNodes, stations)
-  const draftCommittedPath = draftPoints.length >= 2 ? routeOrthogonal(draftPoints, false, DRAFT_CORNER_RADIUS) : ''
+  // When extending an existing line, its body is already on the map, drawn solid in whatever lane
+  // the network routed it into. Redrawing that whole body as a dashed centre-line preview only
+  // fights it: on a corridor it shares with other lines the solid line sits offset in its lane
+  // while the dashed one runs down the middle, so the preview visibly leaves the line it belongs
+  // to. So preview only the part being added — from the line's current endpoint outward. Sliced at
+  // the node level, before resolving, so a node that doesn't resolve can't shift the split. A fresh
+  // line has no committed body, so all of it previews, exactly as before.
+  const committedNodeCount = draftLineId ? (lineList.find(l => l.id === draftLineId)?.nodes.length ?? 0) : 0
+  const previewNodes = committedNodeCount > 0 ? draftLineNodes.slice(committedNodeCount - 1) : draftLineNodes
+  const previewPoints = resolveLineNodes(previewNodes, stations)
+  const draftCommittedPath = previewPoints.length >= 2 ? routeOrthogonal(previewPoints, false, DRAFT_CORNER_RADIUS) : ''
   const draftCursorPath =
     cursorWorld && draftPoints.length >= 1
       ? routeOrthogonal([draftPoints[draftPoints.length - 1], cursorWorld], false, DRAFT_CORNER_RADIUS)
