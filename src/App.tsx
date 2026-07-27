@@ -622,6 +622,7 @@ function App() {
             selectedPoiIds={state.selectedPoiIds}
             selectedWaypoint={state.selectedWaypoint}
             draftLineNodes={state.draftLineNodes}
+            draftLineId={state.draftLineId}
             draftGeoPoints={state.draftGeoPoints}
             showGrid={showGrid}
             showTrains={showTrains}
