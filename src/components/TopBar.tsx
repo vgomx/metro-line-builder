@@ -24,6 +24,7 @@ import type { ImageFormat } from '../exportImage'
 import { ExportMenu } from './ExportMenu'
 import { HoverTip } from './HoverTip'
 import { NotificationCenter } from './NotificationCenter'
+import { LEFT_TOOLBAR_WIDTH } from './LeftToolbar'
 import type { NotificationsApi } from '../state/useNotifications'
 
 /**
@@ -148,11 +149,14 @@ export function TopBar({
         style={{
           display: 'flex',
           alignItems: 'center',
-          // The gap around the logo's divider, matched to every other divider in the bar (space-2
-          // each side of the line). It read as space-4 on both sides — 32px — which left the map
-          // name marooned well to the right of the logo with nothing filling the space.
+          justifyContent: 'center',
+          // The mark rides in a lane exactly as wide as the left toolbar below it, and the bar
+          // shares the toolbar's space-3 inset, so centring here puts the mark on the very axis
+          // the toolbar's icons sit on.
+          width: `${LEFT_TOOLBAR_WIDTH}px`,
+          // The divider then falls at the lane's edge — flush with the toolbar's right side —
+          // with the same space-2 of air before the map name that every other divider gets.
           marginRight: 'var(--space-2)',
-          paddingRight: 'var(--space-2)',
           borderRight: '1px solid var(--border-subtle)',
           flexShrink: 0,
         }}
