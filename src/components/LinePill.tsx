@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { Line } from '../types'
-import { isRailLine, lineCode } from '../types'
+import { isRailLine, isTramLine, lineCode } from '../types'
 
 /**
  * A line, named, wearing its own colour.
@@ -10,9 +10,10 @@ import { isRailLine, lineCode } from '../types'
  * legs.
  *
  * Metro fills the pill solid; rail leaves it unfilled and runs two coloured rails through it, the
- * same double-track it draws on the map. The distinction has to survive per-type numbering, where
- * a metro Line 1 and a rail Line 1 both exist — the fill is what tells them apart at a glance, not
- * the number.
+ * same double-track it draws on the map; tram takes the same unfilled pill but with a single ring,
+ * echoing its single thin line. The distinction has to survive per-type numbering, where a metro
+ * Line 1, a rail Line 1 and a tram Line 1 all exist — the fill and rings tell them apart at a
+ * glance, not the number.
  *
  * It also carries the naming fallback the rest of the app uses: a line whose name has been cleared
  * still has a code, so a nameless line reads as "M4" rather than a blank swatch of colour.
@@ -58,6 +59,23 @@ export function LinePill({ line, size = 'md' }: { line: Line; size?: 'sm' | 'md'
     )
   }
 
+  if (isTramLine(line)) {
+    // The same white pill as rail, but single-ruled — one ring for the one thin line a tram draws,
+    // against rail's two. Same ink, same ground, so metro/rail/tram read as one family of badges.
+    return (
+      <span
+        style={{
+          ...base,
+          background: '#ffffff',
+          color: railInk(line.color),
+          boxShadow: tramRing(line.color),
+        }}
+      >
+        {label}
+      </span>
+    )
+  }
+
   return (
     <span style={{ ...base, background: line.color, color: '#fff' }}>{label}</span>
   )
@@ -72,4 +90,11 @@ export function railInk(color: string): string {
  * no height — the rail badge stays level with the metro one. */
 export function railRings(color: string): string {
   return `inset 0 0 0 1px ${color}, inset 0 0 0 2px #ffffff, inset 0 0 0 3px ${color}`
+}
+
+/** A single ring in the line's colour — a tram's echo of its one thin line, against rail's two.
+ * Painted by box-shadow like the rail rings, so the tram badge stays level with its neighbours.
+ * Kept a touch heavier than one of rail's rings so a lone stroke reads as a deliberate outline. */
+export function tramRing(color: string): string {
+  return `inset 0 0 0 1.5px ${color}`
 }

@@ -104,6 +104,10 @@ export function isRailLine(line: Line): boolean {
   return line.kind === 'rail'
 }
 
+export function isTramLine(line: Line): boolean {
+  return line.kind === 'tram'
+}
+
 /** The letter that leads a line's code — M for metro, R for rail, T for tram. */
 export function lineKindPrefix(kind: LineKind): string {
   return kind === 'rail' ? 'R' : kind === 'tram' ? 'T' : 'M'
