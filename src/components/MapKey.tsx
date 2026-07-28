@@ -55,6 +55,14 @@ function DoubleLine() {
   )
 }
 
+function ThinLine() {
+  return (
+    <svg width="22" height="12" viewBox="0 0 22 12" aria-hidden>
+      <line x1="1" y1="6" x2="21" y2="6" stroke={INK} strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function MapKey() {
   // Translucent at rest so it sits back from the map it explains, full strength on hover for when
   // you're actually reading it — the same treatment, and the same touch fallback (a finger never
@@ -84,11 +92,13 @@ export function MapKey() {
       <Header>Lines</Header>
       <Row mark={<SolidLine />} label="Metro line" />
       <Row mark={<DoubleLine />} label="Rail line" />
+      <Row mark={<ThinLine />} label="Tram line" />
 
       <Header>Stations</Header>
-      <Row mark={<StationMark kind="stop" color={INK} />} label="Stop" />
-      <Row mark={<StationMark kind="rail" color={INK} />} label="Rail stop" />
-      <Row mark={<StationMark kind="interchange" color={INK} />} label="Interchange" />
+      <Row mark={<StationMark shape="circle" color={INK} />} label="Metro stop" />
+      <Row mark={<StationMark shape="square" color={INK} />} label="Rail stop" />
+      <Row mark={<StationMark shape="diamond" color={INK} />} label="Tram stop" />
+      <Row mark={<StationMark shape="circle" interchange color={INK} />} label="Interchange" />
 
       <Header>Main interchange</Header>
       <Row

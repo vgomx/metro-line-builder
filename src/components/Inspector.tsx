@@ -4,8 +4,9 @@ import { ParkIcon, PenIcon, PoiIcon, RiverIcon, TrashIcon } from '../icons'
 import { isUsableLineNumber, MAX_LINE_NUMBER } from '../lineNumber'
 import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
 import type { RideProgress } from '../canvas/trainMotion'
-import { COMPANY_SYMBOLS, isRailLine, lineCode, lineKind } from '../types'
+import { COMPANY_SYMBOLS, lineCode, lineKind, stationShape } from '../types'
 import { TrainIcon } from '../icons'
+import { MODE_LABEL } from '../modeGlyphs'
 import { CompanySymbolIcon, SYMBOL_LABEL } from '../companySymbols'
 import { CompanySelect } from './CompanySelect'
 import { LinePill } from './LinePill'
@@ -183,7 +184,7 @@ function LineSummary({
       />
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' }}>
         <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>
-          {lineCode(line)} · {isRailLine(line) ? 'Rail' : 'Metro'}
+          {lineCode(line)} · {MODE_LABEL[lineKind(line)]}
         </span>
         <span
           style={{ fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
@@ -581,7 +582,7 @@ export function Inspector({
         )}
         <LineTripView
           color={line.color}
-          rail={isRailLine(line)}
+          shape={stationShape(lineKind(line))}
           stops={lineStations.map(s => ({
             id: s.id,
             name: s.name,

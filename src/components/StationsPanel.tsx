@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Input } from 'metro-ds'
-import type { Line, Station } from '../types'
-import { isRailLine } from '../types'
+import type { Line, LineKind, Station } from '../types'
+import { lineKind, markShapeForModes } from '../types'
 import { isTransferStation, lineHasStation } from '../canvas/lineNodes'
 import { LineBadge, MoreLinesBadge } from './LineBadge'
-import { StationMark, stationMarkColor, stationMarkKind } from './StationMark'
+import { StationMark, stationMarkColor } from './StationMark'
 import { SortControl } from './SortControl'
 import type { SortOption } from './SortControl'
 
@@ -13,7 +13,7 @@ export type StationSortKey = 'map' | 'name'
 /** Which mode's stops the list is narrowed to, or all of them. Kept apart from the sort: choosing a
  * mode hides the others, which is a filter, not an ordering — the two were muddled while both lived
  * in one dropdown. */
-export type StationFilter = 'all' | 'metro' | 'rail'
+export type StationFilter = 'all' | LineKind
 
 const SORT_OPTIONS: SortOption<StationSortKey>[] = [
   { key: 'map', label: 'Map order' },
@@ -25,11 +25,10 @@ export function StationSortControl({ value, onChange }: { value: StationSortKey;
   return <SortControl value={value} options={SORT_OPTIONS} onChange={onChange} />
 }
 
-const FILTERS: { key: StationFilter; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'metro', label: 'Metro' },
-  { key: 'rail', label: 'Rail' },
-]
+/** The mode labels the filter and the empty state read from — every mode a stop can be narrowed to. */
+const MODE_LABELS: Record<LineKind, string> = { metro: 'Metro', rail: 'Rail', tram: 'Tram' }
+/** The order the mode filters offer themselves in, matching the Lines panel's sections. */
+const MODE_ORDER: LineKind[] = ['metro', 'rail', 'tram']
 
 interface StationsPanelProps {
   stations: Station[]
@@ -51,23 +50,25 @@ export function StationsPanel({ stations, lines, selectedStationId, sortBy, filt
   const [query, setQuery] = useState('')
   const linesCallingAt = (stationId: string) => lines.filter(l => lineHasStation(l, stationId))
 
-  // Whether a stop is served by a given mode — a rail line calls there, or a metro one; a stop no
-  // line has reached yet answers to the mode it was placed as. An interchange serves both, so it
-  // passes either filter, which is the right answer: it is one of each, and hiding it from the rail
-  // list would lose a place a rail rider can actually change.
-  const servesMode = (station: Station, mode: 'metro' | 'rail') => {
+  // Whether a stop is served by a given mode — a line of that mode calls there; a stop no line has
+  // reached yet answers to the mode it was placed as. An interchange serves each of its modes, so it
+  // passes every one of their filters, which is the right answer: hiding a metro-meets-rail junction
+  // from the rail list would lose a place a rail rider can actually change.
+  const servesMode = (station: Station, mode: LineKind) => {
     const calling = linesCallingAt(station.id)
     if (calling.length === 0) return (station.mode ?? 'metro') === mode
-    return mode === 'rail' ? calling.some(isRailLine) : calling.some(l => !isRailLine(l))
+    return calling.some(l => lineKind(l) === mode)
   }
 
   // The sort is stable, so stops that tie keep the order the map put them in — which is the order
   // this list has always used, and the only one a station really has of its own.
   const ordered = sortBy === 'name' ? [...stations].sort((a, b) => a.name.localeCompare(b.name)) : stations
 
-  // The filter offers itself only when there's a mix to sift — an all-metro map has nothing to
-  // narrow, so a Metro/Rail choice there would be a control that does nothing.
-  const bothModes = stations.some(s => servesMode(s, 'metro')) && stations.some(s => servesMode(s, 'rail'))
+  // The filter offers itself only when there's a mix to sift, and only the modes actually on the map
+  // — an all-metro map has nothing to narrow, and a metro-and-tram map has no reason to show a Rail
+  // button that would only ever come back empty.
+  const presentModes = MODE_ORDER.filter(mode => stations.some(s => servesMode(s, mode)))
+  const showFilter = presentModes.length >= 2
   const filtered = filterMode === 'all' ? ordered : ordered.filter(s => servesMode(s, filterMode))
 
   // Only once there are enough stops for the list to be a problem. On a small map the field
@@ -78,15 +79,15 @@ export function StationsPanel({ stations, lines, selectedStationId, sortBy, filt
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {bothModes && (
+      {showFilter && (
         <div style={{ display: 'flex', gap: '4px', padding: '8px 12px', borderBottom: '1px solid var(--border-subtle)' }}>
-          {FILTERS.map(f => {
-            const active = filterMode === f.key
+          {(['all', ...presentModes] as StationFilter[]).map(key => {
+            const active = filterMode === key
             return (
               <button
-                key={f.key}
+                key={key}
                 type="button"
-                onClick={() => onFilterChange(f.key)}
+                onClick={() => onFilterChange(key)}
                 aria-pressed={active}
                 style={{
                   flex: 1,
@@ -102,7 +103,7 @@ export function StationsPanel({ stations, lines, selectedStationId, sortBy, filt
                   transition: 'background 100ms ease, color 100ms ease',
                 }}
               >
-                {f.label}
+                {key === 'all' ? 'All' : MODE_LABELS[key]}
               </button>
             )
           })}
@@ -125,11 +126,9 @@ export function StationsPanel({ stations, lines, selectedStationId, sortBy, filt
         <p style={{ padding: 'var(--space-4)', color: 'var(--text-muted)', fontSize: 'var(--text-sm)', textAlign: 'center' }}>
           {needle
             ? `No station matches “${query.trim()}”.`
-            : filterMode === 'rail'
-              ? 'No rail stations.'
-              : filterMode === 'metro'
-                ? 'No metro stations.'
-                : 'No stations.'}
+            : filterMode === 'all'
+              ? 'No stations.'
+              : `No ${MODE_LABELS[filterMode].toLowerCase()} stations.`}
         </p>
       )}
 
@@ -140,8 +139,8 @@ export function StationsPanel({ stations, lines, selectedStationId, sortBy, filt
         // mode to go on.
         const calling = linesCallingAt(station.id)
         const interchange = isTransferStation(station, lines)
-        const rail = calling.length > 0 ? calling.some(isRailLine) : station.mode === 'rail'
-        const kind = stationMarkKind(interchange, rail)
+        const modes = calling.length > 0 ? calling.map(lineKind) : [station.mode ?? 'metro']
+        const shape = markShapeForModes(modes)
         const color = stationMarkColor(interchange, calling[0]?.color)
         const badges = calling.slice(0, MAX_BADGES)
         const overflow = calling.length - badges.length
@@ -160,7 +159,7 @@ export function StationsPanel({ stations, lines, selectedStationId, sortBy, filt
               borderLeft: `3px solid ${isSelected ? 'var(--interactive-primary)' : 'transparent'}`,
             }}
           >
-            <StationMark kind={kind} color={color} />
+            <StationMark shape={shape} interchange={interchange} color={color} />
             <span
               style={{
                 flex: 1,

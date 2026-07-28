@@ -70,9 +70,10 @@ export interface Company {
 }
 
 /** What a line runs. Metro is the default and the majority; rail is the mainline/suburban kind,
- * drawn as a double track and stopping at square stations. An enum rather than a boolean so the
- * next kind — tram, BRT — is a value here rather than a second flag to reconcile against this one. */
-export type LineKind = 'metro' | 'rail'
+ * drawn as a double track and stopping at square stations; tram is the street-level kind, a single
+ * thin line calling at diamond stops. An enum rather than a boolean so the next kind — BRT, ferry —
+ * is a value here rather than another flag to reconcile against the last one. */
+export type LineKind = 'metro' | 'rail' | 'tram'
 
 export interface Line {
   id: string
@@ -103,9 +104,34 @@ export function isRailLine(line: Line): boolean {
   return line.kind === 'rail'
 }
 
-/** The letter that leads a line's code — M for metro, R for rail. */
+export function isTramLine(line: Line): boolean {
+  return line.kind === 'tram'
+}
+
+/** The letter that leads a line's code — M for metro, R for rail, T for tram. */
 export function lineKindPrefix(kind: LineKind): string {
-  return kind === 'rail' ? 'R' : 'M'
+  return kind === 'rail' ? 'R' : kind === 'tram' ? 'T' : 'M'
+}
+
+/** The mark a station wears for a mode: a disc for metro, a rounded square for rail, a diamond for
+ * tram. One place so the canvas, the list, the key and the trip strip can't draw a stop three ways.
+ * A presentational mapping, but it lives beside the codes for the same reason `lineKindPrefix` does:
+ * it's the mode's identity, and everything that renders a mode reaches for it. */
+export type StationShape = 'circle' | 'square' | 'diamond'
+export function stationShape(kind: LineKind): StationShape {
+  return kind === 'rail' ? 'square' : kind === 'tram' ? 'diamond' : 'circle'
+}
+
+/**
+ * Which shape a stop wears given the modes calling there.
+ *
+ * A stop served by one mode wears that mode's shape, however many lines of it stop there — a
+ * three-metro interchange is still a (bigger) disc, a rail junction a bigger square. Only where two
+ * modes genuinely meet does the shape fall back to a disc, because no one mode's shape can stand for
+ * a place you change between them. This is the whole rule the canvas, the list and the key share.
+ */
+export function markShapeForModes(modes: LineKind[]): StationShape {
+  return new Set(modes).size >= 2 ? 'circle' : stationShape(modes[0] ?? 'metro')
 }
 
 /**

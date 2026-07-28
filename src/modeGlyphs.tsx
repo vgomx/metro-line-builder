@@ -14,11 +14,11 @@ const MODE_SVGS = import.meta.glob('./assets/openmoji-black/*.svg', {
   import: 'default',
 }) as Record<string, string>
 
-/** Each mode's OpenMoji glyph. metro and train are the two live modes; tram (1F68A), ferry (26F4)
- * and bus (1F68C) ship alongside for when those modes exist. */
-const MODE_HEX: Record<LineKind, string> = { metro: '1F687', rail: '1F686' }
+/** Each mode's OpenMoji glyph — metro, train and tram are the live modes; ferry (26F4) and bus
+ * (1F68C) ship alongside for when those modes exist too. */
+const MODE_HEX: Record<LineKind, string> = { metro: '1F687', rail: '1F686', tram: '1F68A' }
 
-export const MODE_LABEL: Record<LineKind, string> = { metro: 'Metro', rail: 'Rail' }
+export const MODE_LABEL: Record<LineKind, string> = { metro: 'Metro', rail: 'Rail', tram: 'Tram' }
 
 /** The glyph's drawn size in the label, and the gap between two of them. */
 export const MODE_GLYPH_SIZE = 12

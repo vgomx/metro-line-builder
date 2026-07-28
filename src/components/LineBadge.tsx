@@ -1,6 +1,6 @@
 import type { Line } from '../types'
-import { isRailLine, lineCode } from '../types'
-import { railInk, railRings } from './LinePill'
+import { isRailLine, isTramLine, lineCode } from '../types'
+import { railInk, railRings, tramRing } from './LinePill'
 
 /**
  * A line's code, wearing its colour — the small badge the lists and pickers identify a line by.
@@ -11,8 +11,9 @@ import { railInk, railRings } from './LinePill'
  *
  * Metro fills the capsule solid, its digit in whichever of black or white reads on the colour. Rail
  * leaves it white and double-rules it in the line's colour — the badge's echo of the double track —
- * because numbering runs per kind, so a metro M-code and a rail R-code can share a number and the
- * fill is what tells them apart at a glance, the letter what tells them apart in a sentence.
+ * and tram takes the same white capsule with a single ring, its echo of the one thin line. Numbering
+ * runs per kind, so an M-code, an R-code and a T-code can share a number: the fill and rings tell
+ * them apart at a glance, the letter tells them apart in a sentence.
  *
  * `pill` is the roomier stadium for rows with space to give; `circle` the compact one the dense
  * lists use — same capsule, a tighter floor.
@@ -54,6 +55,9 @@ export function LineBadge({ line, shape, size }: { line: Line; shape: 'pill' | '
 
   if (isRailLine(line)) {
     return <span style={{ ...base, background: '#ffffff', color: railInk(line.color), boxShadow: railRings(line.color) }}>{lineCode(line)}</span>
+  }
+  if (isTramLine(line)) {
+    return <span style={{ ...base, background: '#ffffff', color: railInk(line.color), boxShadow: tramRing(line.color) }}>{lineCode(line)}</span>
   }
   return <span style={{ ...base, background: line.color, color: readableInkOn(line.color) }}>{lineCode(line)}</span>
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { prefersReducedMotion } from '../useReducedMotion'
 import type { RideProgress } from '../canvas/trainMotion'
-import type { Line } from '../types'
+import type { Line, StationShape } from '../types'
 import { LineBadge, MoreLinesBadge } from './LineBadge'
 
 export interface TripStop {
@@ -17,8 +17,9 @@ const MAX_TRANSFER_BADGES = 3
 
 interface LineTripViewProps {
   color: string
-  /** A rail line's stops are drawn as rounded squares, matching the mark they wear on the map. */
-  rail?: boolean
+  /** The line's own station shape — a disc for metro, a rounded square for rail, a diamond for tram
+   * — so a stop reads the same in the strip as on the map. A transfer stays a disc regardless. */
+  shape?: StationShape
   stops: TripStop[]
   /** The live ride on this line, or null for the resting route diagram. */
   ride: RideProgress | null
@@ -36,7 +37,7 @@ const ROW_H = 32
  * the leg the train is on fades from full colour to the passed tint as it crosses, the fading
  * edge marking where the train is, landing muted exactly as it pulls in.
  */
-export function LineTripView({ color, rail = false, stops, ride }: LineTripViewProps) {
+export function LineTripView({ color, shape = 'circle', stops, ride }: LineTripViewProps) {
   const currentIndex = ride ? stops.findIndex(s => s.id === ride.nextStationId) : -1
   const riding = ride !== null && currentIndex >= 0
   const dir = riding ? ride!.direction : 1
@@ -160,18 +161,20 @@ export function LineTripView({ color, rail = false, stops, ride }: LineTripViewP
                     position: 'absolute',
                     left: '4px',
                     top: '50%',
-                    transform: 'translateY(-50%)',
+                    // Centred on the row, and turned 45° for a tram's diamond — the rotate has to
+                    // ride the same transform as the centring or it would replace it and drop the bead.
+                    transform: `translateY(-50%)${!stop.transfer && shape === 'diamond' ? ' rotate(45deg)' : ''}`,
                     width: current ? '15px' : '13px',
                     height: current ? '15px' : '13px',
                     marginLeft: current ? '-1px' : 0,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    // A square (softly rounded) for rail, a disc for metro — the same shape language
-                    // the canvas marks use, so a stop reads the same in the strip as on the map. A
-                    // transfer stays a disc even on a rail line, matching the canvas rule that an
-                    // interchange is a circle whatever mode meets there.
-                    borderRadius: rail && !stop.transfer ? '4px' : '50%',
+                    // A disc for metro, a softly rounded square for rail, a diamond (a square turned
+                    // 45°) for tram — the same shape language the canvas marks use, so a stop reads
+                    // the same in the strip as on the map. A transfer stays a disc whatever the mode,
+                    // matching the canvas rule that a mixed-mode interchange is a circle.
+                    borderRadius: stop.transfer || shape === 'circle' ? '50%' : shape === 'diamond' ? '2px' : '4px',
                     border: `2.5px solid ${nodeColor}`,
                     // A plain stop is a hollow bead. An interchange wears the map's target mark — the
                     // same ring with a filled centre it has on the canvas — rather than a solid dot,

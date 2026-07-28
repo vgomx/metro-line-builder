@@ -41,11 +41,13 @@ interface LinesPanelProps {
   onReorder: (lineId: string, toIndex: number) => void
 }
 
-/** The list's two divisions, in the order they stack: metro first as the default and the majority,
- * rail beneath it. Numbering runs independently inside each — a Metro 1 and a Rail 1 both exist. */
+/** The list's divisions, in the order they stack: metro first as the default and the majority, then
+ * rail, then tram. Numbering runs independently inside each — a Metro 1, a Rail 1 and a Tram 1 all
+ * coexist. A section is always shown so its empty state can offer the only "Add" for its kind. */
 const SECTIONS: { kind: LineKind; title: string; add: string }[] = [
   { kind: 'metro', title: 'Metro', add: 'Add metro line' },
   { kind: 'rail', title: 'Rail', add: 'Add rail line' },
+  { kind: 'tram', title: 'Tram', add: 'Add tram line' },
 ]
 
 /**

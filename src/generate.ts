@@ -267,14 +267,20 @@ export function buildRandomMap(): DataSnapshot {
     hubOfLine.set(id, hubIndex)
   }
 
-  // Modes: a city built from nothing is mostly metro, with a rail line or two threaded through it.
-  // A hub two lines cross at becomes a modal interchange the moment one of them is rail — which is
-  // where the mode glyphs earn their place — so a shared hub is seeded rail first and one of its
-  // other lines held back as metro, guaranteeing the crossing is metro-meets-rail. The rest of the
-  // rail quota is filled from anywhere, always leaving metro the majority.
+  // Modes: a city built from nothing is mostly metro, threaded with a rail line or two and the odd
+  // tram. A hub two lines cross at becomes a modal interchange the moment one of them isn't metro —
+  // which is where the mode glyphs earn their place — so a shared hub is seeded rail first and one
+  // of its other lines held back as metro, guaranteeing a metro-meets-rail crossing. The rest of the
+  // non-metro quota is filled from anywhere, always leaving metro the majority.
   const railIds = new Set<string>()
-  const railQuota = lineOrder.length <= 1 ? 0 : Math.min(lineOrder.length - 1, Math.max(1, Math.round(lineOrder.length * 0.3)))
-  if (railQuota > 0) {
+  const tramIds = new Set<string>()
+  // Up to ~40% of the lines run something other than metro, split between rail and tram with rail
+  // the commoner of the two — a mainline threads a city more often than a tram does. Metro keeps the
+  // rest, and so the majority. Tram only turns up once there are enough lines to spare one.
+  const nonMetroQuota = lineOrder.length <= 1 ? 0 : Math.min(lineOrder.length - 1, Math.max(1, Math.round(lineOrder.length * 0.4)))
+  const tramQuota = Math.floor(nonMetroQuota / 2)
+  const railQuota = nonMetroQuota - tramQuota
+  if (nonMetroQuota > 0) {
     const byHub = new Map<number, string[]>()
     for (const id of lineOrder) {
       const h = hubOfLine.get(id)!
@@ -284,22 +290,34 @@ export function buildRandomMap(): DataSnapshot {
     }
     const sharedHub = [...byHub.values()].find(ids => ids.length >= 2)
     const protectedMetro = sharedHub?.[1]
+    // Seed the shared crossing as metro-meets-rail, so a generated map arrives already showing the
+    // mode glyphs it now has the vocabulary for.
     if (sharedHub) railIds.add(sharedHub[0])
     for (const id of shuffle([...lineOrder])) {
       if (railIds.size >= railQuota) break
-      if (id === protectedMetro) continue
+      if (id === protectedMetro || railIds.has(id)) continue
       railIds.add(id)
+    }
+    // Then the trams, from whatever's left to metro — never the protected line, never a rail one.
+    for (const id of shuffle([...lineOrder])) {
+      if (tramIds.size >= tramQuota) break
+      if (id === protectedMetro || railIds.has(id) || tramIds.has(id)) continue
+      tramIds.add(id)
     }
   }
 
-  // Number per mode: metro 1..N, rail 1..N, each filling its own sequence. Metro keeps no `kind`
-  // field, holding to the absent-means-metro convention the rest of the app reads by.
+  // Number per mode: metro 1..N, rail 1..N, tram 1..N, each filling its own sequence. Metro keeps no
+  // `kind` field, holding to the absent-means-metro convention the rest of the app reads by.
   let metroNumber = 0
   let railNumber = 0
+  let tramNumber = 0
   for (const id of lineOrder) {
     if (railIds.has(id)) {
       lines[id].kind = 'rail'
       lines[id].number = ++railNumber
+    } else if (tramIds.has(id)) {
+      lines[id].kind = 'tram'
+      lines[id].number = ++tramNumber
     } else {
       lines[id].number = ++metroNumber
     }
@@ -328,7 +346,7 @@ export function buildRandomMap(): DataSnapshot {
   const modesAtStation = new Map<string, Set<string>>()
   const linesAtStation = new Map<string, number>()
   for (const id of lineOrder) {
-    const mode = railIds.has(id) ? 'rail' : 'metro'
+    const mode = railIds.has(id) ? 'rail' : tramIds.has(id) ? 'tram' : 'metro'
     const seen = new Set<string>()
     for (const node of lines[id].nodes) {
       if (node.kind !== 'station' || seen.has(node.stationId)) continue
