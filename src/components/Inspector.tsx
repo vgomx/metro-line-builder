@@ -4,7 +4,7 @@ import { ParkIcon, PenIcon, PoiIcon, RiverIcon, TrashIcon } from '../icons'
 import { isUsableLineNumber, MAX_LINE_NUMBER } from '../lineNumber'
 import type { Company, GeoFeature, Line, PointOfInterest, Station } from '../types'
 import type { RideProgress } from '../canvas/trainMotion'
-import { COMPANY_SYMBOLS, isRailLine, lineKind } from '../types'
+import { COMPANY_SYMBOLS, isRailLine, lineCode, lineKind } from '../types'
 import { TrainIcon } from '../icons'
 import { CompanySymbolIcon, SYMBOL_LABEL } from '../companySymbols'
 import { CompanySelect } from './CompanySelect'
@@ -26,7 +26,7 @@ function lineNumberError(draft: string, line: Line, lines: Record<string, Line>)
   if (!isUsableLineNumber(parsed)) return `Use a whole number from 1 to ${MAX_LINE_NUMBER}`
   const clash = Object.values(lines).find(other => other.id !== line.id && other.number === parsed && lineKind(other) === lineKind(line))
   if (!clash) return undefined
-  return `Already used by ${clash.name.trim() || `line ${clash.number}`}`
+  return `Already used by ${clash.name.trim() || lineCode(clash)}`
 }
 
 /**
@@ -183,7 +183,7 @@ function LineSummary({
       />
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' }}>
         <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>
-          Line {line.number} · {isRailLine(line) ? 'Rail' : 'Metro'}
+          {lineCode(line)} · {isRailLine(line) ? 'Rail' : 'Metro'}
         </span>
         <span
           style={{ fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
@@ -222,7 +222,7 @@ function DeleteLineButton({
   const others = Object.values(lines).filter(other => other.id !== line.id)
   const ownStationIds = [...new Set(stationIdsOfLine(line))]
   const exclusive = exclusiveStationIds([line], others)
-  const name = line.name.trim() || `Line ${line.number}`
+  const name = line.name.trim() || lineCode(line)
 
   const remove = (withStations: boolean) => {
     setAsking(false)
@@ -717,7 +717,7 @@ export function Inspector({
                     marginRight: 'var(--gap-sm)',
                   }}
                 />
-                Stop here too — {l.name.trim() || `Line ${l.number}`}
+                Stop here too — {l.name.trim() || lineCode(l)}
               </Button>
             ))}
           </div>

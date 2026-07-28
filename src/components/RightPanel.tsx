@@ -11,6 +11,7 @@ import { Inspector } from './Inspector'
 import { JourneyPanel } from './JourneyPanel'
 import { HoverTip } from './HoverTip'
 import type { Company, GeoFeature, Line, LineKind, PointOfInterest, Station } from '../types'
+import { lineCode } from '../types'
 import type { RideProgress } from '../canvas/trainMotion'
 import type { Journey } from '../journey'
 
@@ -200,7 +201,7 @@ export function RightPanel({
   // something is the only way to land there, so the selection itself is the trail back —
   // no navigation history to keep, and the answer can't go stale.
   const detail = selectedLine
-    ? { title: selectedLine.name.trim() || `Line ${selectedLine.number}`, from: 'Lines' }
+    ? { title: selectedLine.name.trim() || lineCode(selectedLine), from: 'Lines' }
     : selectedStation
       ? { title: selectedStation.name.trim() || 'Station', from: 'Stations' }
       : selectedGeoFeature

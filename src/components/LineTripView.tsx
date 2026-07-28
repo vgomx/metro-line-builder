@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { prefersReducedMotion } from '../useReducedMotion'
 import type { RideProgress } from '../canvas/trainMotion'
 import type { Line } from '../types'
-import { LineBadge } from './LineBadge'
+import { LineBadge, MoreLinesBadge } from './LineBadge'
 
 export interface TripStop {
   id: string
@@ -221,9 +221,7 @@ export function LineTripView({ color, rail = false, stops, ride }: LineTripViewP
                       <LineBadge key={l.id} line={l} shape="circle" size="xs" />
                     ))}
                     {stop.transferLines.length > MAX_TRANSFER_BADGES && (
-                      <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-muted)' }}>
-                        +{stop.transferLines.length - MAX_TRANSFER_BADGES}
-                      </span>
+                      <MoreLinesBadge count={stop.transferLines.length - MAX_TRANSFER_BADGES} />
                     )}
                   </span>
                 )}

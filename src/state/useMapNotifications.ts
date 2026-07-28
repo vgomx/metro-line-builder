@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { DataSnapshot } from './useMapState'
 import { stationIdsOfLine } from '../canvas/lineNodes'
+import { lineCode } from '../types'
 import { notificationCopy } from '../notificationCopy'
 
 /**
@@ -20,7 +21,8 @@ type SuppressReason = 'silent' | 'foundation'
 
 interface LineSnap {
   name: string
-  number: number
+  /** M4, R2 — used as the headline's name when the line hasn't got one of its own. */
+  code: string
   companyId: string | null
   stops: number
 }
@@ -36,7 +38,7 @@ function snapshot(state: DataSnapshot): Snap {
   const lines = new Map<string, LineSnap>()
   for (const id of state.lineOrder) {
     const line = state.lines[id]
-    if (line) lines.set(id, { name: line.name, number: line.number, companyId: line.companyId, stops: stationIdsOfLine(line).length })
+    if (line) lines.set(id, { name: line.name, code: lineCode(line), companyId: line.companyId, stops: stationIdsOfLine(line).length })
   }
   const companies = new Map<string, string>()
   for (const id of state.companyOrder) {
@@ -92,15 +94,15 @@ export function useMapNotifications(state: DataSnapshot, announce: (text: string
       const before = prev.lines.get(id)
       if (!before) {
         lineCreated = true
-        announce(notificationCopy.lineOpened(line.name, line.number, line.stops))
+        announce(notificationCopy.lineOpened(line.name, line.code, line.stops))
         continue
       }
       if (line.stops > before.stops) {
-        announce(notificationCopy.lineExtended(line.name, line.number, line.stops - before.stops))
+        announce(notificationCopy.lineExtended(line.name, line.code, line.stops - before.stops))
       }
       if (line.companyId !== before.companyId) {
-        if (line.companyId) announce(notificationCopy.lineConceded(line.name, line.number, snap.companies.get(line.companyId) ?? ''))
-        else announce(notificationCopy.lineReturned(line.name, line.number))
+        if (line.companyId) announce(notificationCopy.lineConceded(line.name, line.code, snap.companies.get(line.companyId) ?? ''))
+        else announce(notificationCopy.lineReturned(line.name, line.code))
       }
     }
 

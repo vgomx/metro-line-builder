@@ -42,6 +42,7 @@ import { ScoreBadge } from './components/ScoreBadge'
 import { playSequence, playSound } from './sound'
 import type { SoundName } from './sound'
 import type { Line, LineKind, Tool } from './types'
+import { lineCode } from './types'
 import { openMojiLabel } from './openmoji'
 
 // The canvas runs edge to edge underneath the floating toolbar and panel, so the parts of
@@ -373,7 +374,7 @@ function App() {
     }
     const served = new Set(doomed.flatMap(line => stationIdsOfLine(line)))
     setPendingDelete({
-      title: doomed.length === 1 ? `Delete ${doomed[0].name.trim() || `Line ${doomed[0].number}`}?` : `Delete ${doomed.length} lines?`,
+      title: doomed.length === 1 ? `Delete ${doomed[0].name.trim() || lineCode(doomed[0])}?` : `Delete ${doomed.length} lines?`,
       total: served.size,
       atRisk: atRisk.map(id => state.stations[id]?.name ?? id),
     })

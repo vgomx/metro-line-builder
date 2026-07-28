@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { Line } from '../types'
-import { isRailLine } from '../types'
+import { isRailLine, lineCode } from '../types'
 
 /**
  * A line, named, wearing its own colour.
@@ -15,14 +15,14 @@ import { isRailLine } from '../types'
  * the number.
  *
  * It also carries the naming fallback the rest of the app uses: a line whose name has been cleared
- * still has a number, so a nameless line reads as "Line 4" rather than a blank swatch of colour.
+ * still has a code, so a nameless line reads as "M4" rather than a blank swatch of colour.
  *
  * `sm` is for sitting inline in a sentence of other text (a leg's "3 stops · 8 min"); `md` for a
  * wrapped row of lines that are the content rather than an annotation on it.
  */
 export function LinePill({ line, size = 'md' }: { line: Line; size?: 'sm' | 'md' }) {
   const small = size === 'sm'
-  const label = line.name.trim() || `Line ${line.number}`
+  const label = line.name.trim() || lineCode(line)
 
   const base: CSSProperties = {
     display: 'inline-flex',

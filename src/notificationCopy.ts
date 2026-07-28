@@ -10,9 +10,10 @@ function pick(options: string[]): string {
   return options[Math.floor(Math.random() * options.length)]
 }
 
-function lineLabel(name: string, number: number): string {
-  const trimmed = name.trim()
-  return trimmed || `Line ${number}`
+/** The line's name for prose, or its code (M4, R2) when it hasn't got one — never a bare number,
+ * which couldn't tell a metro line from the rail line sharing it. */
+function lineLabel(name: string, code: string): string {
+  return name.trim() || code
 }
 
 export const notificationCopy = {
@@ -35,8 +36,8 @@ export const notificationCopy = {
     ])
   },
 
-  lineOpened: (name: string, number: number, stops: number) => {
-    const label = lineLabel(name, number)
+  lineOpened: (name: string, code: string, stops: number) => {
+    const label = lineLabel(name, code)
     const calling = stops > 0 ? ` — ${stops} station${stops === 1 ? '' : 's'} and counting` : ''
     return pick([
       `Ribbon cut! The ${label} opens for service${calling}.`,
@@ -45,8 +46,8 @@ export const notificationCopy = {
     ])
   },
 
-  lineExtended: (name: string, number: number, added: number) => {
-    const label = lineLabel(name, number)
+  lineExtended: (name: string, code: string, added: number) => {
+    const label = lineLabel(name, code)
     const stops = `${added} new stop${added === 1 ? '' : 's'}`
     return pick([
       `The ${label} extends its reach — ${stops} added to the timetable.`,
@@ -64,8 +65,8 @@ export const notificationCopy = {
     ])
   },
 
-  lineConceded: (lineName: string, lineNumber: number, company: string) => {
-    const label = lineLabel(lineName, lineNumber)
+  lineConceded: (lineName: string, code: string, company: string) => {
+    const label = lineLabel(lineName, code)
     const operator = company.trim() || 'a private operator'
     return pick([
       `Concession granted: the ${label} passes to ${operator}.`,
@@ -74,8 +75,8 @@ export const notificationCopy = {
     ])
   },
 
-  lineReturned: (lineName: string, lineNumber: number) => {
-    const label = lineLabel(lineName, lineNumber)
+  lineReturned: (lineName: string, code: string) => {
+    const label = lineLabel(lineName, code)
     return pick([
       `The ${label} returns to public hands. The authority thanks you for your patience.`,
       `Back under municipal control: the ${label} is public once more.`,

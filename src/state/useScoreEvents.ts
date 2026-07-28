@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import type { DataSnapshot } from './useMapState'
 import { stationIdsOfLine } from '../canvas/lineNodes'
 import type { Award } from '../score'
+import { lineCode } from '../types'
 import { LANDMARK_REACH, POINTS, REACTIONS, SCENIC_REACH, TERRITORY_REACH } from '../score'
 
 /**
@@ -46,10 +47,6 @@ interface Ledger {
   earned: Map<string, number>
 }
 
-function label(name: string, number: number): string {
-  return name.trim() || `Line ${number}`
-}
-
 function snapshot(state: State): Snap {
   const draft = new Set(state.draftCreatedStationIds)
   const stations = new Map<string, { x: number; y: number }>()
@@ -71,7 +68,7 @@ function snapshot(state: State): Snap {
     lineIds.add(id)
     lineStops.set(id, stationIds.length)
     lineCompany.set(id, line.companyId)
-    lineLabel.set(id, label(line.name, line.number))
+    lineLabel.set(id, line.name.trim() || lineCode(line))
     for (const sid of new Set(stationIds)) stationLineCount.set(sid, (stationLineCount.get(sid) ?? 0) + 1)
   }
 
