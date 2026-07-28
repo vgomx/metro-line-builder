@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ChangeEvent, ReactNode } from 'react'
 import { Button, IconButton } from 'metro-ds'
-import logoLightUrl from 'metro-ds/assets/logo.svg'
-import logoDarkUrl from 'metro-ds/assets/logo-horizontal-white.svg'
+import logoMarkUrl from 'metro-ds/assets/logo-mark.svg'
+import logoMarkWhiteUrl from 'metro-ds/assets/logo-mark-white.svg'
 import {
   FolderOpenIcon,
   GridIcon,
@@ -157,7 +157,7 @@ export function TopBar({
           flexShrink: 0,
         }}
       >
-        <img src={theme === 'dark' ? logoDarkUrl : logoLightUrl} alt="Metro Line Builder" height={24} />
+        <img src={theme === 'dark' ? logoMarkWhiteUrl : logoMarkUrl} alt="Metro Line Builder" height={24} width={24} />
       </div>
 
       <input
