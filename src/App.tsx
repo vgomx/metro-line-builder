@@ -11,6 +11,7 @@ import { RightPanel, RIGHT_PANEL_WIDTH } from './components/RightPanel'
 import { CanvasStats, SelectionLabel } from './components/CanvasOverlay'
 import { PoiPicker } from './components/PoiPicker'
 import { DraftFinishHint } from './components/DraftFinishHint'
+import { CheckIcon } from './icons'
 import { WelcomeDialog } from './components/WelcomeDialog'
 import { OpenMapDialog } from './components/OpenMapDialog'
 import type { LibrarySummary } from './state/mapLibrary'
@@ -34,6 +35,7 @@ import { exclusiveStationIds, stationIdsOfLine } from './canvas/lineNodes'
 import { geoTypeOfTool, MIN_GEO_POINTS } from './geoDraft'
 import { useTheme } from './useTheme'
 import { useSound } from './useSound'
+import { useCoarsePointer } from './useCoarsePointer'
 import { forgetGazette, useNotifications } from './state/useNotifications'
 import { useMapNotifications } from './state/useMapNotifications'
 import { forgetKarma, useScore } from './state/useScore'
@@ -190,6 +192,9 @@ function App() {
 
   const { theme, toggleTheme } = useTheme()
   const { soundEnabled, toggleSound } = useSound()
+  // A finger, not a mouse — decides whether the draft chrome prints keyboard hints (useless without
+  // a keyboard) and whether the finish control needs to read unmistakably as a tap target.
+  const coarse = useCoarsePointer()
   // Which map is on the canvas. A ref rather than state because nothing renders from it —
   // it's the key the autosave files under, and re-rendering the app to change a filing label
   // would be work for nothing. Declared ahead of the two hooks below because both the Gazette and
@@ -556,7 +561,9 @@ function App() {
       ? {
           points: state.draftLineNodes.length,
           minimum: 2,
-          startHint: 'Click a station or the canvas to start drawing a line · Esc to put the pen down',
+          startHint: coarse
+            ? 'Tap a station or the canvas to start drawing a line'
+            : 'Click a station or the canvas to start drawing a line · Esc to put the pen down',
           finishLabel: state.draftLineId
             ? `Update line (${state.draftLineNodes.length} points)`
             : `Finish line (${state.draftLineNodes.length} points)`,
@@ -566,7 +573,9 @@ function App() {
         ? {
             points: state.draftGeoPoints.length,
             minimum: MIN_GEO_POINTS[geoType],
-            startHint: `Click the canvas to start drawing a ${geoType} · Esc to put the pen down`,
+            startHint: coarse
+              ? `Tap the canvas to start drawing a ${geoType}`
+              : `Click the canvas to start drawing a ${geoType} · Esc to put the pen down`,
             finishLabel: `Finish ${geoType} (${state.draftGeoPoints.length} points)`,
             onFinish: finishGeoFeature,
           }
@@ -731,51 +740,105 @@ function App() {
                 never be the thing that pushes a control out from under the cursor. Lines and
                 geography share the draft column — they are drawn the same way and finished the
                 same way. */}
+            {/* The Gazette's headlines, pinned top-centre and alone now — the drawing chrome has
+                moved out from under them to the foot of the canvas. */}
             <div
               style={{
                 position: 'absolute',
                 top: 'var(--space-3)',
                 left: '50%',
                 transform: 'translateX(-50%)',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 'var(--gap-sm)',
-                maxWidth: 'calc(100% - 32px)',
+                width: 'min(440px, calc(100% - 32px))',
               }}
             >
-              {draft && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--gap-sm)' }}>
-                  {draft.points === 0 && (
-                    <div
+              <NotificationBanner items={notifications.bannerItems} cityName={state.mapName} onDismiss={notifications.dismiss} />
+            </div>
+
+            {/* Everything a drawing tool has to say — its opening hint, then the button that finishes
+                it and the keys beneath — sits at the foot of the canvas, near the tools it belongs to
+                and clear of the headlines up top. During a draft nothing else claims this spot (a
+                draft clears the selection, so no station label or line chip is down here), so the
+                bottom is free for it. Lines and geography share the column: drawn the same way,
+                finished the same way. */}
+            {draft && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 'var(--space-3)',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 'var(--gap-sm)',
+                  maxWidth: 'calc(100% - 32px)',
+                }}
+              >
+                {draft.points === 0 && (
+                  // A light-surface chip, deliberately not the dark ink of a button: this is a
+                  // hint to read, not a control to press, and the finish CTA that replaces it is
+                  // dark (mouse) or accent (touch) — so the hint stays pale to keep the two apart.
+                  <div
+                    style={{
+                      background: 'var(--bg-surface)',
+                      color: 'var(--text-secondary)',
+                      border: '1px solid var(--border-default)',
+                      borderRadius: 'var(--radius-lg)',
+                      padding: '5px 12px',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 500,
+                      whiteSpace: 'nowrap',
+                      boxShadow: 'var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.12))',
+                    }}
+                  >
+                    {draft.startHint}
+                  </div>
+                )}
+
+                {draft.points >= draft.minimum &&
+                  // On a mouse the primary button — dark, like every tooltip chip here — is told
+                  // apart by its cursor and its hover. A finger has neither, so on touch it becomes
+                  // an unmistakable tap target: the accent colour rather than the tooltips' ink, a
+                  // tick, a size a thumb can hit, and a shadow lifting it off the map.
+                  (coarse ? (
+                    <button
+                      type="button"
+                      onClick={draft.onFinish}
                       style={{
-                        background: 'var(--ink-900)',
-                        color: 'var(--ink-0)',
-                        borderRadius: 'var(--radius-lg)',
-                        padding: '5px 12px',
-                        fontSize: 'var(--text-xs)',
-                        fontWeight: 500,
-                        whiteSpace: 'nowrap',
+                        pointerEvents: 'auto',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        height: '44px',
+                        padding: '0 22px',
+                        fontSize: '15px',
+                        fontWeight: 600,
+                        fontFamily: 'var(--font-sans)',
+                        color: 'var(--text-inverse, #fff)',
+                        background: 'var(--interactive-primary)',
+                        border: 'none',
+                        borderRadius: '999px',
+                        boxShadow: '0 6px 18px rgba(0,0,0,0.28)',
+                        cursor: 'pointer',
                       }}
                     >
-                      {draft.startHint}
-                    </div>
-                  )}
-
-                  {draft.points >= draft.minimum && (
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                        <path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      {draft.finishLabel}
+                    </button>
+                  ) : (
                     <div style={{ pointerEvents: 'auto' }}>
-                      <Button variant="primary" onClick={draft.onFinish}>
+                      <Button variant="primary" icon={<CheckIcon />} onClick={draft.onFinish}>
                         {draft.finishLabel}
                       </Button>
                     </div>
-                  )}
+                  ))}
 
-                  <DraftFinishHint active={draft.points >= draft.minimum} />
-                </div>
-              )}
-
-              <NotificationBanner items={notifications.bannerItems} cityName={state.mapName} onDismiss={notifications.dismiss} />
-            </div>
+                {/* The keys are only worth printing where there's a keyboard to press them on. */}
+                {!coarse && <DraftFinishHint active={draft.points >= draft.minimum} />}
+              </div>
+            )}
 
             {toast && (
               <div

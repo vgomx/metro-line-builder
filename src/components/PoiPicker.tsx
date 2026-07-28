@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useCoarsePointer } from '../useCoarsePointer'
 import type { PointerEvent as ReactPointerEvent } from 'react'
@@ -40,11 +40,18 @@ interface PoiPickerProps {
  */
 const MIN_DRAG_TILE = 18
 
-/** A drag only begins on a pull past this — small enough that the lift feels immediate, large
- * enough not to trip on the wobble of a tap. On touch the pull must also be more sideways than
- * vertical, since the palette scrolls vertically (touch-action: pan-y) and an up/down swipe is
- * a browse, not a lift. */
+/** A mouse drag begins on a pull past this — small enough that the lift feels immediate, large
+ * enough not to trip on the wobble of a click. */
 const DRAG_THRESHOLD = 8
+
+/** On a touch screen a symbol lifts by being pressed and held, the way iOS lifts anything for a
+ * drag — a still press is unambiguous against the palette's own scroll, which a finger always
+ * starts with a swipe. Once lifted it follows the finger in any direction, unlike the old
+ * sideways-only pull that fought every diagonal. */
+const LONG_PRESS_MS = 300
+/** A finger that travels this far before the hold completes is scrolling the palette, not lifting —
+ * the pending lift is called off and the swipe left to the browser's own scroll. */
+const SCROLL_TOLERANCE = 10
 
 interface DragState {
   hexcode: string
@@ -66,6 +73,29 @@ export function PoiPicker({ scale, onPlaceByKeyboard, armedIcon, onArm, onPlacem
   const drag = useRef<DragState | null>(null)
   const dragged = useRef(false)
   const [preview, setPreview] = useState<{ x: number; y: number; url?: string; size: number } | null>(null)
+  // The touch hold-to-lift timer, and a non-passive touchmove blocker installed while a lift is
+  // under way so the page can't scroll out from under the finger once the drag has taken over.
+  const holdTimer = useRef<number | null>(null)
+  const scrollBlocker = useRef<((e: TouchEvent) => void) | null>(null)
+
+  const clearHold = () => {
+    if (holdTimer.current !== null) {
+      window.clearTimeout(holdTimer.current)
+      holdTimer.current = null
+    }
+  }
+  const blockScroll = (on: boolean) => {
+    if (on && !scrollBlocker.current) {
+      const fn = (e: TouchEvent) => e.preventDefault()
+      scrollBlocker.current = fn
+      document.addEventListener('touchmove', fn, { passive: false })
+    } else if (!on && scrollBlocker.current) {
+      document.removeEventListener('touchmove', scrollBlocker.current)
+      scrollBlocker.current = null
+    }
+  }
+  // Whatever's left in flight if the palette closes mid-gesture (the tool being switched away).
+  useEffect(() => () => { clearHold(); blockScroll(false) }, [])
 
   const isOverCanvas = (x: number, y: number) => !!document.elementFromPoint(x, y)?.closest('svg[data-map-canvas]')
 
@@ -77,15 +107,37 @@ export function PoiPicker({ scale, onPlaceByKeyboard, armedIcon, onArm, onPlacem
     setPreview(over ? null : { x, y, url: d.url, size: Math.max(MIN_DRAG_TILE, POI_ICON_SIZE * scale) + 2 })
   }
 
+  // Take hold of the symbol — the point both a mouse pull and a finished touch-hold arrive at.
+  const lift = (target: Element, d: DragState, x: number, y: number) => {
+    d.started = true
+    dragged.current = true
+    try { target.setPointerCapture(d.pointerId) } catch { /* target may have scrolled away */ }
+    blockScroll(true)
+    onPlacementBegin(d.hexcode)
+    updatePlacement(x, y, d)
+  }
+
   const onSwatchPointerDown = (e: ReactPointerEvent<HTMLButtonElement>, hexcode: string, url?: string) => {
     dragged.current = false
     drag.current = { hexcode, url, startX: e.clientX, startY: e.clientY, pointerId: e.pointerId, started: false }
-    // Capture the mouse up front: a quick pull throws the pointer off the little swatch in one
-    // move, and without capture already in hand that move lands on the canvas and the swatch
-    // never sees it. Touch waits until the gesture is a confirmed sideways lift, so an up/down
-    // swipe is left to the palette's own scroll (the browser cancels our pointer when it takes
-    // that over).
-    if (!coarse) e.currentTarget.setPointerCapture(e.pointerId)
+    if (!coarse) {
+      // Capture the mouse up front: a quick pull throws the pointer off the little swatch in one
+      // move, and without capture already in hand that move lands on the canvas and the swatch
+      // never sees it.
+      e.currentTarget.setPointerCapture(e.pointerId)
+      return
+    }
+    // Touch: hold still and the symbol lifts, the way a drag begins on iOS. A swipe before the
+    // hold completes is a scroll (handled in the move below) and leaves this timer to be cancelled.
+    const target = e.currentTarget
+    const x = e.clientX
+    const y = e.clientY
+    clearHold()
+    holdTimer.current = window.setTimeout(() => {
+      holdTimer.current = null
+      const d = drag.current
+      if (d && d.pointerId === e.pointerId && !d.started) lift(target, d, x, y)
+    }, LONG_PRESS_MS)
   }
 
   const onSwatchPointerMove = (e: ReactPointerEvent<HTMLButtonElement>) => {
@@ -94,35 +146,39 @@ export function PoiPicker({ scale, onPlaceByKeyboard, armedIcon, onArm, onPlacem
     const dx = e.clientX - d.startX
     const dy = e.clientY - d.startY
     if (!d.started) {
-      const beyond = Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD
-      // On touch a lift has to beat the palette's own vertical scroll; a mouse never scrolls the
-      // palette by dragging, so any pull past the threshold lifts.
-      const lifts = coarse ? Math.abs(dx) > DRAG_THRESHOLD && Math.abs(dx) > Math.abs(dy) : beyond
-      if (!lifts) return
-      d.started = true
-      dragged.current = true
-      if (coarse) e.currentTarget.setPointerCapture(e.pointerId)
-      onPlacementBegin(d.hexcode)
-      updatePlacement(e.clientX, e.clientY, d)
+      if (coarse) {
+        // Moving before the hold completes is a scroll, not a lift: call the hold off and let the
+        // browser have the swipe. (No click follows a scroll, so nothing arms by mistake.)
+        if (Math.abs(dx) > SCROLL_TOLERANCE || Math.abs(dy) > SCROLL_TOLERANCE) {
+          clearHold()
+          drag.current = null
+        }
+        return
+      }
+      if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) lift(e.currentTarget, d, e.clientX, e.clientY)
       return
     }
     updatePlacement(e.clientX, e.clientY, d)
   }
 
   const onSwatchPointerUp = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    clearHold()
     const d = drag.current
     drag.current = null
     // Release even when no drag started — the mouse was captured on the way down.
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
     if (!d || !d.started) return
     setPreview(null)
+    blockScroll(false)
     onPlacementEnd(d.hexcode, e.clientX, e.clientY, isOverCanvas(e.clientX, e.clientY))
   }
 
   const onSwatchPointerCancel = () => {
+    clearHold()
     const d = drag.current
     drag.current = null
     setPreview(null)
+    blockScroll(false)
     // The browser reclaimed the gesture (a scroll it decided was one after all): tear the ghost
     // down with nothing placed.
     if (d?.started) onPlacementEnd(d.hexcode, -1, -1, false)
@@ -164,7 +220,7 @@ export function PoiPicker({ scale, onPlaceByKeyboard, armedIcon, onArm, onPlacem
           {coarse
             ? armedIcon
               ? 'Now tap the map. Tap the symbol again to put it back.'
-              : 'Drag a symbol onto the map, or tap it then tap where it goes.'
+              : 'Hold a symbol and drag it onto the map, or tap it then tap where it goes.'
             : 'Drag a symbol onto the map, or press Enter to drop one in the middle.'}
         </div>
         <Input size="sm" placeholder="Search…" value={query} onChange={e => setQuery(e.target.value)} />
@@ -201,7 +257,7 @@ export function PoiPicker({ scale, onPlaceByKeyboard, armedIcon, onArm, onPlacem
                     key={entry.hexcode}
                     className="mlb-poi-swatch"
                     title={entry.name}
-                    aria-label={coarse ? `${entry.name} — tap to pick up, or drag onto the map` : `${entry.name} — drag onto the map, or press Enter to place`}
+                    aria-label={coarse ? `${entry.name} — tap to pick up, or hold and drag onto the map` : `${entry.name} — drag onto the map, or press Enter to place`}
                     data-dragging={entry.hexcode === drag.current?.hexcode && drag.current?.started}
                     data-armed={entry.hexcode === armedIcon}
                     // pan-y so an up/down swipe still scrolls the palette while a sideways pull is
