@@ -3,7 +3,7 @@ import { Input } from 'metro-ds'
 import type { Line, Station } from '../types'
 import { isRailLine } from '../types'
 import { isTransferStation, lineHasStation } from '../canvas/lineNodes'
-import { LineBadge } from './LineBadge'
+import { LineBadge, MoreLinesBadge } from './LineBadge'
 import { StationMark, stationMarkColor, stationMarkKind } from './StationMark'
 import { SortControl } from './SortControl'
 import type { SortEntry } from './SortControl'
@@ -34,9 +34,9 @@ interface StationsPanelProps {
   onSelect: (stationId: string) => void
 }
 
-/** Past this many, the badges would crowd the name out of its own row; the rest are counted
- * instead. Four is already a busier junction than most maps build. */
-const MAX_BADGES = 4
+/** Past this many, the badges would crowd the name out of its own row; the rest fold into a +N
+ * that says how many more call here without spelling each one out. */
+const MAX_BADGES = 3
 
 export function StationsPanel({ stations, lines, selectedStationId, sortBy, onSelect }: StationsPanelProps) {
   const [query, setQuery] = useState('')
@@ -136,9 +136,7 @@ export function StationsPanel({ stations, lines, selectedStationId, sortBy, onSe
                 {badges.map(line => (
                   <LineBadge key={line.id} line={line} shape="circle" size="xs" />
                 ))}
-                {overflow > 0 && (
-                  <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-muted)' }}>+{overflow}</span>
-                )}
+                {overflow > 0 && <MoreLinesBadge count={overflow} />}
               </span>
             )}
           </div>

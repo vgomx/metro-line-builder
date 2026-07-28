@@ -7,7 +7,7 @@ import type { SortOption } from './SortControl'
 import { EyeIcon, EyeOffIcon, GripIcon, PlusIcon, TrainIcon } from '../icons'
 import { stationIdsOfLine } from '../canvas/lineNodes'
 import type { Line, LineKind } from '../types'
-import { lineKind } from '../types'
+import { lineCode, lineKind } from '../types'
 
 export type SortKey = 'manual' | 'name' | 'number' | 'length' | 'created'
 
@@ -75,7 +75,7 @@ export function LinesPanel({ lines, selectedLineId, ridingLineId, sortBy, onSele
   // the timestamp existed — they take their place in the manual order, which for an untouched map
   // is the order they were drawn in anyway.
   const positionOf = new Map(lines.map((line, i) => [line.id, i]))
-  const nameKey = (line: Line) => (line.name.trim() || `Line ${line.number}`).toLowerCase()
+  const nameKey = (line: Line) => (line.name.trim() || lineCode(line)).toLowerCase()
   const createdKey = (line: Line) => line.createdAt ?? positionOf.get(line.id) ?? 0
 
   /** The sort applied within a section. Manual leaves the lines in their map order (which is the

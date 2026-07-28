@@ -103,6 +103,23 @@ export function isRailLine(line: Line): boolean {
   return line.kind === 'rail'
 }
 
+/** The letter that leads a line's code — M for metro, R for rail. */
+export function lineKindPrefix(kind: LineKind): string {
+  return kind === 'rail' ? 'R' : 'M'
+}
+
+/**
+ * A line's code: its kind's letter and its number, M1, R3 and so on.
+ *
+ * Numbering is per kind, so a metro Line 1 and a rail Line 1 both exist; the badges tell them apart
+ * by shape and fill, but only just, and never in a sentence. The letter makes the distinction plain
+ * and speakable — M1 is unmistakably not R1 — which is the whole reason a rider learns a line by a
+ * code rather than by its colour.
+ */
+export function lineCode(line: Line): string {
+  return `${lineKindPrefix(lineKind(line))}${line.number}`
+}
+
 export type GeoFeatureType = 'river' | 'park'
 
 export interface GeoFeature {
