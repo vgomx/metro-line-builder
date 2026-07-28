@@ -4,7 +4,7 @@ import { BackIcon } from '../icons'
 import { LinesPanel, LineSortControl } from './LinesPanel'
 import type { SortKey } from './LinesPanel'
 import { StationsPanel, StationSortControl } from './StationsPanel'
-import type { StationSortKey } from './StationsPanel'
+import type { StationSortKey, StationFilter } from './StationsPanel'
 import { GeoPanel } from './GeoPanel'
 import { CompaniesPanel } from './CompaniesPanel'
 import { Inspector } from './Inspector'
@@ -168,6 +168,7 @@ export function RightPanel({
   // Number by default — how riders know the lines, and the order most lists want to open in.
   const [lineSort, setLineSort] = useState<SortKey>('number')
   const [stationSort, setStationSort] = useState<StationSortKey>('map')
+  const [stationFilter, setStationFilter] = useState<StationFilter>('all')
 
   // Which way the content slides when the tab changes: rightward through the strip (and on to
   // Properties, which is the deepest view) enters from the right, back the other way from the
@@ -338,6 +339,8 @@ export function RightPanel({
             lines={lineList}
             selectedStationId={selectedStation?.id ?? null}
             sortBy={stationSort}
+            filterMode={stationFilter}
+            onFilterChange={setStationFilter}
             onSelect={openDetail(onSelectStation)}
           />
         )}
