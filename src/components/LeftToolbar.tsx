@@ -49,7 +49,7 @@ function ModePicker({ title, value, onChange }: { title: string; value: LineKind
       <span style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-muted)', padding: '1px 4px 2px' }}>
         {title}
       </span>
-      {(['metro', 'rail'] as LineKind[]).map(mode => (
+      {(['metro', 'rail', 'tram'] as LineKind[]).map(mode => (
         <button
           key={mode}
           type="button"

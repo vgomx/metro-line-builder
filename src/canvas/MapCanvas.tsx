@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import type { ZoomTransform } from 'd3-zoom'
 import type { GeoFeature, Line, LineKind, LineNode, Point, PointOfInterest, Station, Tool } from '../types'
-import { lineKind } from '../types'
+import { lineKind, markShapeForModes } from '../types'
 import { modeGlyphsWidth } from '../modeGlyphs'
 import { useZoomPan } from './useZoomPan'
 import { useReducedMotion } from '../useReducedMotion'
@@ -1634,7 +1634,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             selected={selectedStationIds.includes(station.id)}
             inDraftLine={draftLineStationIdSet.has(station.id)}
             interchange={(lineCountByStation[station.id] ?? 0) >= 2}
-            rail={modes.includes('rail')}
+            shape={markShapeForModes(modes)}
             modes={modes}
             lineColor={lineCountByStation[station.id] === 1 ? lineColorByStation[station.id] : undefined}
             dragging={draggingStationIdSet.has(station.id)}

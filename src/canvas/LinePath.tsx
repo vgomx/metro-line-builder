@@ -25,6 +25,13 @@ const HOVER_MS = 160
 const STROKE_WIDTH = 5
 const STROKE_WIDTH_SELECTED = 7
 /**
+ * A tram runs at street level, so it draws as a single thin line — lighter than the metro stroke it
+ * shares corridors with, which is what tells the two apart at a glance before you reach the badges.
+ * Still safely inside a shared corridor's LANE_WIDTH (7), so a tram lane never touches its neighbour.
+ */
+const TRAM_STROKE_WIDTH = 3
+const TRAM_STROKE_WIDTH_SELECTED = 4.5
+/**
  * Half the width of one rail — the gap the centre stripe eats out of each side of a rail line.
  * Kept small on purpose: the rail line's total width has to match a metro line's, because shared
  * corridors space their lanes LANE_WIDTH (7) apart assuming a ~5px stroke, and a rail line wider
@@ -49,11 +56,19 @@ export function LinePath({ line, geometry, selected, riding, revealing, segmentL
   if (!d) return null
 
   const rail = line.kind === 'rail'
+  const tram = line.kind === 'tram'
 
   // Held back while the line sketches itself on, so the swell doesn't fight the draw-on for
   // the same stroke.
   const lifted = hovered && !revealing
-  const fullWidth = (selected ? STROKE_WIDTH_SELECTED : STROKE_WIDTH) + (lifted ? HOVER_GROWTH : 0)
+  const restWidth = tram
+    ? selected
+      ? TRAM_STROKE_WIDTH_SELECTED
+      : TRAM_STROKE_WIDTH
+    : selected
+      ? STROKE_WIDTH_SELECTED
+      : STROKE_WIDTH
+  const fullWidth = restWidth + (lifted ? HOVER_GROWTH : 0)
 
   const handleClick = (e: MouseEvent<SVGPathElement>) => {
     e.stopPropagation()
@@ -141,7 +156,9 @@ export function LinePath({ line, geometry, selected, riding, revealing, segmentL
           d={d}
           fill="none"
           stroke={rail ? `color-mix(in srgb, ${line.color} 68%, var(--text-primary))` : 'rgba(255, 255, 255, 0.6)'}
-          strokeWidth={3}
+          // A tram's stroke is thin enough that a 3px stream would blanket it; run a narrower
+          // channel down it so the flow reads as a light on the line, not a repaint of it.
+          strokeWidth={tram ? 1.5 : 3}
           strokeLinecap="round"
           strokeDasharray="1.5 26.5"
           style={{ pointerEvents: 'none', animation: 'mlb-line-flow 1.6s linear infinite' }}

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import type { LineKind, Station } from '../types'
+import type { LineKind, Station, StationShape } from '../types'
 import { MODE_GLYPH_GAP, MODE_GLYPH_SIZE, ModeGlyphSvg, modeGlyphsWidth } from '../modeGlyphs'
 import { PERSON_GAP, PERSON_SIZE, PersonGlyph, peopleRowWidth, pickPeople } from '../peopleGlyphs'
 import type { LabelPlacement } from './labelPlacement'
@@ -10,11 +10,12 @@ interface StationNodeProps {
   station: Station
   selected: boolean
   inDraftLine: boolean
-  /** True when the station sits on 2+ distinct lines — rendered as an interchange. */
+  /** True when the station sits on 2+ distinct lines — rendered as an interchange (bigger, ringed). */
   interchange: boolean
-  /** True when any rail line calls here — drawn as a rounded square rather than a circle, so the
-   * shape says the mode while the ink still says whether it's an interchange. */
-  rail: boolean
+  /** The shape the marker wears — a disc, a rounded square or a diamond — resolved from the modes
+   * calling here: the mode's own shape when one mode serves it, a disc when two modes meet. The
+   * same choice for a plain stop and for an interchange; only the size and the ring differ. */
+  shape: StationShape
   /** The distinct transport modes calling here, metro before rail. A main station that mixes two
    * of them shows a glyph for each above its label — the modal interchange, spelled out. */
   modes: LineKind[]
@@ -55,29 +56,31 @@ const DRAG_GROWTH = 2
 const HOVER_GROWTH = 1.5
 
 /**
- * A station marker, drawn as a circle for metro and a rounded square for rail. Every one of the
- * marker's rings routes through here, so the shape choice is made once — the fill/stroke logic
- * above doesn't change, only what it draws onto. A square of side `2r` reads heavier than a circle
- * of radius `r`, so rail is shrunk a touch to sit at the same visual weight as its metro neighbours.
+ * A station marker, drawn as a disc for metro, a rounded square for rail, or a diamond for tram.
+ * Every one of the marker's rings routes through here, so the shape choice is made once — the
+ * fill/stroke logic above doesn't change, only what it draws onto. A square or a diamond of the same
+ * radius reads heavier or lighter than a disc, so each is nudged to sit at the same visual weight as
+ * its metro neighbours.
  *
  * SVG geometry properties (r, x, y, width, height) are CSS-animatable, so the marker's hover/drag
- * swell eases either way; the transition names differ because a circle grows `r` and a rect grows
- * its box.
+ * swell eases either way; the transition names differ because a disc grows `r` and a box grows its
+ * sides. The diamond is a box turned 45°, so it eases the same way the square does.
  */
 function Mark({
-  rail,
+  shape,
   r,
   fill,
   stroke,
   strokeWidth,
 }: {
-  rail: boolean
+  shape: StationShape
   r: number
   fill: string
   stroke: string
   strokeWidth: number
 }) {
-  if (rail) {
+  const boxTransition = 'x 150ms ease, y 150ms ease, width 150ms ease, height 150ms ease'
+  if (shape === 'square') {
     const s = r * 0.9
     return (
       <rect
@@ -89,7 +92,26 @@ function Mark({
         fill={fill}
         stroke={stroke === 'none' ? undefined : stroke}
         strokeWidth={stroke === 'none' ? undefined : strokeWidth}
-        style={{ transition: 'x 150ms ease, y 150ms ease, width 150ms ease, height 150ms ease' }}
+        style={{ transition: boxTransition }}
+      />
+    )
+  }
+  if (shape === 'diamond') {
+    // A square turned 45° about its own centre: its corners reach `s·√2`, so the side is scaled to
+    // land the points near a disc of radius `r` and read at the same weight.
+    const s = r * 0.78
+    return (
+      <rect
+        x={-s}
+        y={-s}
+        width={2 * s}
+        height={2 * s}
+        rx={Math.max(1, s * 0.2)}
+        transform="rotate(45)"
+        fill={fill}
+        stroke={stroke === 'none' ? undefined : stroke}
+        strokeWidth={stroke === 'none' ? undefined : strokeWidth}
+        style={{ transition: boxTransition }}
       />
     )
   }
@@ -162,7 +184,7 @@ export function StationNode({
   selected,
   inDraftLine,
   interchange,
-  rail,
+  shape,
   modes,
   lineColor,
   dragging,
@@ -251,21 +273,21 @@ export function StationNode({
           }
         >
           {isInterchange ? (
-            // An interchange stays a circle whatever mode meets there. The double ring is the
-            // "change here" mark, and it's the more important thing to say at a junction than which
-            // kind of line it is — a metro/rail transfer reads as a transfer first. So the square is
-            // reserved for a single rail stop; the moment a station becomes an interchange it rejoins
-            // the circle vocabulary, and the rail lines through it already show themselves as rail.
+            // An interchange wears its mode's own shape, drawn big with the double "change here"
+            // ring — a rail junction a ringed square, a tram one a ringed diamond. The shape is
+            // resolved upstream: it's a disc when two modes actually meet there, because a
+            // metro-meets-rail transfer reads as a transfer first and no one shape can stand for
+            // both. The ring and the black ink are what mark it out; the shape says which mode.
             <>
               <Mark
-                rail={false}
+                shape={shape}
                 r={drawnRadius}
                 fill={inDraftLine ? 'var(--brand-500)' : 'var(--bg-page)'}
                 stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
                 strokeWidth={3.5}
               />
               <Mark
-                rail={false}
+                shape={shape}
                 r={drawnRadius - 4.5}
                 fill="none"
                 stroke={inDraftLine ? 'var(--brand-500)' : 'var(--text-primary)'}
@@ -283,7 +305,7 @@ export function StationNode({
             // colour back to a legible edge while leaving the hue recognisable, and because the ink
             // is themed, the mix darkens on light pages and lightens on dark ones without a second rule.
             <Mark
-              rail={rail}
+              shape={shape}
               r={drawnRadius}
               fill={inDraftLine ? 'var(--brand-500)' : 'var(--bg-page)'}
               stroke={

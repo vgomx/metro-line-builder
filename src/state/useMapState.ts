@@ -732,8 +732,9 @@ function reducer(rawState: MapState, action: Action): MapState {
         y: action.y,
         transfer: false,
         main: false,
-        // Metro is left absent so the JSON stays clean of the default; only rail is written.
-        ...(action.mode === 'rail' ? { mode: 'rail' as const } : {}),
+        // Metro is left absent so the JSON stays clean of the default; only a non-default mode
+        // (rail, tram) is written.
+        ...(action.mode !== 'metro' ? { mode: action.mode } : {}),
       }
       return {
         ...state,
@@ -958,8 +959,9 @@ function reducer(rawState: MapState, action: Action): MapState {
         visible: true,
         companyId: null,
         createdAt: action.createdAt,
-        // Metro is left absent so the JSON stays clean of the default; only rail is written.
-        ...(action.kind === 'rail' ? { kind: 'rail' as const } : {}),
+        // Metro is left absent so the JSON stays clean of the default; only a non-default kind
+        // (rail, tram) is written.
+        ...(action.kind !== 'metro' ? { kind: action.kind } : {}),
       }
       return {
         ...state,
