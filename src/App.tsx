@@ -11,6 +11,7 @@ import { RightPanel, RIGHT_PANEL_WIDTH } from './components/RightPanel'
 import { CanvasStats, SelectionLabel } from './components/CanvasOverlay'
 import { PoiPicker } from './components/PoiPicker'
 import { DraftFinishHint } from './components/DraftFinishHint'
+import { CheckIcon } from './icons'
 import { WelcomeDialog } from './components/WelcomeDialog'
 import { OpenMapDialog } from './components/OpenMapDialog'
 import type { LibrarySummary } from './state/mapLibrary'
@@ -774,15 +775,20 @@ function App() {
                 }}
               >
                 {draft.points === 0 && (
+                  // A light-surface chip, deliberately not the dark ink of a button: this is a
+                  // hint to read, not a control to press, and the finish CTA that replaces it is
+                  // dark (mouse) or accent (touch) — so the hint stays pale to keep the two apart.
                   <div
                     style={{
-                      background: 'var(--ink-900)',
-                      color: 'var(--ink-0)',
+                      background: 'var(--bg-surface)',
+                      color: 'var(--text-secondary)',
+                      border: '1px solid var(--border-default)',
                       borderRadius: 'var(--radius-lg)',
                       padding: '5px 12px',
                       fontSize: 'var(--text-xs)',
                       fontWeight: 500,
                       whiteSpace: 'nowrap',
+                      boxShadow: 'var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.12))',
                     }}
                   >
                     {draft.startHint}
@@ -823,7 +829,7 @@ function App() {
                     </button>
                   ) : (
                     <div style={{ pointerEvents: 'auto' }}>
-                      <Button variant="primary" onClick={draft.onFinish}>
+                      <Button variant="primary" icon={<CheckIcon />} onClick={draft.onFinish}>
                         {draft.finishLabel}
                       </Button>
                     </div>
