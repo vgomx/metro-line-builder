@@ -34,6 +34,11 @@ interface StationNodeProps {
    * counter rather than a flag so that pulling into the same stop twice keys a fresh crowd, instead
    * of React reusing the first one and replaying nothing. */
   boarding?: number
+  /** Whether the name plate is a live handle for the station — a click on it selects the stop and
+   * opens its properties, the same as a click on the marker. Only while the select tool is up: with
+   * a drawing tool active the plate steps back out of the way so a click near it lands on the canvas
+   * or the line it's meant for, not on the station. */
+  labelInteractive: boolean
   onPointerDown: (e: ReactPointerEvent<SVGGElement>, station: Station) => void
   onClick: (station: Station) => void
   /** Double-clicking a stop is a request to rename it — the most repeated edit on a map. */
@@ -164,6 +169,7 @@ export function StationNode({
   landing,
   labelPlacement,
   boarding,
+  labelInteractive,
   onPointerDown,
   onClick,
   onDoubleClick,
@@ -302,7 +308,11 @@ export function StationNode({
             stroke={isMain ? 'none' : 'var(--border-subtle)'}
             strokeWidth={1}
             opacity={isMain ? 1 : 0.92}
-            style={{ pointerEvents: 'none' }}
+            // The plate is a handle for the station under the select tool: catching the pointer here
+            // routes it to the group's own handlers, so a click on the name selects the stop and a
+            // drag on it moves the stop, exactly as on the marker. Inert under a drawing tool, so it
+            // never swallows a click meant for the canvas or a line behind it.
+            style={{ pointerEvents: labelInteractive ? 'auto' : 'none' }}
           />
         )}
         {/* One tspan per wrapped line, the block centred on the card the placement search

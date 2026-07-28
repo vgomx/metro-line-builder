@@ -1647,6 +1647,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
             }
             labelPlacement={labelPlacementByStation[station.id]}
             boarding={boardingAt?.stationId === station.id ? boardingAt.arrival : undefined}
+            labelInteractive={tool === 'select'}
             onPointerDown={handleStationPointerDown}
             onClick={handleStationClick}
             onDoubleClick={s => tool === 'select' && onRenameRequest('station', s.id)}
