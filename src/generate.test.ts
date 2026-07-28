@@ -50,3 +50,25 @@ describe('buildRandomMap — rail', () => {
     }
   })
 })
+
+describe('buildRandomMap — tram', () => {
+  it('keeps metro the majority over each other mode, and numbers tram from 1', () => {
+    let sawTram = false
+    for (let t = 0; t < RUNS; t++) {
+      const lines = Object.values(buildRandomMap().lines)
+      const metro = lines.filter(l => lineKind(l) === 'metro').length
+      const rail = lines.filter(l => l.kind === 'rail').length
+      const tram = lines.filter(l => l.kind === 'tram').length
+      if (tram > 0) sawTram = true
+      // Metro is never outnumbered by any single other mode — it stays the map's spine.
+      expect(metro, `run ${t} vs rail`).toBeGreaterThanOrEqual(rail)
+      expect(metro, `run ${t} vs tram`).toBeGreaterThanOrEqual(tram)
+      // Tram fills its own gapless 1..N, independent of metro and rail.
+      const tramNums = lines.filter(l => l.kind === 'tram').map(l => l.number).sort((a, b) => a - b)
+      expect(tramNums, `run ${t} tram`).toEqual(tramNums.map((_, i) => i + 1))
+    }
+    // Across fifty maps at least one should have grown large enough to earn a tram — otherwise the
+    // quota never fires and "Surprise me" would never show the mode.
+    expect(sawTram, 'no generated map ever included a tram line').toBe(true)
+  })
+})
